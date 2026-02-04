@@ -1,0 +1,75 @@
+@import './variables.css';
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border: 1px solid var(--accent-metallic-dark);
+  background: var(--bg-tertiary);
+}
+
+.status-indicator {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid currentColor;
+  animation: trianglePulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+
+.status-ready {
+  color: var(--status-ready);
+  border-color: rgba(0, 255, 136, 0.3);
+  background: rgba(0, 255, 136, 0.05);
+}
+
+.status-ready .status-indicator {
+  color: var(--status-ready);
+  filter: drop-shadow(0 0 10px var(--status-ready)) drop-shadow(0 0 20px var(--status-ready));
+}
+
+.status-error {
+  color: var(--status-error);
+  border-color: rgba(255, 68, 68, 0.3);
+  background: rgba(255, 68, 68, 0.05);
+}
+
+.status-error .status-indicator {
+  color: var(--status-error);
+  filter: drop-shadow(0 0 10px var(--status-error));
+  animation: none;
+}
+
+.status-checking {
+  color: var(--status-info);
+  border-color: rgba(0, 191, 255, 0.3);
+  background: rgba(0, 191, 255, 0.05);
+}
+
+.status-checking .status-indicator {
+  color: var(--status-info);
+  filter: drop-shadow(0 0 10px var(--status-info)) drop-shadow(0 0 20px var(--status-info));
+}
+
+@keyframes trianglePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+.status-text {
+  margin: 0;
+  color: var(--text-secondary);
+}

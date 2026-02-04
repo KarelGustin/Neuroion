@@ -1,0 +1,12 @@
+@import './variables.css';
+
+.household-setup {
+  width: 100%;
+}
+
+/* Reuse styles from WiFiConfig */
+.household-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}

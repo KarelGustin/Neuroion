@@ -1,0 +1,155 @@
+# Neuroion
+
+**Local-first home intelligence platform**
+
+Neuroion is a privacy-first home intelligence system that runs entirely on your local network. All intelligence and memory live in a local Homebase (Raspberry Pi), while clients (iOS app, Telegram, setup UI) are thin interfaces.
+
+## Core Principles
+
+- **Local-first**: All intelligence and memory live in a local Homebase
+- **Privacy-first**: No raw health data is stored, only derived context summaries
+- **Consent-based**: System prepares actions, explains WHY, and only executes with explicit user consent
+- **Appliance-like**: Feels like a dedicated appliance, not a Raspberry Pi or Linux computer
+
+## Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   iOS App   │     │  Telegram   │     │  Setup UI   │
+└──────┬──────┘     └──────┬───────┘     └──────┬──────┘
+       │                   │                    │
+       └───────────────────┼────────────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │   Homebase  │
+                    │  (FastAPI)  │
+                    └──────┬──────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+   ┌────▼────┐      ┌──────▼──────┐    ┌──────▼──────┐
+   │  Ollama │      │   SQLite   │    │   Agent    │
+   │   LLM   │      │  Database  │    │  System    │
+   └─────────┘      └───────────┘    └────────────┘
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+ (for setup UI)
+- Ollama running on localhost:11434
+- Docker and Docker Compose (optional, for containerized deployment)
+
+### Development Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd Neuroion
+   ```
+
+2. **Install Python dependencies**:
+   ```bash
+   cd neuroion/core
+   pip install -r requirements.txt
+   ```
+
+3. **Initialize database**:
+   ```bash
+   python -m neuroion.core.main
+   # Database will be created automatically
+   ```
+
+4. **Start the Homebase server**:
+   ```bash
+   uvicorn neuroion.core.main:app --reload
+   ```
+
+5. **Start the setup UI** (in another terminal):
+   ```bash
+   cd setup-ui
+   npm install
+   npm run dev
+   ```
+
+6. **Start the Telegram bot** (optional, in another terminal):
+   ```bash
+   export TELEGRAM_BOT_TOKEN=your_bot_token
+   export HOMEBASE_URL=http://localhost:8000
+   python -m telegram.bot
+   ```
+
+### Docker Deployment
+
+1. **Set environment variables**:
+   ```bash
+   export SECRET_KEY=your-secret-key-here
+   export TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+   ```
+
+2. **Start all services**:
+   ```bash
+   cd infra
+   docker-compose up -d
+   ```
+
+3. **Access services**:
+   - Homebase API: http://localhost:8000
+   - Setup UI: http://localhost:3000
+   - API Docs: http://localhost:8000/docs
+
+## Project Structure
+
+```
+Neuroion/
+├── neuroion/
+│   └── core/              # FastAPI core server
+│       ├── api/           # API endpoints
+│       ├── agent/         # Agent system
+│       ├── llm/           # LLM integration
+│       ├── memory/        # Database layer
+│       └── security/      # Security & auth
+├── setup-ui/              # React setup UI
+├── telegram/              # Telegram bot service
+├── ios/                   # iOS SwiftUI app
+└── infra/                 # Docker & deployment
+```
+
+## API Documentation
+
+See [docs/API.md](docs/API.md) for complete API documentation.
+
+## Configuration
+
+Environment variables:
+
+- `OLLAMA_URL`: Ollama server URL (default: http://localhost:11434)
+- `OLLAMA_MODEL`: Model name (default: llama3.2)
+- `DATABASE_PATH`: SQLite database path
+- `SECRET_KEY`: Secret key for JWT tokens
+- `TELEGRAM_BOT_TOKEN`: Telegram bot token (for Telegram service)
+- `HOMEBASE_URL`: Homebase API URL (for clients)
+
+## Deployment
+
+### Raspberry Pi 5
+
+1. Install Docker on Raspberry Pi
+2. Clone repository
+3. Configure environment variables
+4. Run `docker-compose up -d`
+5. Set up kiosk mode (see `infra/kiosk/README.md`)
+
+### Mac (Development)
+
+Follow the development setup instructions above.
+
+## License
+
+[Your License Here]
+
+## Contributing
+
+[Contributing Guidelines]

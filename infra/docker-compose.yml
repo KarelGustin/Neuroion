@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  homebase:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    container_name: neuroion-homebase
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - DATABASE_PATH=/data/neuroion.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    volumes:
+      - neuroion-data:/data
+    restart: unless-stopped
+    networks:
+      - neuroion-network
+
+  setup-ui:
+    build:
+      context: ../setup-ui
+      dockerfile: Dockerfile
+    container_name: neuroion-setup-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - homebase
+    restart: unless-stopped
+    networks:
+      - neuroion-network
+
+  telegram-bot:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.telegram
+    container_name: neuroion-telegram-bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - HOMEBASE_URL=http://homebase:8000
+      - TELEGRAM_POLLING=true
+    depends_on:
+      - homebase
+    restart: unless-stopped
+    networks:
+      - neuroion-network
+
+volumes:
+  neuroion-data:
+
+networks:
+  neuroion-network:
+    driver: bridge

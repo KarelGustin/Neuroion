@@ -1,0 +1,35 @@
+/* Premium Product Color Palette */
+:root {
+  /* Background Colors */
+  --bg-primary: #000000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #111111;
+  
+  /* Metallic Accents */
+  --accent-metallic: #C0C0C0;
+  --accent-metallic-bright: #E8E8E8;
+  --accent-metallic-dark: #808080;
+  
+  /* Glowing Elements */
+  --glow-white: #FFFFFF;
+  --glow-blue: #00BFFF;
+  --glow-blue-bright: #0080FF;
+  --glow-blue-dim: #0066CC;
+  
+  /* Text Colors */
+  --text-primary: #FFFFFF;
+  --text-secondary: #E0E0E0;
+  --text-muted: #888888;
+  --text-dark: #333333;
+  
+  /* Status Colors */
+  --status-ready: #00FF88;
+  --status-error: #FF4444;
+  --status-warning: #FFAA00;
+  --status-info: #00BFFF;
+  
+  /* Effects */
+  --glow-intensity: 0 0 20px;
+  --glow-intensity-strong: 0 0 40px;
+  --shadow-metallic: 0 0 10px rgba(192, 192, 192, 0.3);
+}

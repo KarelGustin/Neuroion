@@ -1,0 +1,88 @@
+@import './variables.css';
+
+.llm-config {
+  width: 100%;
+}
+
+.provider-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--accent-metallic-dark);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.radio-option:hover {
+  border-color: var(--accent-metallic);
+  background: var(--bg-secondary);
+}
+
+.radio-option input[type="radio"] {
+  margin-right: 1rem;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--glow-blue);
+}
+
+.radio-option input[type="radio"]:checked + .radio-content {
+  color: var(--glow-white);
+}
+
+.radio-option:has(input[type="radio"]:checked) {
+  border-color: var(--glow-blue);
+  background: var(--bg-secondary);
+  box-shadow: 0 0 15px rgba(0, 191, 255, 0.2);
+}
+
+.radio-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.radio-content strong {
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.radio-content span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.provider-config {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent-metallic-dark);
+  border-radius: 8px;
+}
+
+.info-text {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-top: 1rem;
+}
+
+.test-result {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}

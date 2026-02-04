@@ -1,0 +1,130 @@
+@import './variables.css';
+
+.setup-wizard {
+  width: 100%;
+  max-width: 800px;
+  margin: 2rem auto;
+}
+
+.wizard-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.wizard-header h2 {
+  font-size: 2rem;
+  color: var(--glow-white);
+  text-shadow: 
+    0 0 10px var(--glow-blue),
+    0 0 20px var(--glow-blue-dim);
+  margin-bottom: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.step-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-metallic-dark);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.step-circle.active {
+  border-color: var(--glow-blue);
+  background: var(--bg-tertiary);
+  color: var(--glow-white);
+  box-shadow: 
+    0 0 15px var(--glow-blue),
+    inset 0 0 10px rgba(0, 191, 255, 0.2);
+}
+
+.step-circle.completed {
+  border-color: var(--status-ready);
+  background: var(--status-ready);
+  color: var(--bg-primary);
+  box-shadow: 0 0 15px var(--status-ready);
+}
+
+.step-name {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.step-circle.active + .step-name,
+.step-circle.completed + .step-name {
+  color: var(--text-primary);
+}
+
+.step-line {
+  width: 100px;
+  height: 2px;
+  background: var(--accent-metallic-dark);
+  margin: 0 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.step-line.completed {
+  background: linear-gradient(
+    90deg,
+    var(--status-ready),
+    var(--accent-metallic-dark)
+  );
+  box-shadow: 0 0 5px var(--status-ready);
+}
+
+.wizard-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-metallic-dark);
+  border-radius: 12px;
+  padding: 3rem;
+  box-shadow: 
+    0 0 30px rgba(0, 0, 0, 0.8),
+    0 0 60px rgba(0, 191, 255, 0.1),
+    inset 0 0 20px rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.wizard-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-metallic),
+    transparent
+  );
+  opacity: 0.5;
+}

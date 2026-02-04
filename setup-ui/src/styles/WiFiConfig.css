@@ -1,0 +1,135 @@
+@import './variables.css';
+
+.wifi-config {
+  width: 100%;
+}
+
+.config-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.config-header h3 {
+  font-size: 1.5rem;
+  color: var(--glow-white);
+  margin-bottom: 0.5rem;
+  text-shadow: 0 0 10px var(--glow-blue-dim);
+}
+
+.config-header p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.wifi-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.form-group input {
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent-metallic-dark);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--glow-blue);
+  box-shadow: 
+    0 0 10px rgba(0, 191, 255, 0.3),
+    inset 0 0 5px rgba(0, 191, 255, 0.1);
+}
+
+.form-group input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-group input::placeholder {
+  color: var(--text-muted);
+}
+
+.error-message {
+  padding: 1rem;
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid var(--status-error);
+  border-radius: 6px;
+  color: var(--status-error);
+  font-size: 0.9rem;
+}
+
+.success-message {
+  padding: 1rem;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid var(--status-ready);
+  border-radius: 6px;
+  color: var(--status-ready);
+  font-size: 0.9rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.btn-primary,
+.btn-secondary {
+  padding: 0.75rem 2rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--glow-blue), var(--glow-blue-bright));
+  color: var(--bg-primary);
+  box-shadow: 0 0 15px rgba(0, 191, 255, 0.4);
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 25px rgba(0, 191, 255, 0.6);
+  transform: translateY(-2px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--accent-metallic-dark);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent-metallic);
+  background: var(--bg-secondary);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
