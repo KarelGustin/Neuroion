@@ -13,7 +13,7 @@ import traceback
 
 from neuroion.core.config import settings
 from neuroion.core.memory.db import init_db
-from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences
+from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences, join, members
 from neuroion.core.services.telegram_service import start_telegram_bot, stop_telegram_bot
 
 # Configure logging
@@ -99,6 +99,9 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(health.router)
 app.include_router(setup.router)
+app.include_router(setup.status_router)  # /api/status endpoint
+app.include_router(join.router)
+app.include_router(members.router)
 app.include_router(pairing.router)
 app.include_router(chat.router)
 app.include_router(events.router)

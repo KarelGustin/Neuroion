@@ -1,0 +1,14 @@
+[Unit]
+Description=Neuroion Setup Mode (SoftAP)
+After=network.target
+Before=neuroion-normal-mode.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/neuroion-switch-to-setup-mode.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

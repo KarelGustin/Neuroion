@@ -4,6 +4,7 @@ Setup endpoints for initial Homebase configuration.
 Handles WiFi configuration, LLM provider setup, and household initialization.
 """
 import logging
+import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from neuroion.core.memory.repository import (
     SystemConfigRepository,
     HouseholdRepository,
     UserRepository,
+    DeviceConfigRepository,
 )
 from neuroion.core.llm import get_llm_client_from_config
 from neuroion.core.llm.ollama import OllamaClient
@@ -24,6 +26,10 @@ from neuroion.core.llm.openai import OpenAILLMClient
 from neuroion.core.services.wifi_service import WiFiService
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+status_router = APIRouter(prefix="/api", tags=["status"])
+
+# Track startup time for uptime calculation
+_startup_time = time.time()
 
 
 # Request/Response Models
@@ -98,6 +104,53 @@ class InternetCheckResponse(BaseModel):
     """Internet connectivity check response."""
     connected: bool
     message: str
+
+
+class OwnerSetupRequest(BaseModel):
+    """Owner profile setup request."""
+    name: str
+    language: str = "nl"
+    timezone: str = "Europe/Amsterdam"
+    style_prefs: Optional[Dict[str, Any]] = None
+    preferences: Optional[Dict[str, Any]] = None
+    consent: Optional[Dict[str, Any]] = None
+
+
+class OwnerSetupResponse(BaseModel):
+    """Owner setup response."""
+    success: bool
+    member_id: int
+    message: str
+
+
+class ModelPresetRequest(BaseModel):
+    """LLM model preset selection request."""
+    preset: str  # fast, balanced, quality
+    model_name: Optional[str] = None  # Optional override
+
+
+class ModelPresetResponse(BaseModel):
+    """Model preset response."""
+    success: bool
+    preset: str
+    model_name: str
+    message: str
+
+
+class DeviceConfigResponse(BaseModel):
+    """Device configuration response."""
+    wifi_configured: bool
+    hostname: str
+    setup_completed: bool
+    retention_policy: Optional[Dict[str, Any]] = None
+
+
+class StatusResponse(BaseModel):
+    """System status response."""
+    network: Dict[str, Any]
+    model: Dict[str, Any]
+    uptime: int
+    household: Dict[str, Any]
 
 
 # Endpoints
@@ -382,9 +435,55 @@ def setup_household(
             message="Household and owner created successfully",
         )
     except Exception as e:
+        logger.error(f"Error setting up household: {e}", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass  # Ignore rollback errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to setup household: {str(e)}",
+        )
+
+
+@router.post("/complete", response_model=SetupCompleteResponse)
+def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
+    """
+    Mark setup as complete.
+    
+    Updates DeviceConfig to mark setup as completed.
+    """
+    try:
+        # Update device config to mark setup as complete
+        DeviceConfigRepository.update(
+            db=db,
+            setup_completed=True,
+        )
+        
+        # Get setup status
+        status_response = get_setup_status(db)
+        
+        missing_steps = []
+        if not status_response.steps.get("wifi", False):
+            missing_steps.append("wifi")
+        if not status_response.steps.get("llm", False):
+            missing_steps.append("llm")
+        if not status_response.steps.get("household", False):
+            missing_steps.append("household")
+        
+        return SetupCompleteResponse(
+            is_complete=status_response.is_complete,
+            missing_steps=missing_steps,
+        )
+    except Exception as e:
+        logger.error(f"Error marking setup complete: {e}", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark setup complete: {str(e)}",
         )
 
 
@@ -409,3 +508,251 @@ def check_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse
         is_complete=status_response.is_complete,
         missing_steps=missing_steps,
     )
+
+
+@router.get("/device-config", response_model=DeviceConfigResponse)
+def get_device_config(db: Session = Depends(get_db)) -> DeviceConfigResponse:
+    """Get device configuration."""
+    config = DeviceConfigRepository.get_or_create(db)
+    
+    return DeviceConfigResponse(
+        wifi_configured=config.wifi_configured,
+        hostname=config.hostname,
+        setup_completed=config.setup_completed,
+        retention_policy=config.retention_policy,
+    )
+
+
+@router.post("/owner", response_model=OwnerSetupResponse)
+def setup_owner(
+    request: OwnerSetupRequest,
+    db: Session = Depends(get_db),
+) -> OwnerSetupResponse:
+    """
+    Create or update owner profile.
+    
+    This is called during setup to configure the owner's profile.
+    """
+    try:
+        # Get first household (should exist after household setup)
+        households = HouseholdRepository.get_all(db)
+        if not households:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Household must be created first",
+            )
+        
+        household = households[0]
+        
+        # Find or create owner
+        users = UserRepository.get_by_household(db, household.id)
+        owner = next((u for u in users if u.role == "owner"), None)
+        
+        if not owner:
+            # Create owner
+            owner = UserRepository.create(
+                db=db,
+                household_id=household.id,
+                name=request.name,
+                role="owner",
+                device_type="web",
+            )
+        
+        # Update owner profile
+        owner.language = request.language
+        owner.timezone = request.timezone
+        if request.style_prefs:
+            owner.style_prefs_json = request.style_prefs
+        if request.preferences:
+            owner.preferences_json = request.preferences
+        if request.consent:
+            owner.consent_json = request.consent
+        
+        db.commit()
+        db.refresh(owner)
+        
+        return OwnerSetupResponse(
+            success=True,
+            member_id=owner.id,
+            message="Owner profile created successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting up owner: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to setup owner: {str(e)}",
+        )
+
+
+@router.post("/model", response_model=ModelPresetResponse)
+def setup_model_preset(
+    request: ModelPresetRequest,
+    db: Session = Depends(get_db),
+) -> ModelPresetResponse:
+    """
+    Select LLM model preset (fast/balanced/quality).
+    
+    Maps preset to specific model and updates LLM configuration.
+    """
+    try:
+        # Map preset to model
+        preset_models = {
+            "fast": "llama3.2:1b",  # Smaller, faster model
+            "balanced": "llama3.2",  # Default balanced model
+            "quality": "llama3.2:3b",  # Larger, higher quality model
+        }
+        
+        if request.preset not in preset_models:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid preset: {request.preset}. Must be one of: fast, balanced, quality",
+            )
+        
+        model_name = request.model_name or preset_models[request.preset]
+        
+        # Update LLM config to use local provider with selected model
+        SystemConfigRepository.set(
+            db=db,
+            key="llm_provider",
+            value={"provider": "local"},
+            category="llm",
+        )
+        
+        SystemConfigRepository.set(
+            db=db,
+            key="llm_ollama",
+            value={
+                "base_url": "http://localhost:11434",
+                "model": model_name,
+                "timeout": 120,
+            },
+            category="llm",
+        )
+        
+        # Test model availability
+        test_result = None
+        try:
+            llm_client = get_llm_client_from_config(db)
+            test_messages = [{"role": "user", "content": "Hello"}]
+            test_response = llm_client.chat(test_messages, temperature=0.7, max_tokens=10)
+            test_result = "Model available and responding"
+        except Exception as test_error:
+            test_result = f"Model test failed: {str(test_error)}"
+            logger.warning(f"Model test failed: {test_error}")
+        
+        return ModelPresetResponse(
+            success=True,
+            preset=request.preset,
+            model_name=model_name,
+            message=f"Model preset configured: {test_result or 'Configuration saved'}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting up model preset: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to setup model preset: {str(e)}",
+        )
+
+
+# Status endpoint (separate router for /api/status)
+@status_router.get("/status", response_model=StatusResponse)
+def get_status(db: Session = Depends(get_db)) -> StatusResponse:
+    """
+    Get system status: network, model, uptime, household.
+    
+    Returns comprehensive system status for dashboard and touchscreen UI.
+    """
+    try:
+        # Get device config
+        device_config = DeviceConfigRepository.get_or_create(db)
+        
+        # Get network info
+        current_ssid = WiFiService.get_current_ssid()
+        wifi_configured = device_config.wifi_configured
+        
+        # Try to get LAN IP (will be implemented in NetworkManager)
+        lan_ip = "192.168.1.100"  # Placeholder, will use NetworkManager.get_lan_ip()
+        
+        network_info = {
+            "mode": "lan" if wifi_configured else "setup",
+            "wifi_configured": wifi_configured,
+            "ssid": current_ssid or "Not connected",
+            "ip": lan_ip,
+            "hostname": device_config.hostname or "neuroion.local",
+        }
+        
+        # Get LLM model info
+        llm_provider_config = SystemConfigRepository.get(db, "llm_provider")
+        llm_ollama_config = SystemConfigRepository.get(db, "llm_ollama")
+        
+        model_preset = "balanced"
+        model_name = "llama3.2"
+        model_status = "idle"
+        model_health = "unknown"
+        
+        if llm_provider_config and isinstance(llm_provider_config.value, dict):
+            provider = llm_provider_config.value.get("provider", "local")
+            
+            if provider == "local" and llm_ollama_config and isinstance(llm_ollama_config.value, dict):
+                model_name = llm_ollama_config.value.get("model", "llama3.2")
+                # Determine preset from model name
+                if "1b" in model_name.lower():
+                    model_preset = "fast"
+                elif "3b" in model_name.lower():
+                    model_preset = "quality"
+                else:
+                    model_preset = "balanced"
+                
+                # Test LLM health
+                try:
+                    llm_client = get_llm_client_from_config(db)
+                    test_messages = [{"role": "user", "content": "test"}]
+                    llm_client.chat(test_messages, temperature=0.7, max_tokens=1)
+                    model_status = "running"
+                    model_health = "ok"
+                except Exception:
+                    model_status = "idle"
+                    model_health = "error"
+        
+        model_info = {
+            "preset": model_preset,
+            "name": model_name,
+            "status": model_status,
+            "health": model_health,
+        }
+        
+        # Calculate uptime
+        uptime_seconds = int(time.time() - _startup_time)
+        
+        # Get household info
+        households = HouseholdRepository.get_all(db)
+        household_name = "Not configured"
+        member_count = 0
+        
+        if households:
+            household = households[0]
+            household_name = household.name
+            members = UserRepository.get_by_household(db, household.id)
+            member_count = len(members)
+        
+        household_info = {
+            "name": household_name,
+            "member_count": member_count,
+        }
+        
+        return StatusResponse(
+            network=network_info,
+            model=model_info,
+            uptime=uptime_seconds,
+            household=household_info,
+        )
+    except Exception as e:
+        logger.error(f"Error getting status: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get status: {str(e)}",
+        )

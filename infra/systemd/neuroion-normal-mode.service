@@ -1,0 +1,14 @@
+[Unit]
+Description=Neuroion Normal Mode (LAN)
+After=network.target
+Before=neuroion-setup-mode.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/neuroion-switch-to-normal-mode.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

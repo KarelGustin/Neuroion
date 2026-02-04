@@ -1,17 +1,37 @@
 """
 Repository layer for database operations.
 
-Provides high-level CRUD operations and query helpers for all entities.
+Provides high-level methods for CRUD operations on all models.
 """
-from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import and_, or_, func
 
 from neuroion.core.memory.models import (
-    Household, User, Preference, ContextSnapshot, AuditLog, ChatMessage, SystemConfig,
-    DailyRequestCount, UserIntegration, DashboardLink, LoginCode
+    Household,
+    User,
+    Preference,
+    ContextSnapshot,
+    AuditLog,
+    ChatMessage,
+    SystemConfig,
+    DailyRequestCount,
+    UserIntegration,
+    DashboardLink,
+    LoginCode,
+    DeviceConfig,
+    JoinToken,
 )
+
+
+def safe_refresh(db: Session, obj: Any) -> None:
+    """Safely refresh an object, ignoring errors if session is closed."""
+    try:
+        if db.is_active:
+            db.refresh(obj)
+    except Exception:
+        pass  # Ignore refresh errors - object is already committed
 
 
 class HouseholdRepository:
@@ -22,8 +42,12 @@ class HouseholdRepository:
         """Create a new household."""
         household = Household(name=name)
         db.add(household)
-        db.commit()
-        db.refresh(household)
+        try:
+            db.commit()
+            safe_refresh(db, household)
+        except Exception:
+            db.rollback()
+            raise
         return household
     
     @staticmethod
@@ -35,6 +59,25 @@ class HouseholdRepository:
     def get_all(db: Session) -> List[Household]:
         """Get all households."""
         return db.query(Household).all()
+    
+    @staticmethod
+    def update(db: Session, household_id: int, name: str) -> Optional[Household]:
+        """Update household name."""
+        household = HouseholdRepository.get_by_id(db, household_id)
+        if household:
+            household.name = name
+            db.commit()
+        return household
+    
+    @staticmethod
+    def delete(db: Session, household_id: int) -> bool:
+        """Delete household and all related data."""
+        household = HouseholdRepository.get_by_id(db, household_id)
+        if household:
+            db.delete(household)
+            db.commit()
+            return True
+        return False
 
 
 class UserRepository:
@@ -58,8 +101,12 @@ class UserRepository:
             device_type=device_type,
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        try:
+            db.commit()
+            safe_refresh(db, user)
+        except Exception:
+            db.rollback()
+            raise
         return user
     
     @staticmethod
@@ -69,7 +116,7 @@ class UserRepository:
     
     @staticmethod
     def get_by_device_id(db: Session, device_id: str) -> Optional[User]:
-        """Get user by device ID (for pairing)."""
+        """Get user by device ID."""
         return db.query(User).filter(User.device_id == device_id).first()
     
     @staticmethod
@@ -78,12 +125,49 @@ class UserRepository:
         return db.query(User).filter(User.household_id == household_id).all()
     
     @staticmethod
-    def update_last_seen(db: Session, user_id: int) -> None:
-        """Update user's last seen timestamp."""
-        user = db.query(User).filter(User.id == user_id).first()
+    def update(
+        db: Session,
+        user_id: int,
+        name: Optional[str] = None,
+        role: Optional[str] = None,
+        language: Optional[str] = None,
+        timezone: Optional[str] = None,
+        style_prefs_json: Optional[str] = None,
+        preferences_json: Optional[str] = None,
+        consent_json: Optional[str] = None,
+    ) -> Optional[User]:
+        """Update user."""
+        user = UserRepository.get_by_id(db, user_id)
+        if not user:
+            return None
+        
+        if name is not None:
+            user.name = name
+        if role is not None:
+            user.role = role
+        if language is not None:
+            user.language = language
+        if timezone is not None:
+            user.timezone = timezone
+        if style_prefs_json is not None:
+            user.style_prefs_json = style_prefs_json
+        if preferences_json is not None:
+            user.preferences_json = preferences_json
+        if consent_json is not None:
+            user.consent_json = consent_json
+        
+        db.commit()
+        return user
+    
+    @staticmethod
+    def delete(db: Session, user_id: int) -> bool:
+        """Delete user."""
+        user = UserRepository.get_by_id(db, user_id)
         if user:
-            user.last_seen_at = datetime.utcnow()
+            db.delete(user)
             db.commit()
+            return True
+        return False
 
 
 class PreferenceRepository:
@@ -96,50 +180,46 @@ class PreferenceRepository:
         key: str,
         value: Any,
         user_id: Optional[int] = None,
-        category: Optional[str] = None,
     ) -> Preference:
-        """Set a preference (creates or updates)."""
-        import json
-        
-        # Check if exists
+        """Set a preference value."""
+        # Check if preference exists
         query = db.query(Preference).filter(
             Preference.household_id == household_id,
             Preference.key == key,
         )
-        if user_id:
+        if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
         else:
             query = query.filter(Preference.user_id.is_(None))
         
         pref = query.first()
         
-        # Always serialize non-string values to JSON
-        if isinstance(value, str):
-            try:
-                json.loads(value)  # Validate it's valid JSON
-                serialized_value = value  # Already valid JSON string
-            except (json.JSONDecodeError, TypeError):
-                serialized_value = value  # Plain string, keep as-is
+        # Serialize value to JSON if it's not already a string
+        import json
+        if not isinstance(value, str):
+            value_str = json.dumps(value)
         else:
-            # For dict, list, or other types, always serialize to JSON
-            serialized_value = json.dumps(value)
+            # If it's already a string, validate it's valid JSON
+            try:
+                json.loads(value)
+                value_str = value
+            except (json.JSONDecodeError, TypeError):
+                # If it's not valid JSON, wrap it as a string value
+                value_str = json.dumps(value)
         
         if pref:
-            pref.value = serialized_value
-            pref.category = category or pref.category
-            pref.updated_at = datetime.utcnow()
+            pref.value = value_str
         else:
             pref = Preference(
                 household_id=household_id,
                 user_id=user_id,
                 key=key,
-                value=serialized_value,
-                category=category,
+                value=value_str,
             )
             db.add(pref)
         
         db.commit()
-        db.refresh(pref)
+        safe_refresh(db, pref)
         return pref
     
     @staticmethod
@@ -149,34 +229,25 @@ class PreferenceRepository:
         key: str,
         user_id: Optional[int] = None,
     ) -> Optional[Preference]:
-        """Get a preference."""
-        import json
-        
+        """Get a preference value."""
         query = db.query(Preference).filter(
             Preference.household_id == household_id,
             Preference.key == key,
         )
-        if user_id:
+        if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
         else:
             query = query.filter(Preference.user_id.is_(None))
         
-        pref = query.first()
-        if pref:
-            try:
-                pref.value = json.loads(pref.value)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return pref
+        return query.first()
     
     @staticmethod
     def get_all(
         db: Session,
         household_id: int,
         user_id: Optional[int] = None,
-        category: Optional[str] = None,
-    ) -> List[Preference]:
-        """Get all preferences matching criteria."""
+    ) -> Dict[str, Any]:
+        """Get all preferences as a dictionary."""
         import json
         import threading
         thread_id = threading.get_ident()
@@ -186,14 +257,16 @@ class PreferenceRepository:
                 f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:179","message":"PreferenceRepository.get_all entry","data":{"thread_id":thread_id,"household_id":household_id,"user_id":user_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
-        query = db.query(Preference).filter(Preference.household_id == household_id)
+        
+        query = db.query(Preference).filter(
+            Preference.household_id == household_id,
+        )
+        
         if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
         else:
-            # If user_id is None, only get household-level preferences (where user_id IS NULL)
+            # For household-level preferences, user_id must be NULL
             query = query.filter(Preference.user_id.is_(None))
-        if category:
-            query = query.filter(Preference.category == category)
         
         # #region agent log
         try:
@@ -201,13 +274,17 @@ class PreferenceRepository:
                 f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:191","message":"Before query.all()","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
+        
         prefs = query.all()
+        
         # #region agent log
         try:
             with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
                 f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:194","message":"After query.all()","data":{"thread_id":thread_id,"count":len(prefs),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
+        
+        result = {}
         for i, pref in enumerate(prefs):
             # #region agent log
             try:
@@ -216,22 +293,27 @@ class PreferenceRepository:
             except: pass
             # #endregion
             try:
-                pref.value = json.loads(pref.value)
+                # Try to parse as JSON first
+                value = json.loads(pref.value)
             except (json.JSONDecodeError, TypeError):
-                pass
+                # If not valid JSON, use as string
+                value = pref.value
             # #region agent log
             try:
                 with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
                     f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:203","message":"After JSON parse","data":{"thread_id":thread_id,"index":i,"pref_id":id(pref)},"timestamp":int(__import__('time').time()*1000)})+'\n')
             except: pass
             # #endregion
+            result[pref.key] = value
+        
         # #region agent log
         try:
             with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
                 f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:207","message":"PreferenceRepository.get_all exit","data":{"thread_id":thread_id,"count":len(prefs)},"timestamp":int(__import__('time').time()*1000)})+'\n')
         except: pass
         # #endregion
-        return prefs
+        
+        return result
     
     @staticmethod
     def delete(
@@ -245,7 +327,7 @@ class PreferenceRepository:
             Preference.household_id == household_id,
             Preference.key == key,
         )
-        if user_id:
+        if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
         else:
             query = query.filter(Preference.user_id.is_(None))
@@ -267,45 +349,38 @@ class ContextSnapshotRepository:
         household_id: int,
         event_type: str,
         summary: str,
+        context_metadata: Optional[Dict[str, Any]] = None,
         user_id: Optional[int] = None,
-        event_subtype: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        timestamp: Optional[datetime] = None,
     ) -> ContextSnapshot:
-        """Create a context snapshot."""
+        """Create a new context snapshot."""
+        import json
         snapshot = ContextSnapshot(
             household_id=household_id,
             user_id=user_id,
             event_type=event_type,
-            event_subtype=event_subtype,
             summary=summary,
-            context_metadata=metadata,
-            timestamp=timestamp or datetime.utcnow(),
+            context_metadata=json.dumps(context_metadata) if context_metadata else None,
         )
         db.add(snapshot)
         db.commit()
-        db.refresh(snapshot)
+        safe_refresh(db, snapshot)
         return snapshot
     
     @staticmethod
     def get_recent(
         db: Session,
         household_id: int,
-        limit: int = 50,
+        limit: int = 10,
         user_id: Optional[int] = None,
-        event_type: Optional[str] = None,
     ) -> List[ContextSnapshot]:
         """Get recent context snapshots."""
         query = db.query(ContextSnapshot).filter(
-            ContextSnapshot.household_id == household_id
+            ContextSnapshot.household_id == household_id,
         )
-        
-        if user_id:
+        if user_id is not None:
             query = query.filter(ContextSnapshot.user_id == user_id)
-        if event_type:
-            query = query.filter(ContextSnapshot.event_type == event_type)
         
-        return query.order_by(desc(ContextSnapshot.timestamp)).limit(limit).all()
+        return query.order_by(ContextSnapshot.timestamp.desc()).limit(limit).all()
 
 
 class AuditLogRepository:
@@ -315,67 +390,61 @@ class AuditLogRepository:
     def create(
         db: Session,
         household_id: int,
-        action_type: str,
-        action_name: str,
-        reasoning: Optional[str] = None,
-        user_id: Optional[int] = None,
-        input_data: Optional[Dict[str, Any]] = None,
-        status: str = "pending",
+        user_id: Optional[int],
+        action: str,
+        resource_type: str,
+        resource_id: Optional[int],
+        details: Optional[Dict[str, Any]] = None,
     ) -> AuditLog:
-        """Create an audit log entry."""
+        """Create a new audit log entry."""
+        import json
         log = AuditLog(
             household_id=household_id,
             user_id=user_id,
-            action_type=action_type,
-            action_name=action_name,
-            reasoning=reasoning,
-            input_data=input_data,
-            status=status,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=json.dumps(details) if details else None,
         )
         db.add(log)
         db.commit()
-        db.refresh(log)
-        return log
-    
-    @staticmethod
-    def update_status(
-        db: Session,
-        log_id: int,
-        status: str,
-        output_data: Optional[Dict[str, Any]] = None,
-    ) -> Optional[AuditLog]:
-        """Update audit log status."""
-        log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
-        if not log:
-            return None
-        
-        log.status = status
-        if output_data:
-            log.output_data = output_data
-        
-        if status == "confirmed":
-            log.confirmed_at = datetime.utcnow()
-        elif status == "executed":
-            log.executed_at = datetime.utcnow()
-        
-        db.commit()
-        db.refresh(log)
+        safe_refresh(db, log)
         return log
     
     @staticmethod
     def get_recent(
         db: Session,
         household_id: int,
-        limit: int = 100,
-        action_type: Optional[str] = None,
+        limit: int = 50,
+        user_id: Optional[int] = None,
     ) -> List[AuditLog]:
-        """Get recent audit logs."""
-        query = db.query(AuditLog).filter(AuditLog.household_id == household_id)
+        """Get recent audit log entries."""
+        query = db.query(AuditLog).filter(
+            AuditLog.household_id == household_id,
+        )
+        if user_id is not None:
+            query = query.filter(AuditLog.user_id == user_id)
         
-        if action_type:
-            query = query.filter(AuditLog.action_type == action_type)
-        
-        return query.order_by(desc(AuditLog.created_at)).limit(limit).all()
+        return query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
+    
+    @staticmethod
+    def get_by_resource(
+        db: Session,
+        household_id: int,
+        resource_type: str,
+        resource_id: int,
+    ) -> List[AuditLog]:
+        """Get audit logs for a specific resource."""
+        return (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.household_id == household_id,
+                AuditLog.resource_type == resource_type,
+                AuditLog.resource_id == resource_id,
+            )
+            .order_by(AuditLog.timestamp.desc())
+            .all()
+        )
 
 
 class ChatMessageRepository:
@@ -385,52 +454,21 @@ class ChatMessageRepository:
     def create(
         db: Session,
         household_id: int,
-        user_id: int,
+        user_id: Optional[int],
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
     ) -> ChatMessage:
-        """Create a chat message."""
+        """Create a new chat message."""
         message = ChatMessage(
             household_id=household_id,
             user_id=user_id,
             role=role,
             content=content,
-            message_metadata=metadata,
         )
         db.add(message)
         db.commit()
-        db.refresh(message)
+        safe_refresh(db, message)
         return message
-    
-    @staticmethod
-    def get_conversation_history(
-        db: Session,
-        household_id: int,
-        user_id: int,
-        limit: int = 20,
-    ) -> List[Dict[str, str]]:
-        """
-        Get conversation history for a user.
-        
-        Returns:
-            List of message dicts with 'role' and 'content' for LLM
-        """
-        messages = db.query(ChatMessage).filter(
-            ChatMessage.household_id == household_id,
-            ChatMessage.user_id == user_id,
-        ).order_by(desc(ChatMessage.created_at)).limit(limit).all()
-        
-        # Reverse to get chronological order (oldest first)
-        messages.reverse()
-        
-        return [
-            {
-                "role": msg.role,
-                "content": msg.content,
-            }
-            for msg in messages
-        ]
     
     @staticmethod
     def get_recent(
@@ -441,103 +479,68 @@ class ChatMessageRepository:
     ) -> List[ChatMessage]:
         """Get recent chat messages."""
         query = db.query(ChatMessage).filter(
-            ChatMessage.household_id == household_id
+            ChatMessage.household_id == household_id,
         )
-        
-        if user_id:
+        if user_id is not None:
             query = query.filter(ChatMessage.user_id == user_id)
         
-        return query.order_by(desc(ChatMessage.created_at)).limit(limit).all()
+        return query.order_by(ChatMessage.timestamp.desc()).limit(limit).all()
 
 
 class SystemConfigRepository:
     """Repository for system configuration operations."""
     
     @staticmethod
-    def set(
-        db: Session,
-        key: str,
-        value: Any,
-        category: str,
-    ) -> SystemConfig:
-        """Set a system config value (creates or updates)."""
+    def get(db: Session, key: str) -> Optional[SystemConfig]:
+        """Get system config by key."""
+        return db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    
+    @staticmethod
+    def set(db: Session, key: str, value: Any) -> SystemConfig:
+        """Set system config value."""
         import json
+        config = SystemConfigRepository.get(db, key)
         
-        # Always serialize non-string values to JSON
-        # For strings, check if they're already JSON, if not keep as-is
-        if isinstance(value, str):
-            # If it's already a string, try to parse it to see if it's JSON
-            # If it's valid JSON, keep it as-is, otherwise it's a plain string
-            try:
-                json.loads(value)  # Validate it's valid JSON
-                serialized_value = value  # Already valid JSON string
-            except (json.JSONDecodeError, TypeError):
-                serialized_value = value  # Plain string, keep as-is
+        # Serialize value to JSON if it's not already a string
+        if not isinstance(value, str):
+            value_str = json.dumps(value)
         else:
-            # For dict, list, or other types, always serialize to JSON
-            serialized_value = json.dumps(value)
-        
-        config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+            # If it's already a string, validate it's valid JSON
+            try:
+                json.loads(value)
+                value_str = value
+            except (json.JSONDecodeError, TypeError):
+                # If it's not valid JSON, wrap it as a string value
+                value_str = json.dumps(value)
         
         if config:
-            config.value = serialized_value
-            config.category = category
-            config.updated_at = datetime.utcnow()
+            config.value = value_str
         else:
-            config = SystemConfig(
-                key=key,
-                value=serialized_value,
-                category=category,
-            )
+            config = SystemConfig(key=key, value=value_str)
             db.add(config)
         
         db.commit()
-        db.refresh(config)
+        safe_refresh(db, config)
         return config
     
     @staticmethod
-    def get(db: Session, key: str) -> Optional[SystemConfig]:
-        """Get a system config by key."""
+    def get_all(db: Session) -> Dict[str, Any]:
+        """Get all system config as a dictionary."""
         import json
-        
-        config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
-        if config:
-            try:
-                config.value = json.loads(config.value)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return config
-    
-    @staticmethod
-    def get_by_category(db: Session, category: str) -> List[SystemConfig]:
-        """Get all configs in a category."""
-        import json
-        
-        configs = db.query(SystemConfig).filter(SystemConfig.category == category).all()
-        for config in configs:
-            try:
-                config.value = json.loads(config.value)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        return configs
-    
-    @staticmethod
-    def get_all(db: Session) -> List[SystemConfig]:
-        """Get all system configs."""
-        import json
-        
         configs = db.query(SystemConfig).all()
+        result = {}
         for config in configs:
             try:
-                config.value = json.loads(config.value)
+                value = json.loads(config.value)
             except (json.JSONDecodeError, TypeError):
-                pass
-        return configs
+                value = config.value
+            result[config.key] = value
+        return result
     
     @staticmethod
     def delete(db: Session, key: str) -> bool:
-        """Delete a system config."""
-        config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        """Delete system config."""
+        config = SystemConfigRepository.get(db, key)
         if config:
             db.delete(config)
             db.commit()
@@ -549,128 +552,103 @@ class DailyRequestCountRepository:
     """Repository for daily request count operations."""
     
     @staticmethod
-    def get_or_create_today(db: Session, household_id: int) -> DailyRequestCount:
-        """Get or create today's request count for a household."""
-        from datetime import date
-        today = datetime.combine(date.today(), datetime.min.time())
+    def increment(db: Session, date: datetime) -> DailyRequestCount:
+        """Increment daily request count."""
+        date_str = date.strftime("%Y-%m-%d")
+        count = (
+            db.query(DailyRequestCount)
+            .filter(DailyRequestCount.date == date_str)
+            .first()
+        )
         
-        count = db.query(DailyRequestCount).filter(
-            DailyRequestCount.household_id == household_id,
-            DailyRequestCount.date == today,
-        ).first()
-        
-        if not count:
-            count = DailyRequestCount(
-                household_id=household_id,
-                date=today,
-                count=0,
-            )
+        if count:
+            count.count += 1
+            count.updated_at = datetime.utcnow()
+        else:
+            count = DailyRequestCount(date=date_str, count=1)
             db.add(count)
             db.commit()
-            db.refresh(count)
+            safe_refresh(db, count)
         
-        return count
-    
-    @staticmethod
-    def increment(db: Session, household_id: int) -> DailyRequestCount:
-        """Increment today's request count for a household."""
-        count = DailyRequestCountRepository.get_or_create_today(db, household_id)
-        count.count += 1
         count.updated_at = datetime.utcnow()
         db.commit()
-        db.refresh(count)
+        safe_refresh(db, count)
         return count
     
     @staticmethod
-    def get_today_count(db: Session, household_id: int) -> int:
-        """Get today's request count for a household."""
-        from datetime import date
-        today = datetime.combine(date.today(), datetime.min.time())
-        
-        count = db.query(DailyRequestCount).filter(
-            DailyRequestCount.household_id == household_id,
-            DailyRequestCount.date == today,
-        ).first()
-        
-        return count.count if count else 0
+    def get_today(db: Session) -> Optional[DailyRequestCount]:
+        """Get today's request count."""
+        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        return (
+            db.query(DailyRequestCount)
+            .filter(DailyRequestCount.date == date_str)
+            .first()
+        )
 
 
 class UserIntegrationRepository:
     """Repository for user integration operations."""
     
     @staticmethod
-    def create_or_update(
+    def create(
         db: Session,
         user_id: int,
-        integration_type: str,
+        provider: str,
         access_token: str,
         refresh_token: Optional[str] = None,
-        token_expires_at: Optional[datetime] = None,
+        expires_at: Optional[datetime] = None,
         permissions: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
     ) -> UserIntegration:
-        """Create or update a user integration."""
-        integration = db.query(UserIntegration).filter(
-            UserIntegration.user_id == user_id,
-            UserIntegration.integration_type == integration_type,
-        ).first()
-        
-        if integration:
-            integration.access_token = access_token
-            if refresh_token:
-                integration.refresh_token = refresh_token
-            if token_expires_at:
-                integration.token_expires_at = token_expires_at
-            if permissions:
-                integration.permissions = permissions
-            if metadata:
-                integration.integration_metadata = metadata
-            integration.updated_at = datetime.utcnow()
-        else:
-            integration = UserIntegration(
-                user_id=user_id,
-                integration_type=integration_type,
-                access_token=access_token,
-                refresh_token=refresh_token,
-                token_expires_at=token_expires_at,
-                permissions=permissions,
-                integration_metadata=metadata,
-            )
-            db.add(integration)
-        
+        """Create a new user integration."""
+        import json
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=provider,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+            permissions=json.dumps(permissions) if permissions else None,
+        )
+        db.add(integration)
         db.commit()
-        db.refresh(integration)
+        safe_refresh(db, integration)
         return integration
     
     @staticmethod
-    def get_by_user_and_type(
+    def get_by_user_and_provider(
         db: Session,
         user_id: int,
-        integration_type: str,
+        provider: str,
     ) -> Optional[UserIntegration]:
-        """Get integration by user and type."""
-        return db.query(UserIntegration).filter(
-            UserIntegration.user_id == user_id,
-            UserIntegration.integration_type == integration_type,
-        ).first()
+        """Get integration by user and provider."""
+        return (
+            db.query(UserIntegration)
+            .filter(
+                UserIntegration.user_id == user_id,
+                UserIntegration.provider == provider,
+            )
+            .first()
+        )
     
     @staticmethod
-    def get_by_user(db: Session, user_id: int) -> List[UserIntegration]:
-        """Get all integrations for a user."""
-        return db.query(UserIntegration).filter(
-            UserIntegration.user_id == user_id,
-        ).all()
-    
-    @staticmethod
-    def delete(db: Session, user_id: int, integration_type: str) -> bool:
-        """Delete a user integration."""
-        integration = db.query(UserIntegration).filter(
-            UserIntegration.user_id == user_id,
-            UserIntegration.integration_type == integration_type,
-        ).first()
-        
+    def update_tokens(
+        db: Session,
+        user_id: int,
+        provider: str,
+        access_token: str,
+        refresh_token: Optional[str] = None,
+        expires_at: Optional[datetime] = None,
+    ) -> bool:
+        """Update integration tokens."""
+        integration = UserIntegrationRepository.get_by_user_and_provider(
+            db, user_id, provider
+        )
         if integration:
-            db.delete(integration)
+            integration.access_token = access_token
+            if refresh_token is not None:
+                integration.refresh_token = refresh_token
+            if expires_at is not None:
+                integration.expires_at = expires_at
             db.commit()
             return True
         return False
@@ -680,77 +658,57 @@ class DashboardLinkRepository:
     """Repository for dashboard link operations."""
     
     @staticmethod
-    def get_or_create(db: Session, user_id: int) -> DashboardLink:
-        """Get or create a dashboard link for a user."""
-        import secrets
-        
-        link = db.query(DashboardLink).filter(
-            DashboardLink.user_id == user_id,
-        ).first()
-        
-        if not link:
-            # Generate unique token
-            token = secrets.token_urlsafe(32)
-            link = DashboardLink(
-                user_id=user_id,
-                token=token,
-            )
-            db.add(link)
-            db.commit()
-            db.refresh(link)
-        
+    def create(
+        db: Session,
+        user_id: int,
+        token: str,
+        expires_at: datetime,
+    ) -> DashboardLink:
+        """Create a new dashboard link."""
+        link = DashboardLink(
+            user_id=user_id,
+            token=token,
+            expires_at=expires_at,
+        )
+        db.add(link)
+        db.commit()
+        safe_refresh(db, link)
         return link
     
     @staticmethod
     def get_by_token(db: Session, token: str) -> Optional[DashboardLink]:
         """Get dashboard link by token."""
-        link = db.query(DashboardLink).filter(
-            DashboardLink.token == token,
-        ).first()
-        
+        return (
+            db.query(DashboardLink)
+            .filter(
+                DashboardLink.token == token,
+                DashboardLink.expires_at > datetime.utcnow(),
+            )
+            .first()
+        )
+    
+    @staticmethod
+    def update_last_accessed(db: Session, token: str) -> Optional[DashboardLink]:
+        """Update last accessed timestamp."""
+        link = DashboardLinkRepository.get_by_token(db, token)
         if link:
             link.last_accessed_at = datetime.utcnow()
             db.commit()
-            db.refresh(link)
-        
+            safe_refresh(db, link)
         return link
-    
-    @staticmethod
-    def get_by_user(db: Session, user_id: int) -> Optional[DashboardLink]:
-        """Get dashboard link by user ID."""
-        return db.query(DashboardLink).filter(
-            DashboardLink.user_id == user_id,
-        ).first()
 
 
 class LoginCodeRepository:
     """Repository for login code operations."""
     
     @staticmethod
-    def create(db: Session, user_id: int, expires_in_seconds: int = 60) -> LoginCode:
-        """
-        Create a new login code for a user.
-        
-        Args:
-            db: Database session
-            user_id: User ID
-            expires_in_seconds: Expiration time in seconds (default 60)
-        
-        Returns:
-            LoginCode instance
-        """
-        import secrets
-        
-        # Generate 4-digit code
-        code = f"{secrets.randbelow(10000):04d}"
-        
-        # Calculate expiration time
-        expires_at = datetime.utcnow() + timedelta(seconds=expires_in_seconds)
-        
-        # Delete any existing codes for this user
-        db.query(LoginCode).filter(LoginCode.user_id == user_id).delete()
-        
-        # Create new code
+    def create(
+        db: Session,
+        user_id: int,
+        code: str,
+        expires_at: datetime,
+    ) -> LoginCode:
+        """Create a new login code."""
         login_code = LoginCode(
             user_id=user_id,
             code=code,
@@ -758,56 +716,159 @@ class LoginCodeRepository:
         )
         db.add(login_code)
         db.commit()
-        db.refresh(login_code)
-        
+        safe_refresh(db, login_code)
         return login_code
     
     @staticmethod
-    def verify(db: Session, code: str) -> Optional[int]:
-        """
-        Verify a login code and return user_id if valid.
-        
-        Args:
-            db: Database session
-            code: 6-digit code to verify
-        
-        Returns:
-            user_id if valid and not expired, None otherwise
-            Code is deleted after verification (one-time use)
-        """
-        login_code = db.query(LoginCode).filter(LoginCode.code == code).first()
-        
-        if not login_code:
-            return None
-        
-        # Check expiration
-        if datetime.utcnow() > login_code.expires_at:
-            # Delete expired code
-            db.delete(login_code)
+    def get_by_code(db: Session, code: str) -> Optional[LoginCode]:
+        """Get login code by code string."""
+        return (
+            db.query(LoginCode)
+            .filter(
+                LoginCode.code == code,
+                LoginCode.expires_at > datetime.utcnow(),
+                LoginCode.used_at.is_(None),
+            )
+            .first()
+        )
+    
+    @staticmethod
+    def mark_used(db: Session, code: str) -> Optional[int]:
+        """Mark login code as used and return user_id."""
+        login_code = LoginCodeRepository.get_by_code(db, code)
+        if login_code:
+            login_code.used_at = datetime.utcnow()
             db.commit()
-            return None
-        
-        # Get user_id before deleting
-        user_id = login_code.user_id
-        
-        # Delete code (one-time use)
-        db.delete(login_code)
-        db.commit()
-        
-        return user_id
+            return login_code.user_id
+        return None
     
     @staticmethod
     def cleanup_expired(db: Session) -> int:
-        """
-        Remove expired login codes.
+        """Delete expired login codes."""
+        deleted = (
+            db.query(LoginCode)
+            .filter(LoginCode.expires_at < datetime.utcnow())
+            .delete()
+        )
+        db.commit()
+        return deleted
+
+
+class DeviceConfigRepository:
+    """Repository for device configuration operations."""
+    
+    @staticmethod
+    def get_or_create(db: Session) -> DeviceConfig:
+        """Get or create device config (singleton)."""
+        config = db.query(DeviceConfig).first()
+        if not config:
+            config = DeviceConfig()
+            db.add(config)
+            try:
+                # Commit immediately for singleton to avoid threading issues
+                db.commit()
+                safe_refresh(db, config)
+            except Exception:
+                db.rollback()
+                raise
+        return config
+    
+    @staticmethod
+    def update(
+        db: Session,
+        wifi_configured: Optional[bool] = None,
+        hostname: Optional[str] = None,
+        setup_completed: Optional[bool] = None,
+        retention_policy: Optional[Dict[str, Any]] = None,
+    ) -> DeviceConfig:
+        """Update device configuration."""
+        config = DeviceConfigRepository.get_or_create(db)
         
-        Args:
-            db: Database session
+        # Check if any changes are needed
+        needs_update = False
+        if wifi_configured is not None and config.wifi_configured != wifi_configured:
+            config.wifi_configured = wifi_configured
+            needs_update = True
+        if hostname is not None and config.hostname != hostname:
+            config.hostname = hostname
+            needs_update = True
+        if setup_completed is not None and config.setup_completed != setup_completed:
+            config.setup_completed = setup_completed
+            needs_update = True
+        if retention_policy is not None and config.retention_policy != retention_policy:
+            config.retention_policy = retention_policy
+            needs_update = True
         
-        Returns:
-            Number of codes deleted
-        """
-        now = datetime.utcnow()
-        deleted = db.query(LoginCode).filter(LoginCode.expires_at < now).delete()
+        if needs_update:
+            config.updated_at = datetime.utcnow()
+            try:
+                db.commit()
+                safe_refresh(db, config)
+            except Exception:
+                db.rollback()
+                raise
+        
+        return config
+    
+    @staticmethod
+    def get(db: Session) -> Optional[DeviceConfig]:
+        """Get device configuration."""
+        return db.query(DeviceConfig).first()
+
+
+class JoinTokenRepository:
+    """Repository for join token operations."""
+    
+    @staticmethod
+    def create(
+        db: Session,
+        token: str,
+        household_id: int,
+        created_by_member_id: int,
+        expires_at: datetime,
+    ) -> JoinToken:
+        """Create a new join token."""
+        join_token = JoinToken(
+            token=token,
+            household_id=household_id,
+            created_by_member_id=created_by_member_id,
+            expires_at=expires_at,
+        )
+        db.add(join_token)
+        db.commit()
+        safe_refresh(db, join_token)
+        return join_token
+    
+    @staticmethod
+    def get_by_token(db: Session, token: str) -> Optional[JoinToken]:
+        """Get join token by token string."""
+        return (
+            db.query(JoinToken)
+            .filter(
+                JoinToken.token == token,
+                JoinToken.expires_at > datetime.utcnow(),
+                JoinToken.used_at.is_(None),
+            )
+            .first()
+        )
+    
+    @staticmethod
+    def mark_used(db: Session, token: str) -> Optional[JoinToken]:
+        """Mark join token as used."""
+        join_token = JoinTokenRepository.get_by_token(db, token)
+        if join_token:
+            join_token.used_at = datetime.utcnow()
+            db.commit()
+            safe_refresh(db, join_token)
+        return join_token
+    
+    @staticmethod
+    def cleanup_expired(db: Session) -> int:
+        """Delete expired join tokens."""
+        deleted = (
+            db.query(JoinToken)
+            .filter(JoinToken.expires_at < datetime.utcnow())
+            .delete()
+        )
         db.commit()
         return deleted

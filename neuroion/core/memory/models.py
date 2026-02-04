@@ -33,7 +33,7 @@ class Household(Base):
 
 
 class User(Base):
-    """Represents a user within a household."""
+    """Represents a user/member within a household."""
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -44,6 +44,13 @@ class User(Base):
     device_type = Column(String(50), nullable=True)  # ios, telegram, web
     created_at = Column(DateTime, default=func.now(), nullable=False)
     last_seen_at = Column(DateTime, nullable=True)
+    
+    # Member profile fields (for onboarding)
+    language = Column(String(10), nullable=True)  # e.g., "nl", "en"
+    timezone = Column(String(50), nullable=True)  # e.g., "Europe/Amsterdam"
+    style_prefs_json = Column(JSON, nullable=True)  # Communication style preferences
+    preferences_json = Column(JSON, nullable=True)  # General preferences (diet, routines, interests)
+    consent_json = Column(JSON, nullable=True)  # Privacy consent settings
     
     # Relationships
     household = relationship("Household", back_populates="users")
@@ -246,4 +253,43 @@ class LoginCode(Base):
     
     __table_args__ = (
         Index("idx_login_code_code", "code"),
+    )
+
+
+class DeviceConfig(Base):
+    """Device-level configuration."""
+    __tablename__ = "device_config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    wifi_configured = Column(Boolean, default=False, nullable=False)
+    hostname = Column(String(255), default="neuroion", nullable=False)
+    setup_completed = Column(Boolean, default=False, nullable=False)
+    retention_policy = Column(JSON, nullable=True)  # {"days": 365, "auto_delete": True}
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    
+    __table_args__ = (
+        Index("idx_device_config_setup", "setup_completed"),
+    )
+
+
+class JoinToken(Base):
+    """Single-use join tokens for adding members."""
+    __tablename__ = "join_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    created_by_member_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    
+    # Relationships
+    household = relationship("Household")
+    created_by = relationship("User")
+    
+    __table_args__ = (
+        Index("idx_join_token_expires", "expires_at"),
+        Index("idx_join_token_used", "used_at"),
     )

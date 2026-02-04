@@ -38,7 +38,67 @@ SessionLocal = scoped_session(
 
 def init_db() -> None:
     """Initialize database schema (create tables)."""
-    Base.metadata.create_all(bind=engine)
+    import logging
+    import threading
+    
+    logger = logging.getLogger(__name__)
+    
+    # Use a lock to ensure only one thread initializes the database
+    _init_lock = threading.Lock()
+    
+    with _init_lock:
+        try:
+            # Create all tables (this only creates missing tables, doesn't modify existing ones)
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database schema initialized")
+            
+            # For development: try to add missing columns to existing tables
+            # This is a simple migration approach - in production, use Alembic
+            # Only run migrations if tables exist (to avoid errors on fresh installs)
+            try:
+                from sqlalchemy import inspect, text
+                
+                inspector = inspect(engine)
+                existing_tables = inspector.get_table_names()
+                
+                # Check if User table exists and add missing columns
+                if 'users' in existing_tables:
+                    columns = [col['name'] for col in inspector.get_columns('users')]
+                    columns_to_add = []
+                    
+                    if 'language' not in columns:
+                        columns_to_add.append(('language', 'VARCHAR(10)'))
+                    if 'timezone' not in columns:
+                        columns_to_add.append(('timezone', 'VARCHAR(50)'))
+                    if 'style_prefs_json' not in columns:
+                        columns_to_add.append(('style_prefs_json', 'TEXT'))
+                    if 'preferences_json' not in columns:
+                        columns_to_add.append(('preferences_json', 'TEXT'))
+                    if 'consent_json' not in columns:
+                        columns_to_add.append(('consent_json', 'TEXT'))
+                    
+                    if columns_to_add:
+                        # Use the main engine with a connection
+                        with engine.connect() as conn:
+                            with conn.begin():  # Start a transaction
+                                for col_name, col_type in columns_to_add:
+                                    try:
+                                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                                        logger.info(f"Added column {col_name} to users table")
+                                    except Exception as col_error:
+                                        # Column might already exist (race condition)
+                                        logger.debug(f"Could not add column {col_name}: {col_error}")
+                        logger.info("User table columns updated")
+                
+                # Ensure new tables exist (device_config, join_tokens)
+                Base.metadata.create_all(bind=engine)
+                
+            except Exception as migration_error:
+                logger.warning(f"Migration check failed (this is OK for new databases): {migration_error}")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}", exc_info=True)
+            raise
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -70,21 +130,28 @@ def get_db() -> Generator[Session, None, None]:
     # #endregion
     try:
         yield db
+    except Exception:
+        # Rollback on any exception
+        try:
+            if db.is_active:
+                db.rollback()
+        except Exception:
+            pass  # Ignore rollback errors
+        raise
     finally:
-        # #region agent log
+        # Close the session and remove from thread-local registry
+        # Note: Repositories handle their own commits, so we don't commit here
         try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"db.py:64","message":"get_db finally - before remove","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        # Remove the session from the thread-local registry
-        SessionLocal.remove()
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"db.py:67","message":"get_db finally - after remove","data":{"thread_id":thread_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
+            # Only close if session is still bound
+            if db.is_active:
+                db.close()
+        except Exception:
+            pass  # Ignore errors when closing
+        finally:
+            try:
+                SessionLocal.remove()
+            except Exception:
+                pass  # Ignore errors when removing
 
 
 @contextmanager

@@ -86,6 +86,24 @@ export async function setupHousehold(householdName, ownerName) {
   return response.data
 }
 
+export async function setupOwner(name, language, timezone, style_prefs = null, preferences = null) {
+  const response = await api.post('/setup/owner', {
+    name,
+    language,
+    timezone,
+    style_prefs: style_prefs || null,
+    preferences: preferences || null,
+  })
+  return response.data
+}
+
+export async function setupModelPreset(preset) {
+  const response = await api.post('/setup/model', {
+    preset,
+  })
+  return response.data
+}
+
 export async function checkSetupComplete() {
   const response = await api.get('/setup/complete')
   return response.data

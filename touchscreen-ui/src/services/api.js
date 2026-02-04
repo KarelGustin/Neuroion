@@ -1,0 +1,44 @@
+import axios from 'axios'
+
+/**
+ * Automatically detect API base URL based on current hostname.
+ */
+function getApiBaseUrl() {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+
+  const hostname = window.location.hostname
+  const protocol = window.location.protocol
+  const apiPort = import.meta.env.VITE_API_PORT || '8000'
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `http://localhost:${apiPort}`
+  }
+
+  return `${protocol}//${hostname}:${apiPort}`
+}
+
+const API_BASE_URL = getApiBaseUrl()
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000,
+})
+
+export async function getStatus() {
+  const response = await api.get('/api/status')
+  return response.data
+}
+
+export async function createJoinToken() {
+  const response = await api.post('/api/join-token/create', {
+    expires_in_minutes: 10,
+  })
+  return response.data
+}
+
+export default api
