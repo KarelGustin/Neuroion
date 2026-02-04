@@ -178,7 +178,14 @@ class PreferenceRepository:
     ) -> List[Preference]:
         """Get all preferences matching criteria."""
         import json
-        
+        import threading
+        thread_id = threading.get_ident()
+        # #region agent log
+        try:
+            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:179","message":"PreferenceRepository.get_all entry","data":{"thread_id":thread_id,"household_id":household_id,"user_id":user_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
         query = db.query(Preference).filter(Preference.household_id == household_id)
         if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
@@ -188,12 +195,42 @@ class PreferenceRepository:
         if category:
             query = query.filter(Preference.category == category)
         
+        # #region agent log
+        try:
+            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:191","message":"Before query.all()","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
         prefs = query.all()
-        for pref in prefs:
+        # #region agent log
+        try:
+            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:194","message":"After query.all()","data":{"thread_id":thread_id,"count":len(prefs),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
+        for i, pref in enumerate(prefs):
+            # #region agent log
+            try:
+                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:197","message":"Before JSON parse","data":{"thread_id":thread_id,"index":i,"pref_id":id(pref),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            except: pass
+            # #endregion
             try:
                 pref.value = json.loads(pref.value)
             except (json.JSONDecodeError, TypeError):
                 pass
+            # #region agent log
+            try:
+                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:203","message":"After JSON parse","data":{"thread_id":thread_id,"index":i,"pref_id":id(pref)},"timestamp":int(__import__('time').time()*1000)})+'\n')
+            except: pass
+            # #endregion
+        # #region agent log
+        try:
+            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:207","message":"PreferenceRepository.get_all exit","data":{"thread_id":thread_id,"count":len(prefs)},"timestamp":int(__import__('time').time()*1000)})+'\n')
+        except: pass
+        # #endregion
         return prefs
     
     @staticmethod
