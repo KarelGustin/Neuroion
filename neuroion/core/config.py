@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Setup UI
     setup_ui_port: int = int(os.getenv("SETUP_UI_PORT", "3000"))
     
+    # Dashboard UI
+    dashboard_ui_port: int = int(os.getenv("DASHBOARD_UI_PORT", "3001"))
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

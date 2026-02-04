@@ -6,7 +6,7 @@ Platform-specific WiFi configuration for macOS and Linux (Raspberry Pi).
 import platform
 import subprocess
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -239,3 +239,178 @@ class WiFiService:
             logger.error(f"Error getting current SSID: {e}")
         
         return None
+    
+    @staticmethod
+    def scan_wifi_networks() -> List[Dict[str, any]]:
+        """
+        Scan for available WiFi networks.
+        
+        Returns:
+            List of dictionaries with keys: ssid, signal_strength, security, frequency
+        """
+        platform_name = WiFiService.get_platform()
+        
+        if platform_name == "macos":
+            return WiFiService._scan_macos()
+        elif platform_name == "linux":
+            return WiFiService._scan_linux()
+        else:
+            logger.warning(f"WiFi scanning not supported on platform: {platform_name}")
+            return []
+    
+    @staticmethod
+    def _scan_macos() -> List[Dict[str, any]]:
+        """Scan WiFi networks on macOS using airport command."""
+        networks = []
+        try:
+            result = subprocess.run(
+                ["/System/Library/PrivateFrameworks/Apple80211.framework/Resources/airport", "-s"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"Failed to scan WiFi networks: {result.stderr}")
+                return networks
+            
+            # Parse airport output
+            # Format: SSID BSSID RSSI CHANNEL HT CC SECURITY (auth/unicast/group)
+            lines = result.stdout.strip().split("\n")
+            if len(lines) < 2:
+                return networks
+            
+            # Skip header line
+            for line in lines[1:]:
+                if not line.strip():
+                    continue
+                
+                parts = line.split()
+                if len(parts) < 6:
+                    continue
+                
+                ssid = parts[0]
+                rssi = parts[2]
+                channel = parts[3]
+                security = " ".join(parts[5:]) if len(parts) > 5 else "Open"
+                
+                # Convert RSSI to signal strength percentage (rough estimate)
+                try:
+                    rssi_value = int(rssi)
+                    # RSSI ranges from -100 (worst) to 0 (best)
+                    signal_strength = max(0, min(100, 2 * (rssi_value + 100)))
+                except ValueError:
+                    signal_strength = 0
+                
+                networks.append({
+                    "ssid": ssid,
+                    "signal_strength": signal_strength,
+                    "security": "WPA2" if "WPA2" in security else ("WPA" if "WPA" in security else "Open"),
+                    "frequency": "2.4GHz" if int(channel) <= 14 else "5GHz" if channel else "Unknown",
+                    "rssi": rssi_value if isinstance(rssi_value, int) else None,
+                })
+        
+        except subprocess.TimeoutExpired:
+            logger.error("WiFi scan timed out")
+        except Exception as e:
+            logger.error(f"Error scanning WiFi networks on macOS: {e}", exc_info=True)
+        
+        return networks
+    
+    @staticmethod
+    def _scan_linux() -> List[Dict[str, any]]:
+        """Scan WiFi networks on Linux using nmcli."""
+        networks = []
+        try:
+            # Check if nmcli is available
+            result = subprocess.run(
+                ["which", "nmcli"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            
+            if result.returncode != 0:
+                logger.error("nmcli not found. Install NetworkManager: sudo apt-get install network-manager")
+                return networks
+            
+            # Enable WiFi if needed
+            subprocess.run(
+                ["nmcli", "radio", "wifi", "on"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            
+            # Scan for networks
+            result = subprocess.run(
+                ["nmcli", "device", "wifi", "rescan"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            
+            # Get list of networks
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,FREQ", "device", "wifi", "list"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"Failed to list WiFi networks: {result.stderr}")
+                return networks
+            
+            # Parse nmcli output (tab-separated)
+            for line in result.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                
+                parts = line.split(":")
+                if len(parts) < 4:
+                    continue
+                
+                ssid = parts[0] if parts[0] else "Hidden Network"
+                signal_str = parts[1]
+                security = parts[2] if len(parts) > 2 else ""
+                freq = parts[3] if len(parts) > 3 else ""
+                
+                # Convert signal to percentage
+                try:
+                    signal_strength = int(signal_str)
+                except ValueError:
+                    signal_strength = 0
+                
+                # Determine security type
+                if "WPA2" in security:
+                    security_type = "WPA2"
+                elif "WPA" in security:
+                    security_type = "WPA"
+                else:
+                    security_type = "Open"
+                
+                # Determine frequency band
+                try:
+                    freq_value = float(freq)
+                    if freq_value < 3000:
+                        frequency = "2.4GHz"
+                    else:
+                        frequency = "5GHz"
+                except (ValueError, TypeError):
+                    frequency = "Unknown"
+                
+                networks.append({
+                    "ssid": ssid,
+                    "signal_strength": signal_strength,
+                    "security": security_type,
+                    "frequency": frequency,
+                    "rssi": None,  # nmcli doesn't provide RSSI directly
+                })
+        
+        except subprocess.TimeoutExpired:
+            logger.error("WiFi scan timed out")
+        except Exception as e:
+            logger.error(f"Error scanning WiFi networks on Linux: {e}", exc_info=True)
+        
+        return networks

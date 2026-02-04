@@ -4,68 +4,72 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  padding: 1rem 1.5rem;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
   border-radius: 8px;
-  margin-bottom: 2rem;
-  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  border: 1px solid var(--accent-metallic-dark);
+  border: 1px solid var(--border-default);
   background: var(--bg-tertiary);
+  transition: all 0.2s ease;
+}
+
+/* Tablet and up */
+@media (min-width: 768px) {
+  .status {
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 2rem;
+    font-size: 0.875rem;
+  }
 }
 
 .status-indicator {
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-bottom: 10px solid currentColor;
-  animation: trianglePulse 2s ease-in-out infinite;
-  filter: drop-shadow(0 0 8px currentColor);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .status-ready {
   color: var(--status-ready);
-  border-color: rgba(0, 255, 136, 0.3);
-  background: rgba(0, 255, 136, 0.05);
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.05);
 }
 
 .status-ready .status-indicator {
-  color: var(--status-ready);
-  filter: drop-shadow(0 0 10px var(--status-ready)) drop-shadow(0 0 20px var(--status-ready));
+  background: var(--status-ready);
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .status-error {
   color: var(--status-error);
-  border-color: rgba(255, 68, 68, 0.3);
-  background: rgba(255, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.05);
 }
 
 .status-error .status-indicator {
-  color: var(--status-error);
-  filter: drop-shadow(0 0 10px var(--status-error));
-  animation: none;
+  background: var(--status-error);
 }
 
 .status-checking {
   color: var(--status-info);
-  border-color: rgba(0, 191, 255, 0.3);
-  background: rgba(0, 191, 255, 0.05);
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.05);
 }
 
 .status-checking .status-indicator {
-  color: var(--status-info);
-  filter: drop-shadow(0 0 10px var(--status-info)) drop-shadow(0 0 20px var(--status-info));
+  background: var(--status-info);
+  animation: pulse 2s ease-in-out infinite;
 }
 
-@keyframes trianglePulse {
+@keyframes pulse {
   0%, 100% {
     opacity: 1;
-    transform: scale(1);
   }
   50% {
-    opacity: 0.7;
-    transform: scale(1.1);
+    opacity: 0.5;
   }
 }
 

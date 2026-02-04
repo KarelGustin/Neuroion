@@ -30,6 +30,11 @@ export async function getSetupStatus() {
   return response.data
 }
 
+export async function scanWiFiNetworks() {
+  const response = await api.get('/setup/wifi/scan')
+  return response.data.networks
+}
+
 export async function configureWiFi(ssid, password) {
   const response = await api.post('/setup/wifi', {
     ssid,
@@ -56,6 +61,17 @@ export async function setupHousehold(householdName, ownerName) {
 
 export async function checkSetupComplete() {
   const response = await api.get('/setup/complete')
+  return response.data
+}
+
+export async function checkInternetConnection() {
+  const response = await api.get('/setup/internet/check')
+  return response.data
+}
+
+// Dashboard API functions
+export async function getDashboardStats() {
+  const response = await api.get('/dashboard/stats')
   return response.data
 }
 

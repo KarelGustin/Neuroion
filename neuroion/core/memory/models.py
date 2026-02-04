@@ -173,3 +173,59 @@ class SystemConfig(Base):
     __table_args__ = (
         Index("idx_system_config_category", "category"),
     )
+
+
+class DailyRequestCount(Base):
+    """Tracks daily request counts per household (resets at midnight)."""
+    __tablename__ = "daily_request_counts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    date = Column(DateTime, nullable=False, index=True)  # Date only (time set to 00:00:00)
+    count = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    household = relationship("Household")
+    
+    __table_args__ = (
+        Index("idx_daily_request_household_date", "household_id", "date", unique=True),
+    )
+
+
+class UserIntegration(Base):
+    """Stores OAuth tokens and permissions for user integrations (Gmail, etc.)."""
+    __tablename__ = "user_integrations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    integration_type = Column(String(50), nullable=False, index=True)  # gmail, etc.
+    access_token = Column(Text, nullable=False)  # Encrypted OAuth access token
+    refresh_token = Column(Text, nullable=True)  # Encrypted OAuth refresh token
+    token_expires_at = Column(DateTime, nullable=True)  # Token expiration time
+    permissions = Column(JSON, nullable=True)  # Granted permissions (read, write, delete, etc.)
+    metadata = Column(JSON, nullable=True)  # Additional integration metadata
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Relationships
+    user = relationship("User")
+    
+    __table_args__ = (
+        Index("idx_user_integration_user_type", "user_id", "integration_type", unique=True),
+    )
+
+
+class DashboardLink(Base):
+    """Stores personal dashboard links for users."""
+    __tablename__ = "dashboard_links"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    token = Column(String(255), unique=True, nullable=False, index=True)  # Unique token for dashboard access
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    last_accessed_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    user = relationship("User")

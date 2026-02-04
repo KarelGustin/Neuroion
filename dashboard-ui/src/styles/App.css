@@ -1,0 +1,84 @@
+@import './variables.css';
+
+.app {
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.app-loading,
+.app-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  text-align: center;
+  padding: 2rem;
+}
+
+.app-loading p {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.app-error h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.app-error p {
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.error-hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-top: 1rem;
+}
+
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.app-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.app-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: 0;
+  font-weight: 400;
+}
+
+.app-main {
+  width: 100%;
+}
+
+/* Tablet and up */
+@media (min-width: 768px) {
+  .app-container {
+    padding: 3rem 2rem;
+  }
+
+  .app-title {
+    font-size: 3rem;
+  }
+
+  .app-subtitle {
+    font-size: 1.125rem;
+  }
+}

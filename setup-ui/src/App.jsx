@@ -3,6 +3,7 @@ import PairingQR from './components/PairingQR'
 import Status from './components/Status'
 import Logo from './components/Logo'
 import SetupWizard from './components/SetupWizard'
+import Dashboard from './components/Dashboard'
 import { getPairingCode, checkHealth, getSetupStatus } from './services/api'
 import './styles/App.css'
 
@@ -66,6 +67,7 @@ function App() {
 
   const handleSetupComplete = async () => {
     setSetupComplete(true)
+    // Immediately fetch pairing code to show Telegram QR
     await startPairing()
   }
 
@@ -96,17 +98,7 @@ function App() {
         {!setupComplete ? (
           <SetupWizard onComplete={handleSetupComplete} />
         ) : (
-          <>
-            {pairingCode && status === 'ready' && (
-              <PairingQR
-                code={pairingCode}
-                botUsername={import.meta.env.VITE_TELEGRAM_BOT_USERNAME}
-              />
-            )}
-            <div className="footer">
-              <p>Scan QR code with Telegram to pair your device</p>
-            </div>
-          </>
+          <Dashboard />
         )}
       </div>
     </div>

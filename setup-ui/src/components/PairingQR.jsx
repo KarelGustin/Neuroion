@@ -1,8 +1,23 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import '../styles/PairingQR.css'
 
 function PairingQR({ code, botUsername }) {
+  const [qrSize, setQrSize] = useState(300)
+  
+  useEffect(() => {
+    const updateSize = () => {
+      const width = window.innerWidth
+      // On mobile, use most of the width minus padding
+      const size = width < 768 ? Math.min(300, width - 60) : 400
+      setQrSize(size)
+    }
+    
+    updateSize()
+    window.addEventListener('resize', updateSize)
+    return () => window.removeEventListener('resize', updateSize)
+  }, [])
+
   // Create Telegram deep link URL
   // Format: https://t.me/botname?start=PAIRING_CODE
   const telegramUrl = botUsername 
@@ -14,7 +29,7 @@ function PairingQR({ code, botUsername }) {
       <div className="qr-container">
         <QRCodeSVG
           value={telegramUrl}
-          size={400}
+          size={qrSize}
           level="H"
           includeMargin={true}
         />

@@ -16,8 +16,12 @@ from neuroion.core.memory.models import Base
 # Create engine with SQLite-specific configuration
 engine = create_engine(
     get_database_url(),
-    connect_args={"check_same_thread": False},  # SQLite requirement for FastAPI
+    connect_args={
+        "check_same_thread": False,  # SQLite requirement for FastAPI
+        "timeout": 30,  # 30 second timeout for database operations
+    },
     poolclass=StaticPool,  # SQLite doesn't support connection pooling, use StaticPool
+    pool_pre_ping=True,  # Verify connections before using
     echo=settings.database_echo,
 )
 
@@ -60,10 +64,32 @@ def db_session() -> Generator[Session, None, None]:
         db.close()
 
 
-# Enable foreign key constraints for SQLite
+# Enable foreign key constraints and WAL mode for SQLite
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
-    """Enable foreign key constraints in SQLite."""
+    """Enable foreign key constraints and WAL mode in SQLite."""
     cursor = dbapi_conn.cursor()
+    # Enable foreign keys
     cursor.execute("PRAGMA foreign_keys=ON")
+    # Enable WAL mode for better concurrency (allows concurrent reads)
+    cursor.execute("PRAGMA journal_mode=WAL")
+    # Set busy timeout to handle locks (30 seconds)
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
+
+
+# Auto-serialize SystemConfig values before flush
+@event.listens_for(Session, "before_flush")
+def serialize_system_config_values(session, flush_context, instances):
+    """Automatically serialize SystemConfig.value if it's a dict/list before saving."""
+    import json
+    from neuroion.core.memory.models import SystemConfig
+    
+    # Check both dirty (modified) and new objects
+    for obj in list(session.dirty) + list(session.new):
+        if isinstance(obj, SystemConfig):
+            # If value is a dict or list, serialize it to JSON
+            if isinstance(obj.value, (dict, list)):
+                obj.value = json.dumps(obj.value)
+            # If value is already a string, it should already be JSON or plain string
+            # No need to modify it

@@ -107,11 +107,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_tokens[device_id] = data["token"]
             save_tokens(user_tokens)
             
-            await update.message.reply_text(
+            reply_text = (
                 f"✅ Successfully paired with Neuroion!\n\n"
-                f"Household ID: {data['household_id']}\n"
-                f"You can now chat with me. Just send me a message!"
+                f"Household: {data.get('household_name', f\"Household {data['household_id']}\")}\n\n"
             )
+            
+            # If onboarding message is provided, send it
+            if data.get("onboarding_message"):
+                reply_text += f"{data['onboarding_message']}"
+            else:
+                reply_text += "You can now chat with me. Just send me a message!"
+            
+            await update.message.reply_text(reply_text)
             return
         except httpx.HTTPStatusError as e:
             error_detail = ""
@@ -187,11 +194,18 @@ async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_tokens[device_id] = data["token"]
         save_tokens(user_tokens)
         
-        await update.message.reply_text(
+        reply_text = (
             f"✅ Successfully paired!\n\n"
-            f"Household ID: {data['household_id']}\n"
-            f"You can now chat with Neuroion."
+            f"Household: {data.get('household_name', f\"Household {data['household_id']}\")}\n\n"
         )
+        
+        # If onboarding message is provided, send it
+        if data.get("onboarding_message"):
+            reply_text += f"{data['onboarding_message']}"
+        else:
+            reply_text += "You can now chat with Neuroion."
+        
+        await update.message.reply_text(reply_text)
     except httpx.HTTPStatusError as e:
         error_detail = ""
         if e.response is not None:
@@ -241,7 +255,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Send message to Homebase (history is auto-fetched by backend) via async HTTP
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 get_homebase_url("/chat"),
                 json={"message": message_text},
@@ -262,12 +276,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_text += f"   {action.get('reasoning', '')}\n"
                 reply_text += f"   Use /execute {action.get('id')} to confirm\n"
         
-        await update.message.reply_text(reply_text)
+        # Split long messages (Telegram has 4096 character limit)
+        if len(reply_text) > 4000:
+            # Send in chunks
+            chunks = [reply_text[i:i+4000] for i in range(0, len(reply_text), 4000)]
+            for chunk in chunks:
+                await update.message.reply_text(chunk)
+        else:
+            await update.message.reply_text(reply_text)
         
-    except httpx.RequestError as e:
-        logger.error(f"Chat error: {e}")
+    except httpx.HTTPStatusError as e:
+        error_detail = "Unknown error"
+        if e.response is not None:
+            try:
+                error_data = e.response.json()
+                error_detail = error_data.get("detail", str(e))
+            except Exception:
+                error_detail = e.response.text or str(e)
+        
+        logger.error(f"Chat HTTP error: {error_detail}", exc_info=True)
         await update.message.reply_text(
-            f"❌ Error communicating with Homebase: {str(e)}"
+            f"❌ Error from Homebase: {error_detail}\n\n"
+            "Please try again or contact support if the problem persists."
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Chat request error: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"❌ Error communicating with Homebase: {str(e)}\n\n"
+            "Please check your connection and try again."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected chat error: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"❌ An unexpected error occurred: {str(e)}\n\n"
+            "Please try again later."
         )
 
 

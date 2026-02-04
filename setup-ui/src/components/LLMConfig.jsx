@@ -3,27 +3,39 @@ import { configureLLM } from '../services/api'
 import '../styles/LLMConfig.css'
 
 function LLMConfig({ onComplete, onBack, initialData }) {
-  const [provider, setProvider] = useState(initialData?.provider || 'local')
+  // Load from localStorage if initialData is not provided
+  const loadFromStorage = () => {
+    try {
+      const saved = localStorage.getItem('neuroion_setup_llm')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (err) {
+      console.error('Failed to load LLM config from storage:', err)
+    }
+    return null
+  }
+
+  const savedData = initialData || loadFromStorage()
+  const [provider, setProvider] = useState(savedData?.provider || 'local')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
   const [testResult, setTestResult] = useState(null)
 
   // Custom API fields
-  const [customApiKey, setCustomApiKey] = useState(initialData?.customApiKey || '')
+  const [customApiKey, setCustomApiKey] = useState(savedData?.customApiKey || '')
   const [customBaseUrl, setCustomBaseUrl] = useState(
-    initialData?.customBaseUrl || 'https://api.openai.com/v1',
+    savedData?.customBaseUrl || 'https://api.openai.com/v1',
   )
   const [customModel, setCustomModel] = useState(
-    initialData?.customModel || 'gpt-3.5-turbo',
+    savedData?.customModel || 'gpt-3.5-turbo',
   )
 
-  // Local Ollama fields
-  const [ollamaUrl, setOllamaUrl] = useState(
-    initialData?.ollamaUrl || 'http://localhost:11434',
-  )
+  // Local Ollama fields - URL is pre-installed, use default
+  const ollamaUrl = 'http://localhost:11434' // Pre-installed, not configurable
   const [ollamaModel, setOllamaModel] = useState(
-    initialData?.ollamaModel || 'llama3.2',
+    savedData?.ollamaModel || 'llama3.2',
   )
 
   const handleSubmit = async (e) => {
@@ -65,16 +77,23 @@ function LLMConfig({ onComplete, onBack, initialData }) {
       if (result.success) {
         setSuccess(true)
         setTestResult(result.test_result)
+        const llmData = {
+          provider,
+          config,
+          customApiKey,
+          customBaseUrl,
+          customModel,
+          ollamaUrl: ollamaUrl, // Pre-installed URL
+          ollamaModel,
+        }
+        // Save to localStorage
+        try {
+          localStorage.setItem('neuroion_setup_llm', JSON.stringify(llmData))
+        } catch (err) {
+          console.error('Failed to save LLM config:', err)
+        }
         setTimeout(() => {
-          onComplete({
-            provider,
-            config,
-            customApiKey,
-            customBaseUrl,
-            customModel,
-            ollamaUrl,
-            ollamaModel,
-          })
+          onComplete(llmData)
         }, 1500)
       } else {
         setError(result.message || 'Failed to configure LLM')
@@ -110,18 +129,18 @@ function LLMConfig({ onComplete, onBack, initialData }) {
             </div>
           </label>
 
-          <label className="radio-option">
+          <label className="radio-option disabled">
             <input
               type="radio"
               name="provider"
               value="cloud"
               checked={provider === 'cloud'}
               onChange={(e) => setProvider(e.target.value)}
-              disabled={loading || success}
+              disabled={true}
             />
             <div className="radio-content">
-              <strong>Cloud (Free)</strong>
-              <span>Uses free HuggingFace API, requires internet</span>
+              <strong>Neuroion Agent (Not available yet)</strong>
+              <span>€19 per member</span>
             </div>
           </label>
 
@@ -144,17 +163,6 @@ function LLMConfig({ onComplete, onBack, initialData }) {
         {provider === 'local' && (
           <div className="provider-config">
             <div className="form-group">
-              <label htmlFor="ollama-url">Ollama URL</label>
-              <input
-                type="text"
-                id="ollama-url"
-                value={ollamaUrl}
-                onChange={(e) => setOllamaUrl(e.target.value)}
-                placeholder="http://localhost:11434"
-                disabled={loading || success}
-              />
-            </div>
-            <div className="form-group">
               <label htmlFor="ollama-model">Model Name</label>
               <input
                 type="text"
@@ -166,7 +174,7 @@ function LLMConfig({ onComplete, onBack, initialData }) {
               />
             </div>
             <p className="info-text">
-              Make sure Ollama is installed and running on your device
+              Ollama is pre-installed on your device
             </p>
           </div>
         )}
@@ -174,8 +182,7 @@ function LLMConfig({ onComplete, onBack, initialData }) {
         {provider === 'cloud' && (
           <div className="provider-config">
             <p className="info-text">
-              Using free HuggingFace Inference API. No additional configuration
-              needed.
+              Neuroion Agent is not yet available. This feature will be available soon.
             </p>
           </div>
         )}

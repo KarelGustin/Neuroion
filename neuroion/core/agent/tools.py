@@ -257,3 +257,39 @@ def summarize_family_preferences(
         },
         "summary": f"Found {len(household_prefs)} household preferences and preferences for {len(users)} users",
     }
+
+
+@register_tool(
+    name="get_dashboard_link",
+    description="Get personal dashboard link for the user. Use this when user asks for their dashboard, personal page, or wants to manage integrations",
+    parameters={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+)
+def get_dashboard_link(
+    db: Session,
+    household_id: int,
+    user_id: int,
+) -> Dict[str, Any]:
+    """
+    Get personal dashboard link for user.
+    
+    Returns:
+        Dict with dashboard URL
+    """
+    from neuroion.core.memory.repository import DashboardLinkRepository
+    from neuroion.core.config import settings
+    
+    # Get or create dashboard link
+    link = DashboardLinkRepository.get_or_create(db, user_id)
+    
+    # Construct URL
+    from neuroion.core.config import settings
+    url = f"http://localhost:{settings.dashboard_ui_port}/user/{user_id}?token={link.token}"
+    
+    return {
+        "url": url,
+        "message": f"Your personal dashboard is available at: {url}\n\nYou can use it to manage integrations, view your data, and configure settings.",
+    }

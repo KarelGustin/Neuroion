@@ -3,10 +3,24 @@ import { setupHousehold } from '../services/api'
 import '../styles/HouseholdSetup.css'
 
 function HouseholdSetup({ onComplete, onBack, initialData }) {
+  // Load from localStorage if initialData is not provided
+  const loadFromStorage = () => {
+    try {
+      const saved = localStorage.getItem('neuroion_setup_household')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (err) {
+      console.error('Failed to load household config from storage:', err)
+    }
+    return null
+  }
+
+  const savedData = initialData || loadFromStorage()
   const [householdName, setHouseholdName] = useState(
-    initialData?.householdName || '',
+    savedData?.householdName || '',
   )
-  const [ownerName, setOwnerName] = useState(initialData?.ownerName || '')
+  const [ownerName, setOwnerName] = useState(savedData?.ownerName || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
@@ -21,13 +35,20 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
       const result = await setupHousehold(householdName, ownerName)
       if (result.success) {
         setSuccess(true)
+        const householdData = {
+          householdName,
+          ownerName,
+          householdId: result.household_id,
+          userId: result.user_id,
+        }
+        // Save to localStorage (will be cleared by SetupWizard on completion)
+        try {
+          localStorage.setItem('neuroion_setup_household', JSON.stringify(householdData))
+        } catch (err) {
+          console.error('Failed to save household config:', err)
+        }
         setTimeout(() => {
-          onComplete({
-            householdName,
-            ownerName,
-            householdId: result.household_id,
-            userId: result.user_id,
-          })
+          onComplete(householdData)
         }, 1000)
       } else {
         setError(result.message || 'Failed to setup household')

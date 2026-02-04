@@ -76,12 +76,57 @@ class Agent:
             context_snapshots=context_dicts,
             preferences=prefs_dict,
             conversation_history=conversation_history,
+            db=db,
+            household_id=household_id,
+            user_id=user_id,
         )
+        
+        # Check if in onboarding mode
+        in_onboarding = False
+        current_question = None
+        if user_id:
+            from neuroion.core.agent.onboarding import (
+                get_current_onboarding_question,
+                save_onboarding_answer,
+                advance_onboarding,
+                is_onboarding_completed,
+            )
+            
+            current_question = get_current_onboarding_question(db, household_id, user_id)
+            in_onboarding = current_question is not None
         
         # Get LLM response
         llm_response = self.llm.chat(messages, temperature=0.7)
         
-        # Determine if action is needed
+        # Handle onboarding if in progress
+        if in_onboarding and current_question:
+            # Save the answer to current question
+            save_onboarding_answer(
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                question_key=current_question["key"],
+                answer=message,
+                category=current_question["category"],
+            )
+            
+            # Advance to next question
+            next_question = advance_onboarding(db, household_id, user_id)
+            
+            # If there's a next question, modify response to include it
+            if next_question:
+                llm_response = f"{llm_response}\n\n{next_question['question']}"
+            elif is_onboarding_completed(db, household_id, user_id):
+                llm_response = f"{llm_response}\n\nGreat! Thanks for answering all the questions. I know you better now and can help you more personally. What can I help you with today?"
+            
+            # During onboarding, don't propose actions
+            return {
+                "message": llm_response,
+                "reasoning": "",
+                "actions": [],
+            }
+        
+        # Determine if action is needed (only if not in onboarding)
         action_decision = self._decide_action(message, llm_response)
         
         if action_decision["needs_action"]:

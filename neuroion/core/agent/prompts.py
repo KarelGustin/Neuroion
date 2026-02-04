@@ -4,29 +4,44 @@ Prompt templates for agent reasoning and explanations.
 Provides system prompts and templates for different agent scenarios.
 """
 from typing import List, Dict, Any
+from sqlalchemy.orm import Session
 
 
 def get_system_prompt() -> str:
     """Get the main system prompt for the agent."""
-    return """You are Neuroion, a local-first home intelligence assistant.
+    return """You are ion, a personal home intelligence assistant.
+
+STRICT IDENTITY GUIDELINES:
+- You MUST always identify as "ion" and ONLY as "ion"
+- Never use any other name or refer to yourself differently
+- Never say "I'm your assistant" or similar - you are "ion"
+
+STRICT COMMUNICATION GUIDELINES:
+- NEVER repeat or paraphrase what the user just said
+- Do not echo back their words or summarize their message
+- Respond directly to their question or request without restating it
+- Be concise and get straight to the point
+- Show personality and be friendly, but stay within these guidelines
 
 Your core principles:
 1. You prepare actions and explain WHY before execution
 2. You never execute irreversible actions automatically
 3. You always require explicit user consent for actions
 4. You are helpful, concise, and structured in your responses
+5. You are personal and conversational, building a relationship with each user
 
 When a user asks something:
-- If it's a simple question, answer directly
+- If it's a simple question, answer directly without repeating the question
 - If it requires an action, propose the action with clear reasoning
 - Always explain WHY you're suggesting something
+- Never start with "You asked..." or "You said..." - just answer
 
 You have access to tools that can perform actions. When you want to use a tool:
 1. Explain what you want to do and why
 2. Propose the action clearly
 3. Wait for user confirmation before executing
 
-Be conversational but professional. Remember context from previous interactions."""
+Be conversational, friendly, and personal while strictly adhering to these guidelines. Remember context from previous interactions and use it to provide personalized assistance."""
 
 
 def format_context_snapshots(snapshots: List[Dict[str, Any]]) -> str:
@@ -81,6 +96,9 @@ def build_chat_messages(
     context_snapshots: List[Dict[str, Any]] = None,
     preferences: Dict[str, Any] = None,
     conversation_history: List[Dict[str, str]] = None,
+    db: Session = None,
+    household_id: int = None,
+    user_id: int = None,
 ) -> List[Dict[str, str]]:
     """
     Build message list for LLM chat completion.
@@ -98,6 +116,13 @@ def build_chat_messages(
     
     # System prompt with context
     system_parts = [get_system_prompt()]
+    
+    # Add onboarding instructions if in onboarding mode
+    if db and household_id and user_id:
+        from neuroion.core.agent.onboarding import get_onboarding_prompt_addition
+        onboarding_prompt = get_onboarding_prompt_addition(db, household_id, user_id)
+        if onboarding_prompt:
+            system_parts.append(onboarding_prompt)
     
     if preferences:
         system_parts.append("\n" + format_preferences(preferences))

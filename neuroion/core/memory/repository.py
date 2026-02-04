@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
 
 from neuroion.core.memory.models import (
-    Household, User, Preference, ContextSnapshot, AuditLog, ChatMessage, SystemConfig
+    Household, User, Preference, ContextSnapshot, AuditLog, ChatMessage, SystemConfig,
+    DailyRequestCount, UserIntegration, DashboardLink
 )
 
 
@@ -112,8 +113,19 @@ class PreferenceRepository:
         
         pref = query.first()
         
+        # Always serialize non-string values to JSON
+        if isinstance(value, str):
+            try:
+                json.loads(value)  # Validate it's valid JSON
+                serialized_value = value  # Already valid JSON string
+            except (json.JSONDecodeError, TypeError):
+                serialized_value = value  # Plain string, keep as-is
+        else:
+            # For dict, list, or other types, always serialize to JSON
+            serialized_value = json.dumps(value)
+        
         if pref:
-            pref.value = json.dumps(value) if not isinstance(value, str) else value
+            pref.value = serialized_value
             pref.category = category or pref.category
             pref.updated_at = datetime.utcnow()
         else:
@@ -121,7 +133,7 @@ class PreferenceRepository:
                 household_id=household_id,
                 user_id=user_id,
                 key=key,
-                value=json.dumps(value) if not isinstance(value, str) else value,
+                value=serialized_value,
                 category=category,
             )
             db.add(pref)
@@ -387,16 +399,30 @@ class SystemConfigRepository:
         """Set a system config value (creates or updates)."""
         import json
         
+        # Always serialize non-string values to JSON
+        # For strings, check if they're already JSON, if not keep as-is
+        if isinstance(value, str):
+            # If it's already a string, try to parse it to see if it's JSON
+            # If it's valid JSON, keep it as-is, otherwise it's a plain string
+            try:
+                json.loads(value)  # Validate it's valid JSON
+                serialized_value = value  # Already valid JSON string
+            except (json.JSONDecodeError, TypeError):
+                serialized_value = value  # Plain string, keep as-is
+        else:
+            # For dict, list, or other types, always serialize to JSON
+            serialized_value = json.dumps(value)
+        
         config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
         
         if config:
-            config.value = json.dumps(value) if not isinstance(value, str) else value
+            config.value = serialized_value
             config.category = category
             config.updated_at = datetime.utcnow()
         else:
             config = SystemConfig(
                 key=key,
-                value=json.dumps(value) if not isinstance(value, str) else value,
+                value=serialized_value,
                 category=category,
             )
             db.add(config)
@@ -453,3 +479,181 @@ class SystemConfigRepository:
             db.commit()
             return True
         return False
+
+
+class DailyRequestCountRepository:
+    """Repository for daily request count operations."""
+    
+    @staticmethod
+    def get_or_create_today(db: Session, household_id: int) -> DailyRequestCount:
+        """Get or create today's request count for a household."""
+        from datetime import date
+        today = datetime.combine(date.today(), datetime.min.time())
+        
+        count = db.query(DailyRequestCount).filter(
+            DailyRequestCount.household_id == household_id,
+            DailyRequestCount.date == today,
+        ).first()
+        
+        if not count:
+            count = DailyRequestCount(
+                household_id=household_id,
+                date=today,
+                count=0,
+            )
+            db.add(count)
+            db.commit()
+            db.refresh(count)
+        
+        return count
+    
+    @staticmethod
+    def increment(db: Session, household_id: int) -> DailyRequestCount:
+        """Increment today's request count for a household."""
+        count = DailyRequestCountRepository.get_or_create_today(db, household_id)
+        count.count += 1
+        count.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(count)
+        return count
+    
+    @staticmethod
+    def get_today_count(db: Session, household_id: int) -> int:
+        """Get today's request count for a household."""
+        from datetime import date
+        today = datetime.combine(date.today(), datetime.min.time())
+        
+        count = db.query(DailyRequestCount).filter(
+            DailyRequestCount.household_id == household_id,
+            DailyRequestCount.date == today,
+        ).first()
+        
+        return count.count if count else 0
+
+
+class UserIntegrationRepository:
+    """Repository for user integration operations."""
+    
+    @staticmethod
+    def create_or_update(
+        db: Session,
+        user_id: int,
+        integration_type: str,
+        access_token: str,
+        refresh_token: Optional[str] = None,
+        token_expires_at: Optional[datetime] = None,
+        permissions: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> UserIntegration:
+        """Create or update a user integration."""
+        integration = db.query(UserIntegration).filter(
+            UserIntegration.user_id == user_id,
+            UserIntegration.integration_type == integration_type,
+        ).first()
+        
+        if integration:
+            integration.access_token = access_token
+            if refresh_token:
+                integration.refresh_token = refresh_token
+            if token_expires_at:
+                integration.token_expires_at = token_expires_at
+            if permissions:
+                integration.permissions = permissions
+            if metadata:
+                integration.metadata = metadata
+            integration.updated_at = datetime.utcnow()
+        else:
+            integration = UserIntegration(
+                user_id=user_id,
+                integration_type=integration_type,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_expires_at=token_expires_at,
+                permissions=permissions,
+                metadata=metadata,
+            )
+            db.add(integration)
+        
+        db.commit()
+        db.refresh(integration)
+        return integration
+    
+    @staticmethod
+    def get_by_user_and_type(
+        db: Session,
+        user_id: int,
+        integration_type: str,
+    ) -> Optional[UserIntegration]:
+        """Get integration by user and type."""
+        return db.query(UserIntegration).filter(
+            UserIntegration.user_id == user_id,
+            UserIntegration.integration_type == integration_type,
+        ).first()
+    
+    @staticmethod
+    def get_by_user(db: Session, user_id: int) -> List[UserIntegration]:
+        """Get all integrations for a user."""
+        return db.query(UserIntegration).filter(
+            UserIntegration.user_id == user_id,
+        ).all()
+    
+    @staticmethod
+    def delete(db: Session, user_id: int, integration_type: str) -> bool:
+        """Delete a user integration."""
+        integration = db.query(UserIntegration).filter(
+            UserIntegration.user_id == user_id,
+            UserIntegration.integration_type == integration_type,
+        ).first()
+        
+        if integration:
+            db.delete(integration)
+            db.commit()
+            return True
+        return False
+
+
+class DashboardLinkRepository:
+    """Repository for dashboard link operations."""
+    
+    @staticmethod
+    def get_or_create(db: Session, user_id: int) -> DashboardLink:
+        """Get or create a dashboard link for a user."""
+        import secrets
+        
+        link = db.query(DashboardLink).filter(
+            DashboardLink.user_id == user_id,
+        ).first()
+        
+        if not link:
+            # Generate unique token
+            token = secrets.token_urlsafe(32)
+            link = DashboardLink(
+                user_id=user_id,
+                token=token,
+            )
+            db.add(link)
+            db.commit()
+            db.refresh(link)
+        
+        return link
+    
+    @staticmethod
+    def get_by_token(db: Session, token: str) -> Optional[DashboardLink]:
+        """Get dashboard link by token."""
+        link = db.query(DashboardLink).filter(
+            DashboardLink.token == token,
+        ).first()
+        
+        if link:
+            link.last_accessed_at = datetime.utcnow()
+            db.commit()
+            db.refresh(link)
+        
+        return link
+    
+    @staticmethod
+    def get_by_user(db: Session, user_id: int) -> Optional[DashboardLink]:
+        """Get dashboard link by user ID."""
+        return db.query(DashboardLink).filter(
+            DashboardLink.user_id == user_id,
+        ).first()

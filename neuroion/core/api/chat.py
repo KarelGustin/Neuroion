@@ -12,6 +12,11 @@ from neuroion.core.memory.db import get_db
 from neuroion.core.security.permissions import get_current_user
 from neuroion.core.agent.agent import Agent
 from neuroion.core.memory.repository import ChatMessageRepository
+from neuroion.core.agent.onboarding import (
+    is_onboarding_completed,
+    get_current_onboarding_question,
+)
+from neuroion.core.services.request_counter import RequestCounter
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -79,6 +84,9 @@ def chat(
     agent = get_agent()
     household_id = user["household_id"]
     user_id = user["user_id"]
+    
+    # Increment daily request counter
+    RequestCounter.increment(db, household_id)
     
     # Get conversation history if not provided
     conversation_history = request.conversation_history

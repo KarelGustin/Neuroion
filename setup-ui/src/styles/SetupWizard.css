@@ -2,129 +2,161 @@
 
 .setup-wizard {
   width: 100%;
-  max-width: 800px;
-  margin: 2rem auto;
+  max-width: 100%;
+  margin: 0;
 }
 
 .wizard-header {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
 }
 
 .wizard-header h2 {
-  font-size: 2rem;
-  color: var(--glow-white);
-  text-shadow: 
-    0 0 10px var(--glow-blue),
-    0 0 20px var(--glow-blue-dim);
-  margin-bottom: 2rem;
-  letter-spacing: -0.02em;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.01em;
+  font-weight: 600;
 }
 
 .step-indicator {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 1rem;
-  margin: 2rem 0;
+  gap: 0.25rem;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
 }
 
 .step-item {
   display: flex;
   align-items: center;
   position: relative;
+  flex-direction: column;
 }
 
 .step-circle {
-  width: 50px;
-  height: 50px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: 2px solid var(--accent-metallic-dark);
-  background: var(--bg-secondary);
+  border: 2px solid var(--border-default);
+  background: var(--bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 0.8125rem;
   color: var(--text-muted);
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   position: relative;
   z-index: 2;
+  flex-shrink: 0;
 }
 
 .step-circle.active {
-  border-color: var(--glow-blue);
-  background: var(--bg-tertiary);
-  color: var(--glow-white);
-  box-shadow: 
-    0 0 15px var(--glow-blue),
-    inset 0 0 10px rgba(0, 191, 255, 0.2);
+  border-color: var(--accent-blue);
+  background: var(--accent-blue);
+  color: var(--text-primary);
 }
 
 .step-circle.completed {
   border-color: var(--status-ready);
   background: var(--status-ready);
-  color: var(--bg-primary);
-  box-shadow: 0 0 15px var(--status-ready);
+  color: var(--text-primary);
 }
 
 .step-name {
-  position: absolute;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: static;
+  transform: none;
+  margin-top: 0.5rem;
   white-space: nowrap;
-  font-size: 0.9rem;
+  font-size: 0.6875rem;
   color: var(--text-muted);
   font-weight: 500;
+  text-align: center;
+  text-decoration: underline;
 }
 
 .step-circle.active + .step-name,
 .step-circle.completed + .step-name {
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .step-line {
-  width: 100px;
-  height: 2px;
-  background: var(--accent-metallic-dark);
-  margin: 0 0.5rem;
-  transition: all 0.3s ease;
+  width: 40px;
+  height: 1px;
+  background: var(--border-default);
+  margin: 0 0.125rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .step-line.completed {
-  background: linear-gradient(
-    90deg,
-    var(--status-ready),
-    var(--accent-metallic-dark)
-  );
-  box-shadow: 0 0 5px var(--status-ready);
+  background: var(--status-ready);
 }
 
 .wizard-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--accent-metallic-dark);
-  border-radius: 12px;
-  padding: 3rem;
-  box-shadow: 
-    0 0 30px rgba(0, 0, 0, 0.8),
-    0 0 60px rgba(0, 191, 255, 0.1),
-    inset 0 0 20px rgba(0, 0, 0, 0.3);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
   position: relative;
-  overflow: hidden;
+  overflow-y: visible;
+  max-height: none;
 }
 
-.wizard-content::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--accent-metallic),
-    transparent
-  );
-  opacity: 0.5;
+/* Tablet: 768px and up */
+@media (min-width: 768px) {
+  .setup-wizard {
+    max-width: 800px;
+    margin: 2rem auto;
+  }
+  
+  .wizard-header {
+    margin-bottom: 3rem;
+  }
+  
+  .wizard-header h2 {
+    font-size: 1.75rem;
+    margin-bottom: 2rem;
+  }
+  
+  .step-indicator {
+    gap: 0.5rem;
+    margin: 2rem 0;
+    flex-wrap: nowrap;
+  }
+  
+  .step-item {
+    flex-direction: row;
+  }
+  
+  .step-circle {
+    width: 40px;
+    height: 40px;
+    font-size: 0.875rem;
+  }
+  
+  .step-name {
+    position: absolute;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 0;
+    font-size: 0.75rem;
+  }
+  
+  .step-line {
+    width: 80px;
+    margin: 0 0.25rem;
+  }
+  
+  .wizard-content {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    padding: 2.5rem;
+    box-shadow: var(--shadow-md);
+  }
 }

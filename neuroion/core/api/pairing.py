@@ -6,10 +6,16 @@ Handles pairing code generation and confirmation for new devices.
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from neuroion.core.memory.db import get_db
-from neuroion.core.memory.repository import HouseholdRepository, UserRepository
+from neuroion.core.memory.repository import HouseholdRepository, UserRepository, ChatMessageRepository
 from neuroion.core.security.tokens import TokenManager, PairingCodeStore
+from neuroion.core.agent.onboarding import (
+    is_onboarding_completed,
+    get_current_onboarding_question,
+)
+from neuroion.core.agent.agent import Agent
 
 router = APIRouter(prefix="/pair", tags=["pairing"])
 
@@ -38,8 +44,10 @@ class PairConfirmResponse(BaseModel):
     """Response with auth token."""
     token: str
     household_id: int
+    household_name: str
     user_id: int
     expires_in_hours: int
+    onboarding_message: Optional[str] = None  # First onboarding question if needed
 
 
 @router.post("/start")
@@ -105,8 +113,10 @@ def confirm_pairing(
     
     # Check if user already exists for this device
     user = UserRepository.get_by_device_id(db, request.device_id)
+    is_new_user = False
     
     if not user:
+        is_new_user = True
         # Determine device type from device_id
         device_type = "telegram" if request.device_id.startswith("telegram_") else "unknown"
         
@@ -125,6 +135,10 @@ def confirm_pairing(
             user.device_type = "telegram"
             db.commit()
     
+    # Get household name
+    household = HouseholdRepository.get_by_id(db, household_id)
+    household_name = household.name if household else f"Household {household_id}"
+    
     # Generate auth token
     token = TokenManager.create_access_token({
         "user_id": user.id,
@@ -132,9 +146,26 @@ def confirm_pairing(
         "device_id": request.device_id,
     })
     
+    # Start onboarding conversation if new user or not completed
+    onboarding_message = None
+    if is_new_user or not is_onboarding_completed(db, household_id, user.id):
+        first_question = get_current_onboarding_question(db, household_id, user.id)
+        if first_question:
+            onboarding_message = first_question["question"]
+            # Save the initial onboarding message as assistant message
+            ChatMessageRepository.create(
+                db=db,
+                household_id=household_id,
+                user_id=user.id,
+                role="assistant",
+                content=onboarding_message,
+            )
+    
     return PairConfirmResponse(
         token=token,
         household_id=household_id,
+        household_name=household_name,
         user_id=user.id,
         expires_in_hours=8760,  # 1 year from config
+        onboarding_message=onboarding_message,
     )

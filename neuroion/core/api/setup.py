@@ -3,10 +3,13 @@ Setup endpoints for initial Homebase configuration.
 
 Handles WiFi configuration, LLM provider setup, and household initialization.
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from neuroion.core.memory.db import get_db
 from neuroion.core.memory.repository import (
@@ -18,6 +21,7 @@ from neuroion.core.llm import get_llm_client_from_config
 from neuroion.core.llm.ollama import OllamaClient
 from neuroion.core.llm.cloud import CloudLLMClient
 from neuroion.core.llm.openai import OpenAILLMClient
+from neuroion.core.services.wifi_service import WiFiService
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 
@@ -76,6 +80,26 @@ class SetupCompleteResponse(BaseModel):
     missing_steps: list[str]
 
 
+class WiFiNetwork(BaseModel):
+    """WiFi network information."""
+    ssid: str
+    signal_strength: int  # 0-100
+    security: str  # WPA2, WPA, Open
+    frequency: str  # 2.4GHz, 5GHz, Unknown
+    rssi: Optional[int] = None
+
+
+class WiFiScanResponse(BaseModel):
+    """WiFi scan response."""
+    networks: List[WiFiNetwork]
+
+
+class InternetCheckResponse(BaseModel):
+    """Internet connectivity check response."""
+    connected: bool
+    message: str
+
+
 # Endpoints
 
 @router.get("/status", response_model=SetupStatusResponse)
@@ -97,7 +121,8 @@ def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
     households = HouseholdRepository.get_all(db)
     household_configured = len(households) > 0
     
-    is_complete = wifi_configured and llm_configured and household_configured
+    # WiFi is optional - system can work offline
+    is_complete = llm_configured and household_configured
     
     steps = {
         "wifi": wifi_configured,
@@ -118,6 +143,52 @@ def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
     )
 
 
+@router.get("/internet/check", response_model=InternetCheckResponse)
+def check_internet_connection() -> InternetCheckResponse:
+    """
+    Check if device has internet connectivity.
+    
+    Uses WiFiService.test_connection() to ping 8.8.8.8.
+    """
+    try:
+        connected, message = WiFiService.test_connection()
+        return InternetCheckResponse(
+            connected=connected,
+            message=message,
+        )
+    except Exception as e:
+        logger.error(f"Error checking internet connection: {e}", exc_info=True)
+        return InternetCheckResponse(
+            connected=False,
+            message=f"Connection check failed: {str(e)}",
+        )
+
+
+@router.get("/wifi/scan", response_model=WiFiScanResponse)
+def scan_wifi_networks() -> WiFiScanResponse:
+    """
+    Scan for available WiFi networks.
+    
+    Returns list of available networks with signal strength and security info.
+    """
+    try:
+        networks_data = WiFiService.scan_wifi_networks()
+        networks = [
+            WiFiNetwork(
+                ssid=net.get("ssid", ""),
+                signal_strength=net.get("signal_strength", 0),
+                security=net.get("security", "Unknown"),
+                frequency=net.get("frequency", "Unknown"),
+                rssi=net.get("rssi"),
+            )
+            for net in networks_data
+        ]
+        return WiFiScanResponse(networks=networks)
+    except Exception as e:
+        logger.error(f"Error scanning WiFi networks: {e}", exc_info=True)
+        return WiFiScanResponse(networks=[])
+
+
 @router.post("/wifi", response_model=WiFiConfigResponse)
 def configure_wifi(
     request: WiFiConfigRequest,
@@ -130,7 +201,7 @@ def configure_wifi(
     is handled by WiFiService (platform-specific).
     """
     try:
-        # Store WiFi config
+        # Store WiFi config (repository handles commit internally)
         SystemConfigRepository.set(
             db=db,
             key="wifi",
@@ -146,6 +217,11 @@ def configure_wifi(
             message="WiFi configuration saved successfully",
         )
     except Exception as e:
+        logger.error(f"Error configuring WiFi: {e}", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass  # Ignore rollback errors
         return WiFiConfigResponse(
             success=False,
             message=f"Failed to configure WiFi: {str(e)}",

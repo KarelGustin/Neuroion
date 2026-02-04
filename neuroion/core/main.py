@@ -13,7 +13,7 @@ import traceback
 
 from neuroion.core.config import settings
 from neuroion.core.memory.db import init_db
-from neuroion.core.api import health, pairing, chat, events, admin, setup
+from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations
 from neuroion.core.services.telegram_service import start_telegram_bot, stop_telegram_bot
 
 # Configure logging
@@ -103,6 +103,8 @@ app.include_router(pairing.router)
 app.include_router(chat.router)
 app.include_router(events.router)
 app.include_router(admin.router)
+app.include_router(dashboard.router)
+app.include_router(integrations.router)
 
 
 if __name__ == "__main__":
