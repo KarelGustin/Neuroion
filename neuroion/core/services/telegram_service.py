@@ -65,6 +65,7 @@ async def start_telegram_bot() -> Optional[Application]:
         
         start_command = telegram_bot_module.start_command
         pair_command = telegram_bot_module.pair_command
+        dashboard_command = telegram_bot_module.dashboard_command
         handle_message = telegram_bot_module.handle_message
         execute_command = telegram_bot_module.execute_command
         
@@ -84,6 +85,7 @@ async def start_telegram_bot() -> Optional[Application]:
         # Register handlers
         app.add_handler(CommandHandler("start", start_command))
         app.add_handler(CommandHandler("pair", pair_command))
+        app.add_handler(CommandHandler("dashboard", dashboard_command))
         app.add_handler(CommandHandler("execute", execute_command))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         

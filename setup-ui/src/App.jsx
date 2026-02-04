@@ -88,10 +88,10 @@ function App() {
   return (
     <div className="app">
       <div className="container">
-        <div className="header">
-          <Logo />
-          <p className="tagline">Home Intelligence Platform</p>
-        </div>
+        {/* <div className="header">
+          {/* <Logo /> */}
+          {/* <p className="tagline">Home Intelligence Platform</p>
+        </div> */} 
 
         <Status status={status} error={error} />
 

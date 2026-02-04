@@ -1,17 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import '../styles/PixelAnimation.css'
+// Import the existing logo from assets
+import logoImage from '../assets/ChatGPT Image Feb 2, 2026, 11_56_17 AM.png'
 
 function PixelAnimation({ status = 'online' }) {
-  const [animationPhase, setAnimationPhase] = useState(0)
-
-  useEffect(() => {
-    // Animate through phases to create flowing effect
-    const interval = setInterval(() => {
-      setAnimationPhase(prev => (prev + 1) % 4)
-    }, 800)
-
-    return () => clearInterval(interval)
-  }, [])
+  const [logoError, setLogoError] = useState(false)
 
   const getStatusClass = () => {
     switch (status) {
@@ -26,21 +19,30 @@ function PixelAnimation({ status = 'online' }) {
     }
   }
 
+  // Fallback: show a placeholder if logo fails to load
+  if (logoError) {
+    return (
+      <div className={`pixel-animation ${getStatusClass()}`}>
+        <div className="logo-container">
+          <div className="logo-placeholder">
+            <div className="logo-placeholder-text">Logo</div>
+            <div className="logo-placeholder-hint">Logo image failed to load</div>
+          </div>
+          <div className="glow-effect"></div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`pixel-animation ${getStatusClass()}`}>
-      <div className="logo-inspired">
-        {/* Triangle made of separate segments */}
-        {/* Top segment - horizontal */}
-        <div className="triangle-segment segment-top" data-phase={animationPhase}></div>
-        {/* Left segment - angled side */}
-        <div className="triangle-segment segment-left" data-phase={animationPhase}></div>
-        {/* Right segment - angled side */}
-        <div className="triangle-segment segment-right" data-phase={animationPhase}></div>
-        
-        {/* Vertical line below triangle center */}
-        <div className="vertical-line" data-phase={animationPhase}></div>
-        
-        {/* Glow effect */}
+      <div className="logo-container">
+        <img 
+          src={logoImage} 
+          alt="Neuroion Logo" 
+          className="logo-image"
+          onError={() => setLogoError(true)}
+        />
         <div className="glow-effect"></div>
       </div>
     </div>

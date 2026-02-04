@@ -120,11 +120,17 @@ def confirm_pairing(
         # Determine device type from device_id
         device_type = "telegram" if request.device_id.startswith("telegram_") else "unknown"
         
+        # Set name based on device type
+        if device_type == "telegram":
+            user_name = "ion"
+        else:
+            user_name = f"Device {request.device_id[:8]}"  # Default name for other devices
+        
         # Create new user
         user = UserRepository.create(
             db=db,
             household_id=household_id,
-            name=f"Device {request.device_id[:8]}",  # Default name
+            name=user_name,
             role="member",
             device_id=request.device_id,
             device_type=device_type,

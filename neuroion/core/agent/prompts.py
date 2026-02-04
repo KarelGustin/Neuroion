@@ -20,7 +20,9 @@ STRICT COMMUNICATION GUIDELINES:
 - NEVER repeat or paraphrase what the user just said
 - Do not echo back their words or summarize their message
 - Respond directly to their question or request without restating it
-- Be concise and get straight to the point
+- Be concise: Keep responses to 1-3 sentences unless the user explicitly asks for more detail
+- NEVER use markdown formatting - no **bold**, no *italic*, no code blocks, no formatting of any kind
+- Write as a normal human assistant would speak - plain text only
 - Show personality and be friendly, but stay within these guidelines
 
 Your core principles:
@@ -35,6 +37,8 @@ When a user asks something:
 - If it requires an action, propose the action with clear reasoning
 - Always explain WHY you're suggesting something
 - Never start with "You asked..." or "You said..." - just answer
+- Keep responses brief and to the point - 1-3 sentences is ideal
+- Never use markdown formatting like **bold** or any other formatting symbols
 
 You have access to tools that can perform actions. When you want to use a tool:
 1. Explain what you want to do and why
@@ -67,26 +71,44 @@ def format_context_snapshots(snapshots: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def format_preferences(preferences: Dict[str, Any]) -> str:
+def format_preferences(
+    user_preferences: Dict[str, Any] = None,
+    household_preferences: Dict[str, Any] = None,
+) -> str:
     """
     Format preferences for inclusion in prompts.
     
     Args:
-        preferences: Dict of preferences
+        user_preferences: Dict of user-specific preferences
+        household_preferences: Dict of household-level preferences
     
     Returns:
         Formatted string for prompt
     """
-    if not preferences:
-        return "No preferences stored."
+    lines = []
     
-    lines = ["Household preferences:"]
-    for key, value in list(preferences.items())[:20]:  # Limit to 20
-        if isinstance(value, (dict, list)):
-            value_str = str(value)[:100]  # Truncate long values
-        else:
-            value_str = str(value)
-        lines.append(f"- {key}: {value_str}")
+    if household_preferences:
+        lines.append("Household preferences (shared by all members):")
+        for key, value in list(household_preferences.items())[:20]:  # Limit to 20
+            if isinstance(value, (dict, list)):
+                value_str = str(value)[:100]  # Truncate long values
+            else:
+                value_str = str(value)
+            lines.append(f"- {key}: {value_str}")
+    
+    if user_preferences:
+        if household_preferences:
+            lines.append("")  # Empty line between sections
+        lines.append("User-specific preferences (override household preferences):")
+        for key, value in list(user_preferences.items())[:20]:  # Limit to 20
+            if isinstance(value, (dict, list)):
+                value_str = str(value)[:100]  # Truncate long values
+            else:
+                value_str = str(value)
+            lines.append(f"- {key}: {value_str}")
+    
+    if not lines:
+        return "No preferences stored."
     
     return "\n".join(lines)
 
@@ -95,6 +117,8 @@ def build_chat_messages(
     user_message: str,
     context_snapshots: List[Dict[str, Any]] = None,
     preferences: Dict[str, Any] = None,
+    user_preferences: Dict[str, Any] = None,
+    household_preferences: Dict[str, Any] = None,
     conversation_history: List[Dict[str, str]] = None,
     db: Session = None,
     household_id: int = None,
@@ -124,8 +148,17 @@ def build_chat_messages(
         if onboarding_prompt:
             system_parts.append(onboarding_prompt)
     
-    if preferences:
-        system_parts.append("\n" + format_preferences(preferences))
+    # Format preferences (use new format if user/household provided, otherwise fallback to old format)
+    if user_preferences is not None or household_preferences is not None:
+        prefs_text = format_preferences(
+            user_preferences=user_preferences,
+            household_preferences=household_preferences,
+        )
+        if prefs_text != "No preferences stored.":
+            system_parts.append("\n" + prefs_text)
+    elif preferences:
+        # Fallback to old format for backwards compatibility
+        system_parts.append("\n" + format_preferences(household_preferences=preferences))
     
     if context_snapshots:
         system_parts.append("\n" + format_context_snapshots(context_snapshots))

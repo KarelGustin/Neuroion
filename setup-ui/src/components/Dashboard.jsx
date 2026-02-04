@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import PixelAnimation from './PixelAnimation'
-import { getDashboardStats } from '../services/api'
+import { getDashboardStats, getHouseholdMembers, generateLoginCode } from '../services/api'
 import '../styles/Dashboard.css'
 
 function Dashboard() {
@@ -11,13 +11,17 @@ function Dashboard() {
     wifi_status_color: 'green',
     wifi_message: 'Connected',
   })
+  const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [loginCode, setLoginCode] = useState(null)
+  const [countdown, setCountdown] = useState(60)
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const data = await getDashboardStats()
+        console.log('Dashboard stats received:', data) // Debug log
         setStats(data)
         setError(null)
       } catch (err) {
@@ -28,14 +32,64 @@ function Dashboard() {
       }
     }
 
+    const fetchMembers = async () => {
+      try {
+        const membersList = await getHouseholdMembers()
+        setMembers(membersList)
+      } catch (err) {
+        console.error('Failed to fetch members:', err)
+      }
+    }
+
     // Initial fetch
     fetchStats()
+    fetchMembers()
 
     // Poll every 5 seconds
-    const interval = setInterval(fetchStats, 5000)
+    const interval = setInterval(() => {
+      fetchStats()
+      fetchMembers()
+    }, 5000)
 
     return () => clearInterval(interval)
   }, [])
+
+  // Countdown timer for login code
+  useEffect(() => {
+    if (loginCode && countdown > 0) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            setLoginCode(null)
+            return 60
+          }
+          return prev - 1
+        })
+      }, 1000)
+      return () => clearInterval(timer)
+    } else if (loginCode && countdown === 0) {
+      setLoginCode(null)
+      setCountdown(60)
+    }
+  }, [loginCode, countdown])
+
+  const handleMemberClick = async (userId) => {
+    try {
+      const result = await generateLoginCode(userId)
+      setLoginCode(result.code)
+      setCountdown(60)
+    } catch (err) {
+      console.error('Failed to generate login code:', err)
+      alert('Failed to generate login code. Please try again.')
+    }
+  }
+
+  const copyToClipboard = () => {
+    if (loginCode) {
+      navigator.clipboard.writeText(loginCode)
+      alert('Login code copied to clipboard!')
+    }
+  }
 
   if (loading) {
     return (
@@ -67,7 +121,6 @@ function Dashboard() {
 
         <div className="dashboard-stats">
           <div className="stat-card">
-            <div className="stat-icon">👥</div>
             <div className="stat-content">
               <p className="stat-label">Household Members</p>
               <p className="stat-value">{stats.member_count}</p>
@@ -75,14 +128,50 @@ function Dashboard() {
           </div>
 
           <div className="stat-card">
-            <div className="stat-icon">💬</div>
             <div className="stat-content">
               <p className="stat-label">Requests Today</p>
               <p className="stat-value">{stats.daily_requests}</p>
             </div>
           </div>
         </div>
+
+        {members.length > 0 && (
+          <div className="dashboard-members">
+            <h2 className="members-title">Household Members</h2>
+            <p className="members-hint">Click a name to get login code</p>
+            <div className="members-list">
+              {members.map((member) => (
+                <button
+                  key={member.id}
+                  className="member-item"
+                  onClick={() => handleMemberClick(member.id)}
+                >
+                  <span className="member-name">{member.name}</span>
+                  <span className="member-role">{member.role}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {loginCode && (
+        <div className="login-code-modal">
+          <div className="login-code-content">
+            <h3>Login Code</h3>
+            <div className="login-code-display">
+              <span className="login-code-value">{loginCode}</span>
+              <button className="copy-button" onClick={copyToClipboard}>
+                Copy
+              </button>
+            </div>
+            <p className="login-code-timer">Expires in {countdown} seconds</p>
+            <button className="close-button" onClick={() => setLoginCode(null)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="dashboard-error">

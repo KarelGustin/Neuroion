@@ -261,7 +261,7 @@ def summarize_family_preferences(
 
 @register_tool(
     name="get_dashboard_link",
-    description="Get personal dashboard link for the user. Use this when user asks for their dashboard, personal page, or wants to manage integrations",
+    description="Get personal dashboard link for the user. Use this when user asks for their dashboard, personal page, or wants to manage integrations. This will generate a login code that expires in 60 seconds.",
     parameters={
         "type": "object",
         "properties": {},
@@ -274,22 +274,33 @@ def get_dashboard_link(
     user_id: int,
 ) -> Dict[str, Any]:
     """
-    Get personal dashboard link for user.
+    Get personal dashboard link for user and generate a login code.
     
     Returns:
-        Dict with dashboard URL
+        Dict with dashboard URL and 4-digit login code
     """
-    from neuroion.core.memory.repository import DashboardLinkRepository
+    from neuroion.core.memory.repository import DashboardLinkRepository, LoginCodeRepository
     from neuroion.core.config import settings
+    from neuroion.core.services.network import get_dashboard_base_url
     
     # Get or create dashboard link
     link = DashboardLinkRepository.get_or_create(db, user_id)
     
-    # Construct URL
-    from neuroion.core.config import settings
-    url = f"http://localhost:{settings.dashboard_ui_port}/user/{user_id}?token={link.token}"
+    # Generate login code (expires in 60 seconds)
+    login_code = LoginCodeRepository.create(db, user_id, expires_in_seconds=60)
+    
+    # Construct URL using detected local IP (works for mobile access)
+    base_url = get_dashboard_base_url(settings.dashboard_ui_port, prefer_localhost=False)
+    url = f"{base_url}/user/{user_id}"
     
     return {
         "url": url,
-        "message": f"Your personal dashboard is available at: {url}\n\nYou can use it to manage integrations, view your data, and configure settings.",
+        "code": login_code.code,
+        "expires_at": login_code.expires_at.isoformat(),
+        "message": (
+            f"🔗 Your Personal Dashboard\n\n"
+            f"Link: {url}\n\n"
+            f"Login Code: {login_code.code}\n"
+            f"⏱ Valid for 60 seconds"
+        ),
     }

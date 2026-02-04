@@ -32,8 +32,18 @@ function LLMConfig({ onComplete, onBack, initialData }) {
     savedData?.customModel || 'gpt-3.5-turbo',
   )
 
-  // Local Ollama fields - URL is pre-installed, use default
-  const ollamaUrl = 'http://localhost:11434' // Pre-installed, not configurable
+  // Local Ollama fields - URL automatically detected based on current hostname
+  // If accessing via IP, use that IP for Ollama; otherwise use localhost
+  const getOllamaUrl = () => {
+    const hostname = window.location.hostname
+    // If accessing via localhost, use localhost for Ollama
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:11434'
+    }
+    // Otherwise, use the same hostname (IP address) for Ollama
+    return `http://${hostname}:11434`
+  }
+  const ollamaUrl = getOllamaUrl()
   const [ollamaModel, setOllamaModel] = useState(
     savedData?.ollamaModel || 'llama3.2',
   )

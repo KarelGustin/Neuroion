@@ -1,6 +1,33 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+/**
+ * Automatically detect API base URL based on current hostname.
+ * - If accessed via localhost, use localhost for API
+ * - If accessed via IP address, use that IP for API
+ * - Falls back to environment variable or localhost
+ */
+function getApiBaseUrl() {
+  // Use environment variable if explicitly set
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+
+  // Get current hostname and protocol
+  const hostname = window.location.hostname
+  const protocol = window.location.protocol
+  const apiPort = import.meta.env.VITE_API_PORT || '8000'
+
+  // If accessing via localhost or 127.0.0.1, use localhost for API
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return `http://localhost:${apiPort}`
+  }
+
+  // Otherwise, use the same hostname (IP address) for API
+  // This works when accessing from mobile devices on the same network
+  return `${protocol}//${hostname}:${apiPort}`
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -72,6 +99,25 @@ export async function checkInternetConnection() {
 // Dashboard API functions
 export async function getDashboardStats() {
   const response = await api.get('/dashboard/stats')
+  return response.data
+}
+
+export async function getHouseholdMembers() {
+  const response = await api.get('/dashboard/members')
+  return response.data.members
+}
+
+export async function generateLoginCode(userId) {
+  const response = await api.post('/dashboard/login-code/generate', {
+    user_id: userId,
+  })
+  return response.data
+}
+
+export async function verifyLoginCode(code) {
+  const response = await api.post('/dashboard/login-code/verify', {
+    code,
+  })
   return response.data
 }
 

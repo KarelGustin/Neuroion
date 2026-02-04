@@ -3,14 +3,14 @@ Repository layer for database operations.
 
 Provides high-level CRUD operations and query helpers for all entities.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
 
 from neuroion.core.memory.models import (
     Household, User, Preference, ContextSnapshot, AuditLog, ChatMessage, SystemConfig,
-    DailyRequestCount, UserIntegration, DashboardLink
+    DailyRequestCount, UserIntegration, DashboardLink, LoginCode
 )
 
 
@@ -180,8 +180,11 @@ class PreferenceRepository:
         import json
         
         query = db.query(Preference).filter(Preference.household_id == household_id)
-        if user_id:
+        if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
+        else:
+            # If user_id is None, only get household-level preferences (where user_id IS NULL)
+            query = query.filter(Preference.user_id.is_(None))
         if category:
             query = query.filter(Preference.category == category)
         
@@ -192,6 +195,30 @@ class PreferenceRepository:
             except (json.JSONDecodeError, TypeError):
                 pass
         return prefs
+    
+    @staticmethod
+    def delete(
+        db: Session,
+        household_id: int,
+        key: str,
+        user_id: Optional[int] = None,
+    ) -> bool:
+        """Delete a preference."""
+        query = db.query(Preference).filter(
+            Preference.household_id == household_id,
+            Preference.key == key,
+        )
+        if user_id:
+            query = query.filter(Preference.user_id == user_id)
+        else:
+            query = query.filter(Preference.user_id.is_(None))
+        
+        pref = query.first()
+        if pref:
+            db.delete(pref)
+            db.commit()
+            return True
+        return False
 
 
 class ContextSnapshotRepository:
@@ -560,7 +587,7 @@ class UserIntegrationRepository:
             if permissions:
                 integration.permissions = permissions
             if metadata:
-                integration.metadata = metadata
+                integration.integration_metadata = metadata
             integration.updated_at = datetime.utcnow()
         else:
             integration = UserIntegration(
@@ -570,7 +597,7 @@ class UserIntegrationRepository:
                 refresh_token=refresh_token,
                 token_expires_at=token_expires_at,
                 permissions=permissions,
-                metadata=metadata,
+                integration_metadata=metadata,
             )
             db.add(integration)
         
@@ -657,3 +684,93 @@ class DashboardLinkRepository:
         return db.query(DashboardLink).filter(
             DashboardLink.user_id == user_id,
         ).first()
+
+
+class LoginCodeRepository:
+    """Repository for login code operations."""
+    
+    @staticmethod
+    def create(db: Session, user_id: int, expires_in_seconds: int = 60) -> LoginCode:
+        """
+        Create a new login code for a user.
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            expires_in_seconds: Expiration time in seconds (default 60)
+        
+        Returns:
+            LoginCode instance
+        """
+        import secrets
+        
+        # Generate 4-digit code
+        code = f"{secrets.randbelow(10000):04d}"
+        
+        # Calculate expiration time
+        expires_at = datetime.utcnow() + timedelta(seconds=expires_in_seconds)
+        
+        # Delete any existing codes for this user
+        db.query(LoginCode).filter(LoginCode.user_id == user_id).delete()
+        
+        # Create new code
+        login_code = LoginCode(
+            user_id=user_id,
+            code=code,
+            expires_at=expires_at,
+        )
+        db.add(login_code)
+        db.commit()
+        db.refresh(login_code)
+        
+        return login_code
+    
+    @staticmethod
+    def verify(db: Session, code: str) -> Optional[int]:
+        """
+        Verify a login code and return user_id if valid.
+        
+        Args:
+            db: Database session
+            code: 6-digit code to verify
+        
+        Returns:
+            user_id if valid and not expired, None otherwise
+            Code is deleted after verification (one-time use)
+        """
+        login_code = db.query(LoginCode).filter(LoginCode.code == code).first()
+        
+        if not login_code:
+            return None
+        
+        # Check expiration
+        if datetime.utcnow() > login_code.expires_at:
+            # Delete expired code
+            db.delete(login_code)
+            db.commit()
+            return None
+        
+        # Get user_id before deleting
+        user_id = login_code.user_id
+        
+        # Delete code (one-time use)
+        db.delete(login_code)
+        db.commit()
+        
+        return user_id
+    
+    @staticmethod
+    def cleanup_expired(db: Session) -> int:
+        """
+        Remove expired login codes.
+        
+        Args:
+            db: Database session
+        
+        Returns:
+            Number of codes deleted
+        """
+        now = datetime.utcnow()
+        deleted = db.query(LoginCode).filter(LoginCode.expires_at < now).delete()
+        db.commit()
+        return deleted

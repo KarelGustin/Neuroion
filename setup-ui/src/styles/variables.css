@@ -15,9 +15,10 @@
   --text-secondary: #e5e5e5;
   --text-muted: #a3a3a3;
   
-  /* Border Colors */
-  --border-default: rgba(255, 255, 255, 0.1);
-  --border-hover: rgba(255, 255, 255, 0.2);
+  /* Border Colors - Apple-style thin borders */
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-thin: 0.5px;
   
   /* Status Colors */
   --status-ready: #10b981;

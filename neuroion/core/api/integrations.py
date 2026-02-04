@@ -12,6 +12,7 @@ from neuroion.core.memory.db import get_db
 from neuroion.core.memory.repository import UserRepository, UserIntegrationRepository
 from neuroion.core.integrations.oauth import OAuthFlowHandler
 from neuroion.core.integrations.gmail import GmailIntegration
+from neuroion.core.security.permissions import get_current_user
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -53,13 +54,23 @@ class OAuthAuthorizeResponse(BaseModel):
 def get_user_integrations(
     user_id: int,
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ) -> IntegrationsListResponse:
     """
     Get all integrations for a user.
+    
+    Requires authentication. User can only access their own integrations.
     """
+    # Verify authenticated user matches requested user_id
+    if user["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access your own integrations",
+        )
+    
     # Verify user exists
-    user = UserRepository.get_by_id(db, user_id)
-    if not user:
+    user_obj = UserRepository.get_by_id(db, user_id)
+    if not user_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
@@ -72,7 +83,7 @@ def get_user_integrations(
             IntegrationResponse(
                 integration_type=integration.integration_type,
                 permissions=integration.permissions,
-                metadata=integration.metadata,
+                metadata=integration.integration_metadata,
                 created_at=integration.created_at.isoformat(),
             )
             for integration in integrations

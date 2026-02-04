@@ -29,7 +29,7 @@ class Household(Base):
     preferences = relationship("Preference", back_populates="household", cascade="all, delete-orphan")
     context_snapshots = relationship("ContextSnapshot", back_populates="household", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="household", cascade="all, delete-orphan")
-    chat_messages = relationship("ChatMessage", cascade="all, delete-orphan")
+    chat_messages = relationship("ChatMessage", back_populates="household", cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -150,7 +150,7 @@ class ChatMessage(Base):
     created_at = Column(DateTime, default=func.now(), nullable=False, index=True)
     
     # Relationships
-    household = relationship("Household")
+    household = relationship("Household", back_populates="chat_messages")
     user = relationship("User")
     
     __table_args__ = (
@@ -205,7 +205,7 @@ class UserIntegration(Base):
     refresh_token = Column(Text, nullable=True)  # Encrypted OAuth refresh token
     token_expires_at = Column(DateTime, nullable=True)  # Token expiration time
     permissions = Column(JSON, nullable=True)  # Granted permissions (read, write, delete, etc.)
-    metadata = Column(JSON, nullable=True)  # Additional integration metadata
+    integration_metadata = Column(JSON, nullable=True)  # Additional integration metadata
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
     
@@ -229,3 +229,21 @@ class DashboardLink(Base):
     
     # Relationships
     user = relationship("User")
+
+
+class LoginCode(Base):
+    """Stores temporary login codes for personal dashboard access."""
+    __tablename__ = "login_codes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    code = Column(String(4), nullable=False, index=True)  # 4-digit code
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    
+    # Relationships
+    user = relationship("User")
+    
+    __table_args__ = (
+        Index("idx_login_code_code", "code"),
+    )

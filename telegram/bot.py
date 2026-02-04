@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 from telegram import Update
+from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -107,9 +108,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_tokens[device_id] = data["token"]
             save_tokens(user_tokens)
             
+            household_name = data.get('household_name') or f"Household {data['household_id']}"
             reply_text = (
                 f"✅ Successfully paired with Neuroion!\n\n"
-                f"Household: {data.get('household_name', f\"Household {data['household_id']}\")}\n\n"
+                f"Household: {household_name}\n\n"
             )
             
             # If onboarding message is provided, send it
@@ -194,9 +196,10 @@ async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_tokens[device_id] = data["token"]
         save_tokens(user_tokens)
         
+        household_name = data.get('household_name') or f"Household {data['household_id']}"
         reply_text = (
             f"✅ Successfully paired!\n\n"
-            f"Household: {data.get('household_name', f\"Household {data['household_id']}\")}\n\n"
+            f"Household: {household_name}\n\n"
         )
         
         # If onboarding message is provided, send it
@@ -251,6 +254,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         getattr(user, "username", None),
         bool(token),
         message_text,
+    )
+    
+    # Send typing indicator immediately
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id,
+        action=ChatAction.TYPING
     )
     
     try:
@@ -310,6 +319,96 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"❌ An unexpected error occurred: {str(e)}\n\n"
             "Please try again later."
+        )
+
+
+async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /dashboard command to get dashboard link and login code."""
+    user = update.effective_user
+    device_id = f"telegram_{user.id}"
+    
+    # Check if paired
+    token = user_tokens.get(device_id)
+    if not token:
+        await update.message.reply_text(
+            "⚠️ You need to pair first. Use /pair <code> to pair with your Homebase."
+        )
+        return
+    
+    logger.info(
+        "Received /dashboard from user_id=%s username=%s",
+        user.id,
+        getattr(user, "username", None),
+    )
+    
+    try:
+        # Decode token to get user_id
+        from neuroion.core.security.tokens import TokenManager
+        payload = TokenManager.verify_token(token)
+        
+        if not payload:
+            await update.message.reply_text(
+                "❌ Invalid token. Please try pairing again."
+            )
+            return
+        
+        user_id = payload.get("user_id")
+        if not user_id:
+            await update.message.reply_text(
+                "❌ Could not determine your user ID. Please try pairing again."
+            )
+            return
+        
+        # Generate login code and get dashboard link
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Generate login code
+            code_response = await client.post(
+                get_homebase_url("/dashboard/login-code/generate"),
+                json={"user_id": user_id},
+            )
+            code_response.raise_for_status()
+            code_data = code_response.json()
+            
+            # Get dashboard base URL
+            link_response = await client.get(
+                get_homebase_url(f"/dashboard/user/{user_id}/link"),
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            link_response.raise_for_status()
+            link_data = link_response.json()
+            
+            # Send response with link and code
+            message = (
+                f"🔗 Your Personal Dashboard\n\n"
+                f"Link: {link_data['url']}\n\n"
+                f"Login Code: {code_data['code']}\n"
+                f"⏱ Valid for 60 seconds"
+            )
+            
+            await update.message.reply_text(message)
+            
+    except httpx.HTTPStatusError as e:
+        error_detail = "Unknown error"
+        if e.response is not None:
+            try:
+                error_data = e.response.json()
+                error_detail = error_data.get("detail", str(e))
+            except Exception:
+                error_detail = e.response.text or str(e)
+        
+        logger.error(f"Dashboard HTTP error: {error_detail}")
+        await update.message.reply_text(
+            f"❌ Error getting dashboard: {error_detail}"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Dashboard request error: {e}")
+        await update.message.reply_text(
+            f"❌ Error communicating with Homebase: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected dashboard error: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"❌ An unexpected error occurred: {str(e)}"
         )
 
 
@@ -377,6 +476,7 @@ def main():
     # Register handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("pair", pair_command))
+    application.add_handler(CommandHandler("dashboard", dashboard_command))
     application.add_handler(CommandHandler("execute", execute_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     

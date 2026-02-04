@@ -63,9 +63,20 @@ class Agent:
             for snap in context_snapshots
         ]
         
-        # Get preferences
-        prefs = PreferenceRepository.get_all(db, household_id)
-        prefs_dict = {pref.key: pref.value for pref in prefs}
+        # Get preferences: user-specific and household-level separately
+        household_prefs_dict = {}
+        user_prefs_dict = {}
+        
+        # Get household-level preferences (where user_id IS NULL)
+        household_prefs = PreferenceRepository.get_all(db, household_id, user_id=None)
+        for pref in household_prefs:
+            household_prefs_dict[pref.key] = pref.value
+        
+        # Get user-specific preferences (these override household preferences)
+        if user_id:
+            user_prefs = PreferenceRepository.get_all(db, household_id, user_id=user_id)
+            for pref in user_prefs:
+                user_prefs_dict[pref.key] = pref.value
         
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)
@@ -74,7 +85,8 @@ class Agent:
         messages = build_chat_messages(
             user_message=message,
             context_snapshots=context_dicts,
-            preferences=prefs_dict,
+            user_preferences=user_prefs_dict if user_prefs_dict else None,
+            household_preferences=household_prefs_dict if household_prefs_dict else None,
             conversation_history=conversation_history,
             db=db,
             household_id=household_id,
@@ -97,6 +109,10 @@ class Agent:
         
         # Get LLM response
         llm_response = self.llm.chat(messages, temperature=0.7)
+        
+        # Post-process response: strip markdown bold syntax and trim
+        llm_response = re.sub(r'\*\*(.+?)\*\*', r'\1', llm_response)  # Remove **bold**
+        llm_response = llm_response.strip()
         
         # Handle onboarding if in progress
         if in_onboarding and current_question:
