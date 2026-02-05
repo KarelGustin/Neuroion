@@ -212,6 +212,22 @@ Voor een volledige setup heb je **2-3 terminals** nodig:
 
 ---
 
+## 🖥️ Kiosk (7" scherm / Core unit)
+
+Op een vast scherm (bijv. 7" touchscreen) kun je de Setup UI in **kioskmodus** openen:
+
+1. **Startvolgorde:** Start eerst Ollama, dan de Homebase API, dan de Setup UI (bijv. `npm run dev` in `setup-ui/`).
+2. **Kiosk-URL:** Open in de browser (of via het script in `infra/kiosk/`):  
+   `http://localhost:5173/?kiosk=1`  
+   (Vervang 5173 door de poort waarop de Setup UI draait als die anders is.)
+3. **Gedrag:**
+   - **Setup nog niet klaar:** Het scherm toont alleen een grote **QR-code**. Scan deze met je telefoon om de setup-wizard te openen en daar te voltooien.
+   - **Setup klaar:** Het scherm toont het **core dashboard**: verbindingsstatus, ledenlijst, knop “+ Add member” (opent QR voor onboarding), aantal Neuroion Requests, en optie om leden te verwijderen.
+
+Zie `infra/kiosk/README.md` voor het kiosk-script en opties voor automatisch starten.
+
+---
+
 ## 🛑 Stoppen
 
 Om alles netjes te stoppen:

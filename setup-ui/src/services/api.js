@@ -139,4 +139,19 @@ export async function verifyLoginCode(code) {
   return response.data
 }
 
+export async function createDashboardJoinToken(expiresInMinutes = 10) {
+  const response = await api.post('/dashboard/join-token', {
+    expires_in_minutes: expiresInMinutes,
+  })
+  return response.data
+}
+
+export async function deleteMemberFromDashboard(memberId, confirmationCode) {
+  const response = await api.post('/dashboard/member-delete', {
+    member_id: memberId,
+    confirmation_code: confirmationCode,
+  })
+  return response.data
+}
+
 export default api

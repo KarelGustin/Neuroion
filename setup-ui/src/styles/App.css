@@ -1,13 +1,13 @@
 @import './variables.css';
 
-/* Mobile-first: Base styles for mobile */
+/* Mobile-first: compact for 7" touchscreen, iPhone, small devices */
 .app {
   width: 100%;
   min-height: 100vh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 0;
+  padding: clamp(0.25rem, 2vw, 1rem);
   overflow-y: auto;
 }
 
@@ -15,7 +15,7 @@
   background: var(--bg-secondary);
   border: none;
   border-radius: 0;
-  padding: 1rem;
+  padding: clamp(0.5rem, 3vw, 1rem);
   max-width: 100%;
   width: 100%;
   box-shadow: none;
@@ -24,6 +24,20 @@
   backdrop-filter: none;
   transition: border-color 0.2s ease;
   margin: 0;
+}
+
+/* Grid layout for Status + content on wider screens */
+.app-grid {
+  display: block;
+}
+
+/* Kiosk: full-width container, geen Status */
+.app-kiosk .container {
+  max-width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .container:hover {
@@ -55,13 +69,13 @@
   line-height: 1.5;
 }
 
-/* Tablet: 768px and up */
+/* Tablet: 768px and up – grid voor Status + SetupWizard/Dashboard */
 @media (min-width: 768px) {
   .app {
     align-items: center;
     padding: 2rem;
   }
-  
+
   .container {
     background: var(--bg-secondary);
     border: 1px solid var(--border-default);
@@ -72,20 +86,38 @@
     box-shadow: var(--shadow-lg);
     backdrop-filter: blur(10px);
   }
-  
+
+  .app-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1.5rem 2rem;
+    max-width: 100%;
+    text-align: left;
+  }
+
+  /* Eén kind (alleen Dashboard): volle breedte */
+  .app-grid:has(.dashboard):not(:has(.status)) {
+    grid-template-columns: 1fr;
+  }
+
+  .app-grid .status {
+    align-self: start;
+    min-width: 180px;
+  }
+
   .header {
     margin-bottom: 2rem;
   }
-  
+
   .tagline {
     font-size: 1rem;
   }
-  
+
   .footer {
     margin-top: 2rem;
     padding-top: 2rem;
   }
-  
+
   .footer p {
     font-size: 0.875rem;
   }
@@ -95,5 +127,40 @@
 @media (min-width: 1024px) {
   .container {
     padding: 3rem;
+  }
+}
+
+/* Large desktop / high-end displays: 1200px and up */
+@media (min-width: 1200px) {
+  .app {
+    align-items: center;
+    padding: 3rem;
+  }
+
+  .container {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 3rem;
+    border-radius: 24px;
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(16px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 3rem;
+    text-align: left;
+  }
+
+  /* Left column: connection/status */
+  .container > .status {
+    flex: 0 0 260px;
+    align-self: flex-start;
+  }
+
+  /* Right column: wizard or dashboard */
+  .container > .setup-wizard,
+  .container > .dashboard {
+    flex: 1;
   }
 }

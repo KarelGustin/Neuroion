@@ -64,58 +64,15 @@ class Agent:
         ]
         
         # Get preferences: user-specific and household-level separately
-        import json
-        import threading
-        thread_id = threading.get_ident()
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"agent.py:67","message":"Before get_all household","data":{"thread_id":thread_id,"household_id":household_id,"user_id":user_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        household_prefs_dict = {}
+        # PreferenceRepository.get_all returns Dict[str, Any]
+        household_prefs_dict = PreferenceRepository.get_all(
+            db, household_id, user_id=None
+        )
         user_prefs_dict = {}
-        
-        # Get household-level preferences (where user_id IS NULL)
-        household_prefs = PreferenceRepository.get_all(db, household_id, user_id=None)
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"agent.py:75","message":"After get_all household","data":{"thread_id":thread_id,"count":len(household_prefs),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        for pref in household_prefs:
-            household_prefs_dict[pref.key] = pref.value
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"agent.py:78","message":"After iterating household prefs","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        
-        # Get user-specific preferences (these override household preferences)
         if user_id:
-            # #region agent log
-            try:
-                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"agent.py:82","message":"Before get_all user","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            user_prefs = PreferenceRepository.get_all(db, household_id, user_id=user_id)
-            # #region agent log
-            try:
-                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"agent.py:85","message":"After get_all user","data":{"thread_id":thread_id,"count":len(user_prefs),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            for pref in user_prefs:
-                user_prefs_dict[pref.key] = pref.value
-            # #region agent log
-            try:
-                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"agent.py:89","message":"After iterating user prefs","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
+            user_prefs_dict = PreferenceRepository.get_all(
+                db, household_id, user_id=user_id
+            )
         
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)

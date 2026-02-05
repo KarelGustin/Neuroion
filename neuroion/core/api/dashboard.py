@@ -29,9 +29,19 @@ from neuroion.core.services.wifi_status import WiFiStatusService, WiFiStatus
 from neuroion.core.services.network import get_dashboard_base_url
 from neuroion.core.config import settings
 from neuroion.core.security.tokens import TokenManager
+from neuroion.core.security.passcode import hash_passcode, verify_passcode, is_valid_passcode_format
+from neuroion.core.security.join_tokens import JoinTokenManager
+from neuroion.core.security.permissions import get_current_user
 from datetime import timedelta
+import time
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+# Startup time for "days since boot" (shared with setup status)
+try:
+    from neuroion.core.api.setup import _startup_time as _dashboard_startup_time
+except Exception:
+    _dashboard_startup_time = time.time()
 
 
 class DashboardStatsResponse(BaseModel):
@@ -41,6 +51,7 @@ class DashboardStatsResponse(BaseModel):
     wifi_status: str  # "online", "no_signal", "error"
     wifi_status_color: str  # "green", "blue", "red"
     wifi_message: str
+    days_since_boot: int  # Dagen sinds geboot
 
 
 class DashboardLinkResponse(BaseModel):
@@ -83,6 +94,134 @@ class MembersListResponse(BaseModel):
     members: list[MemberResponse]
 
 
+class ByPageResponse(BaseModel):
+    """Public response for GET by-page (exists and optional display_name)."""
+    exists: bool
+    display_name: Optional[str] = None
+
+
+class UnlockRequest(BaseModel):
+    """Request to unlock personal dashboard with passcode."""
+    page_name: str
+    passcode: str
+
+
+class UnlockResponse(BaseModel):
+    """Response after successful unlock (JWT for personal dashboard)."""
+    token: str
+    user_id: int
+
+
+class SetPasscodeRequest(BaseModel):
+    """Request to set passcode (after join, using setup_token)."""
+    setup_token: str
+    passcode: str
+
+
+class SetPasscodeResponse(BaseModel):
+    """Response after setting passcode."""
+    success: bool
+    message: str
+
+
+class DashboardMemberDeleteRequest(BaseModel):
+    """Request to delete a member from kiosk (no auth). Confirmation = member's passcode."""
+    member_id: int
+    confirmation_code: str
+
+
+class DashboardMemberDeleteResponse(BaseModel):
+    """Response after deleting member from kiosk."""
+    success: bool
+    message: str
+
+
+class DashboardJoinTokenRequest(BaseModel):
+    """Request to create join token from kiosk (no auth)."""
+    expires_in_minutes: Optional[int] = 10
+
+
+class DashboardJoinTokenResponse(BaseModel):
+    """Response with join token and URLs for add-member QR."""
+    token: str
+    expires_at: str
+    join_url: str
+    qr_url: str
+
+
+@router.post("/join-token", response_model=DashboardJoinTokenResponse)
+def create_dashboard_join_token(
+    request: DashboardJoinTokenRequest,
+    db: Session = Depends(get_db),
+) -> DashboardJoinTokenResponse:
+    """
+    Create a join token for add-member flow (no auth).
+    For use by core unit 7" dashboard. Uses first household and first owner.
+    """
+    households = HouseholdRepository.get_all(db)
+    if not households:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No household configured",
+        )
+    household_id = households[0].id
+    members = UserRepository.get_by_household(db, household_id)
+    owner = next((m for m in members if m.role == "owner"), None)
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No owner in household",
+        )
+    data = JoinTokenManager.create_token(
+        db=db,
+        household_id=household_id,
+        created_by_member_id=owner.id,
+        expires_in_minutes=request.expires_in_minutes,
+    )
+    base_url = get_dashboard_base_url(settings.dashboard_ui_port, prefer_localhost=False).rstrip("/")
+    join_url = f"{base_url}/join?token={data['token']}"
+    return DashboardJoinTokenResponse(
+        token=data["token"],
+        expires_at=data["expires_at"],
+        join_url=join_url,
+        qr_url=join_url,
+    )
+
+
+@router.post("/member-delete", response_model=DashboardMemberDeleteResponse)
+def dashboard_member_delete(
+    request: DashboardMemberDeleteRequest,
+    db: Session = Depends(get_db),
+) -> DashboardMemberDeleteResponse:
+    """
+    Delete a member and all their data from kiosk (no auth).
+    Confirmation code must be the member's passcode (so only someone who knows it can delete).
+    """
+    if not is_valid_passcode_format(request.confirmation_code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Confirmation code must be 4-6 digits",
+        )
+    member = UserRepository.get_by_id(db, request.member_id)
+    if not member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    if not member.passcode_hash or not verify_passcode(request.confirmation_code, member.passcode_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid confirmation code",
+        )
+    try:
+        UserRepository.delete_user_and_all_data(db, request.member_id)
+        return DashboardMemberDeleteResponse(success=True, message="Member and all data deleted")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("Error deleting member: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete member",
+        )
+
+
 @router.get("/stats", response_model=DashboardStatsResponse)
 def get_dashboard_stats(
     db: Session = Depends(get_db),
@@ -98,12 +237,14 @@ def get_dashboard_stats(
     if not households:
         # Return default values if no household exists
         wifi_status, wifi_message = WiFiStatusService.get_status()
+        uptime_seconds = max(0, int(time.time() - _dashboard_startup_time))
         return DashboardStatsResponse(
             member_count=0,
             daily_requests=0,
             wifi_status=wifi_status.value,
             wifi_status_color=WiFiStatusService.get_status_color(wifi_status),
             wifi_message=wifi_message,
+            days_since_boot=uptime_seconds // 86400,
         )
     
     household_id = households[0].id
@@ -117,13 +258,18 @@ def get_dashboard_stats(
     
     # Get WiFi status
     wifi_status, wifi_message = WiFiStatusService.get_status()
-    
+
+    # Days since boot (Neuroion process start)
+    uptime_seconds = max(0, int(time.time() - _dashboard_startup_time))
+    days_since_boot = uptime_seconds // 86400
+
     return DashboardStatsResponse(
         member_count=member_count,
         daily_requests=daily_requests,
         wifi_status=wifi_status.value,
         wifi_status_color=WiFiStatusService.get_status_color(wifi_status),
         wifi_message=wifi_message,
+        days_since_boot=days_since_boot,
     )
 
 
@@ -178,7 +324,7 @@ def generate_login_code(
         )
     
     # Generate login code
-    login_code = LoginCodeRepository.create(db, request.user_id, expires_in_seconds=60)
+    login_code = LoginCodeRepository.create_for_user(db, request.user_id, expires_in_seconds=60)
     
     return LoginCodeGenerateResponse(
         code=login_code.code,
@@ -258,3 +404,103 @@ def get_household_members(
             for member in members
         ]
     )
+
+
+@router.get("/by-page/{page_name}", response_model=ByPageResponse)
+def get_by_page(
+    page_name: str,
+    db: Session = Depends(get_db),
+) -> ByPageResponse:
+    """
+    Public lookup: does this page_name exist? Optionally return display name.
+    No sensitive data. For "save this page" UX.
+    """
+    user = UserRepository.get_by_page_name(db, page_name.strip().lower())
+    if not user:
+        return ByPageResponse(exists=False)
+    return ByPageResponse(exists=True, display_name=user.name)
+
+
+@router.post("/unlock", response_model=UnlockResponse)
+def unlock_with_passcode(
+    request: UnlockRequest,
+    db: Session = Depends(get_db),
+) -> UnlockResponse:
+    """
+    Login to personal dashboard with page_name + passcode.
+    Returns JWT (same format as login-code verify).
+    """
+    if not is_valid_passcode_format(request.passcode):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passcode must be 4-6 digits",
+        )
+    user = UserRepository.get_by_page_name(db, request.page_name.strip().lower())
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid page or passcode",
+        )
+    if not user.passcode_hash or not verify_passcode(request.passcode, user.passcode_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid page or passcode",
+        )
+    token = TokenManager.create_access_token(
+        data={
+            "user_id": user.id,
+            "household_id": user.household_id,
+        },
+        expires_delta=timedelta(hours=24),
+    )
+    return UnlockResponse(token=token, user_id=user.id)
+
+
+class UserStatsResponse(BaseModel):
+    """User stats for personal dashboard."""
+    daily_requests: int
+    message_count: int
+
+
+@router.get("/user/stats", response_model=UserStatsResponse)
+def get_user_stats(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> UserStatsResponse:
+    """Get stats for the current user (for personal dashboard)."""
+    household_id = user["household_id"]
+    user_id = user["user_id"]
+    daily_requests = RequestCounter.get_today_count(db, household_id)
+    from sqlalchemy import func
+    from neuroion.core.memory.models import ChatMessage
+    msg_count = db.query(func.count(ChatMessage.id)).filter(
+        ChatMessage.user_id == user_id,
+    ).scalar() or 0
+    return UserStatsResponse(
+        daily_requests=daily_requests,
+        message_count=msg_count,
+    )
+
+
+@router.post("/set-passcode", response_model=SetPasscodeResponse)
+def set_passcode(
+    request: SetPasscodeRequest,
+    db: Session = Depends(get_db),
+) -> SetPasscodeResponse:
+    """
+    Set passcode for a user after join (one-time setup_token from consume response).
+    """
+    if not is_valid_passcode_format(request.passcode):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passcode must be 4-6 digits",
+        )
+    user = UserRepository.get_by_setup_token(db, request.setup_token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired setup token",
+        )
+    hashed = hash_passcode(request.passcode)
+    UserRepository.set_passcode(db, user.id, hashed)
+    return SetPasscodeResponse(success=True, message="Passcode set successfully")

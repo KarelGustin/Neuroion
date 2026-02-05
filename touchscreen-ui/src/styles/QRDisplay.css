@@ -1,67 +1,87 @@
 .qr-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.9);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 2rem;
+  padding: var(--space-6);
 }
 
 .qr-container {
-  background: #111;
-  border: 1px solid #333;
-  border-radius: 16px;
-  padding: 2rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-modal);
+  padding: var(--space-8);
   text-align: center;
   max-width: 400px;
   width: 100%;
+  box-shadow: var(--shadow-modal);
 }
 
 .qr-container h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 1.5rem;
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+  margin: 0 0 var(--space-6);
+  letter-spacing: var(--tracking-tight);
 }
 
 .qr-code {
   background: #fff;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  margin-bottom: var(--space-4);
   display: inline-block;
 }
 
 .qr-url {
-  font-size: 0.75rem;
-  color: #888;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
   word-break: break-all;
-  margin-bottom: 1.5rem;
+  margin: 0 0 var(--space-6);
+  line-height: 1.4;
 }
 
 .qr-close {
-  padding: 0.75rem 2rem;
-  background: #333;
-  border: 1px solid #555;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 500;
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   cursor: pointer;
   min-height: 44px;
   width: 100%;
   -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease, transform 0.15s ease;
 }
 
 .qr-close:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .qr-close:active {
   transform: scale(0.98);
+}
+
+.qr-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qr-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.8);
+  }
+  .qr-close {
+    transition: none;
+  }
 }

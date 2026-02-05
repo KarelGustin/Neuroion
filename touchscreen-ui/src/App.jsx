@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import StatusCard from './components/StatusCard'
 import ActionButton from './components/ActionButton'
 import QRDisplay from './components/QRDisplay'
+import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
 import { getStatus, createJoinToken } from './services/api'
 import './styles/App.css'
 
@@ -59,7 +60,10 @@ function App() {
   if (loading) {
     return (
       <div className="app">
-        <div className="loading">Loading...</div>
+        <div className="loading">
+          <div className="loading-spinner" aria-hidden="true" />
+          <span className="loading-label">Loading…</span>
+        </div>
       </div>
     )
   }
@@ -82,7 +86,7 @@ function App() {
               IP: status.network.ip,
               Hostname: status.network.hostname,
             }}
-            icon="📡"
+            icon={<Connectivity size={24} />}
           />
         )}
 
@@ -95,7 +99,7 @@ function App() {
               Model: status.model.name,
               Health: status.model.health,
             }}
-            icon="🤖"
+            icon={<Sparkles size={24} />}
           />
         )}
 
@@ -107,7 +111,7 @@ function App() {
               Name: status.household.name,
               Members: status.household.member_count,
             }}
-            icon="🏠"
+            icon={<Home size={24} />}
           />
         )}
       </div>
@@ -115,25 +119,25 @@ function App() {
       <div className="actions-grid">
         <ActionButton
           label="Open Dashboard"
-          icon="📱"
+          icon={<Smartphone size={24} />}
           onClick={handleOpenDashboard}
           variant="primary"
         />
         <ActionButton
           label="Add Member"
-          icon="➕"
+          icon={<UserPlus size={24} />}
           onClick={handleAddMember}
           variant="primary"
         />
         <ActionButton
           label="Troubleshoot"
-          icon="🔧"
+          icon={<Wrench size={24} />}
           onClick={handleTroubleshoot}
           variant="secondary"
         />
         <ActionButton
           label="Restart"
-          icon="🔄"
+          icon={<RotateCw size={24} />}
           onClick={handleRestart}
           variant="danger"
           requiresLongPress={true}

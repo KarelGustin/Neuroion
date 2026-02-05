@@ -28,6 +28,22 @@ class RequestCounter:
         Returns:
             New count after increment
         """
+        # #region agent log
+        try:
+            import json as _json, time as _time
+            with open('/Users/karelgustin/Neuroion/Neuroion/.cursor/debug.log', 'a') as _f:
+                _f.write(_json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H2",
+                    "location": "request_counter.py:31",
+                    "message": "RequestCounter.increment entry",
+                    "data": {"household_id": household_id},
+                    "timestamp": int(_time.time() * 1000),
+                }) + "\n")
+        except Exception:
+            pass
+        # #endregion
         count = DailyRequestCountRepository.increment(db, household_id)
         return count.count
     

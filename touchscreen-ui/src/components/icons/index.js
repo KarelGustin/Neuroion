@@ -1,0 +1,7 @@
+export { default as Connectivity } from './Connectivity'
+export { default as Sparkles } from './Sparkles'
+export { default as Home } from './Home'
+export { default as Smartphone } from './Smartphone'
+export { default as UserPlus } from './UserPlus'
+export { default as Wrench } from './Wrench'
+export { default as RotateCw } from './RotateCw'

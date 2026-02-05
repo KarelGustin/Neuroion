@@ -12,7 +12,9 @@ pkill chromium-browser || true
 # Wait a moment
 sleep 2
 
-# Start Chromium in kiosk mode
+# Setup UI port: 5173 (Vite dev) or 3000 (production build)
+SETUP_UI_PORT="${SETUP_UI_PORT:-5173}"
+# Kiosk URL: ?kiosk=1 shows config QR when setup incomplete, then core dashboard when complete
 chromium-browser \
     --kiosk \
     --noerrdialogs \
@@ -20,7 +22,7 @@ chromium-browser \
     --disable-session-crashed-bubble \
     --disable-restore-session-state \
     --autoplay-policy=no-user-gesture-required \
-    http://localhost:3000 &
+    "http://localhost:${SETUP_UI_PORT}/?kiosk=1" &
 
 # Wait for Chromium to start
 sleep 5

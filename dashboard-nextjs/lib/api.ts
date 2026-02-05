@@ -33,6 +33,28 @@ const api = axios.create({
   timeout: 10000,
 })
 
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null) {
+  authToken = token
+}
+
+export function getAuthToken(): string | null {
+  return authToken
+}
+
+api.interceptors.request.use((config) => {
+  let token = authToken
+  if (!token && typeof window !== 'undefined') {
+    token = localStorage.getItem('neuroion_token')
+    if (token) authToken = token
+  }
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 // Status API
 export async function getStatus() {
   const response = await api.get('/api/status')
@@ -81,6 +103,43 @@ export async function getSetupStatus() {
 
 export async function getDeviceConfig() {
   const response = await api.get('/setup/device-config')
+  return response.data
+}
+
+// Personal page (passcode unlock)
+export async function getByPage(pageName: string) {
+  const response = await api.get(`/dashboard/by-page/${encodeURIComponent(pageName)}`)
+  return response.data
+}
+
+export async function unlockWithPasscode(pageName: string, passcode: string) {
+  const response = await api.post('/dashboard/unlock', {
+    page_name: pageName,
+    passcode,
+  })
+  return response.data
+}
+
+export async function setPasscode(setupToken: string, passcode: string) {
+  const response = await api.post('/dashboard/set-passcode', {
+    setup_token: setupToken,
+    passcode,
+  })
+  return response.data
+}
+
+// Chat (requires auth)
+export async function sendChatMessage(message: string, conversationHistory?: { role: string; content: string }[]) {
+  const response = await api.post('/chat', {
+    message,
+    conversation_history: conversationHistory,
+  })
+  return response.data
+}
+
+// User stats for personal dashboard (requires auth)
+export async function getUserStats() {
+  const response = await api.get('/dashboard/user/stats')
   return response.data
 }
 

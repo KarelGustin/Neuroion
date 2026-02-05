@@ -287,7 +287,7 @@ def get_dashboard_link(
     link = DashboardLinkRepository.get_or_create(db, user_id)
     
     # Generate login code (expires in 60 seconds)
-    login_code = LoginCodeRepository.create(db, user_id, expires_in_seconds=60)
+    login_code = LoginCodeRepository.create_for_user(db, user_id, expires_in_seconds=60)
     
     # Construct URL using detected local IP (works for mobile access)
     base_url = get_dashboard_base_url(settings.dashboard_ui_port, prefer_localhost=False)

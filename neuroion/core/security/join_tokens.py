@@ -36,14 +36,18 @@ class JoinTokenManager:
         """
         if expires_in_minutes is None:
             expires_in_minutes = JoinTokenManager.DEFAULT_EXPIRY_MINUTES
-        
+
+        import secrets
+        token_str = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
         join_token = JoinTokenRepository.create(
             db=db,
+            token=token_str,
             household_id=household_id,
             created_by_member_id=created_by_member_id,
-            expires_in_minutes=expires_in_minutes,
+            expires_at=expires_at,
         )
-        
+
         # Generate QR URL (will use actual hostname/IP in production)
         qr_url = f"http://neuroion.local/join?token={join_token.token}"
         

@@ -1,13 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import PairingQR from './components/PairingQR'
 import Status from './components/Status'
 import Logo from './components/Logo'
 import SetupWizard from './components/SetupWizard'
 import Dashboard from './components/Dashboard'
+import ConfigQR from './components/ConfigQR'
 import { getPairingCode, checkHealth, getSetupStatus } from './services/api'
 import './styles/App.css'
 
 function App() {
+  const isKiosk = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('kiosk') === '1' || params.get('mode') === 'kiosk'
+  }, [])
+
   const [pairingCode, setPairingCode] = useState(null)
   const [status, setStatus] = useState('checking')
   const [error, setError] = useState(null)
@@ -15,7 +21,6 @@ function App() {
   const [checkingSetup, setCheckingSetup] = useState(true)
 
   useEffect(() => {
-    // Check health and setup status on mount
     checkHealth()
       .then(() => {
         setStatus('ready')
@@ -27,7 +32,6 @@ function App() {
         setCheckingSetup(false)
       })
 
-    // Refresh pairing code every 5 minutes if setup is complete
     const interval = setInterval(() => {
       if (status === 'ready' && setupComplete) {
         startPairing()
@@ -36,6 +40,17 @@ function App() {
 
     return () => clearInterval(interval)
   }, [status, setupComplete])
+
+  // In kiosk mode, poll setup status so we switch from ConfigQR to Dashboard when config is done on another device
+  useEffect(() => {
+    if (!isKiosk || status !== 'ready') return
+    const poll = setInterval(() => {
+      getSetupStatus()
+        .then((s) => setSetupComplete(s.is_complete))
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(poll)
+  }, [isKiosk, status])
 
   const checkSetupStatus = async () => {
     try {
@@ -71,7 +86,7 @@ function App() {
     await startPairing()
   }
 
-  if (checkingSetup) {
+  if (checkingSetup && !isKiosk) {
     return (
       <div className="app">
         <div className="container">
@@ -85,16 +100,28 @@ function App() {
     )
   }
 
+  if (isKiosk && !setupComplete) {
+    return (
+      <div className="app config-qr-app">
+        <ConfigQR />
+      </div>
+    )
+  }
+
+  if (isKiosk && setupComplete) {
+    return (
+      <div className="app app-kiosk">
+        <div className="container">
+          <Dashboard isKiosk />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="app">
-      <div className="container">
-        {/* <div className="header">
-          {/* <Logo /> */}
-          {/* <p className="tagline">Home Intelligence Platform</p>
-        </div> */} 
-
-        <Status status={status} error={error} />
-
+      <div className="container app-grid">
+        {!setupComplete && <Status status={status} error={error} />}
         {!setupComplete ? (
           <SetupWizard onComplete={handleSetupComplete} />
         ) : (

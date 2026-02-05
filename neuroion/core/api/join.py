@@ -2,6 +2,7 @@
 Join token endpoints for secure member onboarding.
 """
 import logging
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from neuroion.core.memory.repository import (
     DeviceConfigRepository,
 )
 from neuroion.core.security.join_tokens import JoinTokenManager
+from neuroion.core.utils.slug import slugify
 from neuroion.core.security.permissions import get_current_user, require_role
 
 router = APIRouter(prefix="/api", tags=["join"])
@@ -49,6 +51,8 @@ class JoinTokenConsumeResponse(BaseModel):
     member_id: int
     household_id: int
     message: str
+    page_name: str  # slug for /p/{page_name}
+    setup_token: str  # one-time token to set passcode (POST /dashboard/set-passcode)
 
 
 # Endpoints
@@ -119,16 +123,23 @@ def consume_join_token(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Member name is required",
             )
-        
-        # Create member
+
+        # Generate unique page_name (slug) for personal dashboard
+        base_slug = slugify(name)
+        if not base_slug:
+            base_slug = "user"
+        page_name = UserRepository.ensure_unique_page_name(db, base_slug, exclude_user_id=None)
+
+        # Create member with page_name
         member = UserRepository.create(
             db=db,
             household_id=household_id,
             name=name,
             role="member",
-            device_type="web",  # Default, can be updated later
+            device_type="web",
+            page_name=page_name,
         )
-        
+
         # Update member profile fields
         if "language" in member_data:
             member.language = member_data["language"]
@@ -140,15 +151,21 @@ def consume_join_token(
             member.preferences_json = member_data["preferences"]
         if "consent" in member_data:
             member.consent_json = member_data["consent"]
-        
+
         db.commit()
         db.refresh(member)
-        
+
+        # One-time setup_token so frontend can call set-passcode (no auth yet)
+        setup_token = secrets.token_urlsafe(32)
+        UserRepository.set_setup_token(db, member.id, setup_token, expires_in_minutes=10)
+
         return JoinTokenConsumeResponse(
             success=True,
             member_id=member.id,
             household_id=household_id,
             message="Member created successfully",
+            page_name=page_name,
+            setup_token=setup_token,
         )
     except HTTPException:
         raise

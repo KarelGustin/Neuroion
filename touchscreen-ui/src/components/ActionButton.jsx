@@ -1,28 +1,29 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import '../styles/ActionButton.css'
 
 function ActionButton({ label, icon, onClick, variant = 'primary', requiresLongPress = false }) {
-  const [pressStart, setPressStart] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
+  const longPressTimerRef = useRef(null)
 
   const handlePressStart = () => {
     if (requiresLongPress) {
-      setPressStart(Date.now())
-      setTimeout(() => {
-        if (pressStart && Date.now() - pressStart >= 2000) {
-          setShowConfirm(true)
-        }
+      longPressTimerRef.current = setTimeout(() => {
+        setShowConfirm(true)
+        longPressTimerRef.current = null
       }, 2000)
     }
   }
 
   const handlePressEnd = () => {
     if (requiresLongPress) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
       if (showConfirm) {
         onClick()
         setShowConfirm(false)
       }
-      setPressStart(null)
     } else {
       onClick()
     }
@@ -30,6 +31,7 @@ function ActionButton({ label, icon, onClick, variant = 'primary', requiresLongP
 
   return (
     <button
+      type="button"
       className={`action-button ${variant} ${showConfirm ? 'confirm' : ''}`}
       onTouchStart={handlePressStart}
       onTouchEnd={handlePressEnd}

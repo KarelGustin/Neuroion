@@ -52,6 +52,12 @@ class User(Base):
     preferences_json = Column(JSON, nullable=True)  # General preferences (diet, routines, interests)
     consent_json = Column(JSON, nullable=True)  # Privacy consent settings
     
+    # Personal page and passcode (for /p/{page_name} and unlock)
+    page_name = Column(String(64), unique=True, nullable=True, index=True)  # slug e.g. "karelgustin"
+    passcode_hash = Column(String(255), nullable=True)  # bcrypt hash of 4-6 digit passcode
+    setup_token = Column(String(64), nullable=True, index=True)  # one-time token to set passcode after join
+    setup_token_expires_at = Column(DateTime, nullable=True)  # expiry for setup_token
+    
     # Relationships
     household = relationship("Household", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")
@@ -231,6 +237,7 @@ class DashboardLink(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
     token = Column(String(255), unique=True, nullable=False, index=True)  # Unique token for dashboard access
+    expires_at = Column(DateTime, nullable=True)  # Optional; null = never expires
     created_at = Column(DateTime, default=func.now(), nullable=False)
     last_accessed_at = Column(DateTime, nullable=True)
     
@@ -244,8 +251,9 @@ class LoginCode(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    code = Column(String(4), nullable=False, index=True)  # 4-digit code
+    code = Column(String(6), nullable=False, index=True)  # 4-6 digit code
     expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     
     # Relationships

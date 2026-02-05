@@ -5,6 +5,8 @@ Provides high-level methods for CRUD operations on all models.
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+import logging
+import threading
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 
@@ -23,6 +25,19 @@ from neuroion.core.memory.models import (
     DeviceConfig,
     JoinToken,
 )
+from neuroion.core.utils.slug import slugify
+
+
+logger = logging.getLogger(__name__)
+
+
+def require_active_session(db: Session) -> None:
+    """Raise if session is closed; prevents use-after-close."""
+    if not db.is_active:
+        raise RuntimeError(
+            "Session already closed; do not use request session outside request scope "
+            "or from another thread."
+        )
 
 
 def safe_refresh(db: Session, obj: Any) -> None:
@@ -40,6 +55,7 @@ class HouseholdRepository:
     @staticmethod
     def create(db: Session, name: str) -> Household:
         """Create a new household."""
+        require_active_session(db)
         household = Household(name=name)
         db.add(household)
         try:
@@ -63,6 +79,7 @@ class HouseholdRepository:
     @staticmethod
     def update(db: Session, household_id: int, name: str) -> Optional[Household]:
         """Update household name."""
+        require_active_session(db)
         household = HouseholdRepository.get_by_id(db, household_id)
         if household:
             household.name = name
@@ -72,6 +89,7 @@ class HouseholdRepository:
     @staticmethod
     def delete(db: Session, household_id: int) -> bool:
         """Delete household and all related data."""
+        require_active_session(db)
         household = HouseholdRepository.get_by_id(db, household_id)
         if household:
             db.delete(household)
@@ -91,14 +109,17 @@ class UserRepository:
         role: str = "member",
         device_id: Optional[str] = None,
         device_type: Optional[str] = None,
+        page_name: Optional[str] = None,
     ) -> User:
-        """Create a new user."""
+        """Create a new user. If page_name not provided, generates from name."""
+        require_active_session(db)
         user = User(
             household_id=household_id,
             name=name,
             role=role,
             device_id=device_id,
             device_type=device_type,
+            page_name=page_name,
         )
         db.add(user)
         try:
@@ -123,6 +144,118 @@ class UserRepository:
     def get_by_household(db: Session, household_id: int) -> List[User]:
         """Get all users in a household."""
         return db.query(User).filter(User.household_id == household_id).all()
+
+    @staticmethod
+    def get_by_page_name(db: Session, page_name: str) -> Optional[User]:
+        """Get user by page_name (slug)."""
+        if not page_name:
+            return None
+        return db.query(User).filter(User.page_name == page_name.strip().lower()).first()
+
+    @staticmethod
+    def get_by_setup_token(db: Session, setup_token: str) -> Optional[User]:
+        """Get user by valid setup_token (for post-join passcode set)."""
+        if not setup_token:
+            return None
+        user = (
+            db.query(User)
+            .filter(
+                User.setup_token == setup_token,
+                User.setup_token_expires_at > datetime.utcnow(),
+            )
+            .first()
+        )
+        return user
+
+    @staticmethod
+    def ensure_unique_page_name(
+        db: Session,
+        base_slug: str,
+        exclude_user_id: Optional[int] = None,
+    ) -> str:
+        """Return a unique page_name. If base_slug is taken, append 2, 3, ..."""
+        require_active_session(db)
+        candidate = base_slug
+        suffix = 1
+        while True:
+            q = db.query(User).filter(User.page_name == candidate)
+            if exclude_user_id is not None:
+                q = q.filter(User.id != exclude_user_id)
+            if q.first() is None:
+                return candidate
+            suffix += 1
+            candidate = f"{base_slug}{suffix}"
+
+    @staticmethod
+    def set_passcode(db: Session, user_id: int, passcode_hash: str) -> bool:
+        """Set passcode hash for user. Returns True on success."""
+        require_active_session(db)
+        user = UserRepository.get_by_id(db, user_id)
+        if not user:
+            return False
+        user.passcode_hash = passcode_hash
+        user.setup_token = None
+        user.setup_token_expires_at = None
+        try:
+            db.commit()
+            safe_refresh(db, user)
+            return True
+        except Exception:
+            db.rollback()
+            raise
+
+    @staticmethod
+    def set_page_name(db: Session, user_id: int, page_name: str) -> bool:
+        """Set page_name for user (must be unique). Returns True on success."""
+        require_active_session(db)
+        user = UserRepository.get_by_id(db, user_id)
+        if not user:
+            return False
+        user.page_name = page_name
+        try:
+            db.commit()
+            safe_refresh(db, user)
+            return True
+        except Exception:
+            db.rollback()
+            raise
+
+    @staticmethod
+    def set_setup_token(
+        db: Session,
+        user_id: int,
+        setup_token: str,
+        expires_in_minutes: int = 10,
+    ) -> bool:
+        """Set one-time setup_token for user (e.g. after join)."""
+        require_active_session(db)
+        user = UserRepository.get_by_id(db, user_id)
+        if not user:
+            return False
+        user.setup_token = setup_token
+        user.setup_token_expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
+        try:
+            db.commit()
+            safe_refresh(db, user)
+            return True
+        except Exception:
+            db.rollback()
+            raise
+
+    @staticmethod
+    def update_last_seen(db: Session, user_id: int) -> None:
+        """Update user's last_seen_at timestamp."""
+        require_active_session(db)
+        user = UserRepository.get_by_id(db, user_id)
+        if not user:
+            return
+        user.last_seen_at = datetime.utcnow()
+        try:
+            db.commit()
+            safe_refresh(db, user)
+        except Exception:
+            db.rollback()
+            raise
     
     @staticmethod
     def update(
@@ -135,12 +268,15 @@ class UserRepository:
         style_prefs_json: Optional[str] = None,
         preferences_json: Optional[str] = None,
         consent_json: Optional[str] = None,
+        page_name: Optional[str] = None,
+        passcode_hash: Optional[str] = None,
     ) -> Optional[User]:
         """Update user."""
+        require_active_session(db)
         user = UserRepository.get_by_id(db, user_id)
         if not user:
             return None
-        
+
         if name is not None:
             user.name = name
         if role is not None:
@@ -155,19 +291,59 @@ class UserRepository:
             user.preferences_json = preferences_json
         if consent_json is not None:
             user.consent_json = consent_json
-        
-        db.commit()
-        return user
+        if page_name is not None:
+            user.page_name = page_name
+        if passcode_hash is not None:
+            user.passcode_hash = passcode_hash
+            user.setup_token = None
+            user.setup_token_expires_at = None
+
+        try:
+            db.commit()
+            safe_refresh(db, user)
+            return user
+        except Exception:
+            db.rollback()
+            raise
     
     @staticmethod
     def delete(db: Session, user_id: int) -> bool:
-        """Delete user."""
+        """Delete user (caller must have already deleted or nulled related rows)."""
+        require_active_session(db)
         user = UserRepository.get_by_id(db, user_id)
         if user:
             db.delete(user)
             db.commit()
             return True
         return False
+
+    @staticmethod
+    def delete_user_and_all_data(db: Session, user_id: int) -> bool:
+        """
+        Delete user and all data associated with them.
+        Deletes: preferences, context_snapshots, audit_logs, chat_messages,
+        user_integrations, login_codes, dashboard_links, join_tokens (created_by).
+        """
+        require_active_session(db)
+        user = UserRepository.get_by_id(db, user_id)
+        if not user:
+            return False
+        # Delete in order (child tables first due to FKs)
+        db.query(Preference).filter(Preference.user_id == user_id).delete()
+        db.query(ContextSnapshot).filter(ContextSnapshot.user_id == user_id).delete()
+        db.query(AuditLog).filter(AuditLog.user_id == user_id).delete()
+        db.query(ChatMessage).filter(ChatMessage.user_id == user_id).delete()
+        db.query(UserIntegration).filter(UserIntegration.user_id == user_id).delete()
+        db.query(LoginCode).filter(LoginCode.user_id == user_id).delete()
+        db.query(DashboardLink).filter(DashboardLink.user_id == user_id).delete()
+        db.query(JoinToken).filter(JoinToken.created_by_member_id == user_id).delete()
+        db.delete(user)
+        try:
+            db.commit()
+            return True
+        except Exception:
+            db.rollback()
+            raise
 
 
 class PreferenceRepository:
@@ -180,8 +356,10 @@ class PreferenceRepository:
         key: str,
         value: Any,
         user_id: Optional[int] = None,
+        category: Optional[str] = None,
     ) -> Preference:
         """Set a preference value."""
+        require_active_session(db)
         # Check if preference exists
         query = db.query(Preference).filter(
             Preference.household_id == household_id,
@@ -209,12 +387,16 @@ class PreferenceRepository:
         
         if pref:
             pref.value = value_str
+            # Optionally update category
+            if category is not None and pref.category != category:
+                pref.category = category
         else:
             pref = Preference(
                 household_id=household_id,
                 user_id=user_id,
                 key=key,
                 value=value_str,
+                category=category,
             )
             db.add(pref)
         
@@ -249,70 +431,22 @@ class PreferenceRepository:
     ) -> Dict[str, Any]:
         """Get all preferences as a dictionary."""
         import json
-        import threading
-        thread_id = threading.get_ident()
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:179","message":"PreferenceRepository.get_all entry","data":{"thread_id":thread_id,"household_id":household_id,"user_id":user_id},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        
         query = db.query(Preference).filter(
             Preference.household_id == household_id,
         )
-        
         if user_id is not None:
             query = query.filter(Preference.user_id == user_id)
         else:
             # For household-level preferences, user_id must be NULL
             query = query.filter(Preference.user_id.is_(None))
-        
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:191","message":"Before query.all()","data":{"thread_id":thread_id,"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        
         prefs = query.all()
-        
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:194","message":"After query.all()","data":{"thread_id":thread_id,"count":len(prefs),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        
         result = {}
-        for i, pref in enumerate(prefs):
-            # #region agent log
+        for pref in prefs:
             try:
-                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:197","message":"Before JSON parse","data":{"thread_id":thread_id,"index":i,"pref_id":id(pref),"session_id":id(db)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
-            try:
-                # Try to parse as JSON first
                 value = json.loads(pref.value)
             except (json.JSONDecodeError, TypeError):
-                # If not valid JSON, use as string
                 value = pref.value
-            # #region agent log
-            try:
-                with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:203","message":"After JSON parse","data":{"thread_id":thread_id,"index":i,"pref_id":id(pref)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-            except: pass
-            # #endregion
             result[pref.key] = value
-        
-        # #region agent log
-        try:
-            with open('/Users/karelgustin/Neuroion/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"repository.py:207","message":"PreferenceRepository.get_all exit","data":{"thread_id":thread_id,"count":len(prefs)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        except: pass
-        # #endregion
-        
         return result
     
     @staticmethod
@@ -323,6 +457,7 @@ class PreferenceRepository:
         user_id: Optional[int] = None,
     ) -> bool:
         """Delete a preference."""
+        require_active_session(db)
         query = db.query(Preference).filter(
             Preference.household_id == household_id,
             Preference.key == key,
@@ -353,6 +488,7 @@ class ContextSnapshotRepository:
         user_id: Optional[int] = None,
     ) -> ContextSnapshot:
         """Create a new context snapshot."""
+        require_active_session(db)
         import json
         snapshot = ContextSnapshot(
             household_id=household_id,
@@ -397,6 +533,7 @@ class AuditLogRepository:
         details: Optional[Dict[str, Any]] = None,
     ) -> AuditLog:
         """Create a new audit log entry."""
+        require_active_session(db)
         import json
         log = AuditLog(
             household_id=household_id,
@@ -457,13 +594,16 @@ class ChatMessageRepository:
         user_id: Optional[int],
         role: str,
         content: str,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> ChatMessage:
         """Create a new chat message."""
+        require_active_session(db)
         message = ChatMessage(
             household_id=household_id,
             user_id=user_id,
             role=role,
             content=content,
+            message_metadata=metadata,
         )
         db.add(message)
         db.commit()
@@ -484,7 +624,40 @@ class ChatMessageRepository:
         if user_id is not None:
             query = query.filter(ChatMessage.user_id == user_id)
         
-        return query.order_by(ChatMessage.timestamp.desc()).limit(limit).all()
+        return query.order_by(ChatMessage.created_at.desc()).limit(limit).all()
+    
+    @staticmethod
+    def get_conversation_history(
+        db: Session,
+        household_id: int,
+        user_id: Optional[int],
+        limit: int = 50,
+    ) -> List[Dict[str, str]]:
+        """
+        Get recent messages as a simple role/content history for the agent.
+        Returned in chronological order (oldest first).
+        """
+        require_active_session(db)
+        query = db.query(ChatMessage).filter(
+            ChatMessage.household_id == household_id,
+        )
+        if user_id is not None:
+            query = query.filter(ChatMessage.user_id == user_id)
+        
+        messages = (
+            query.order_by(ChatMessage.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+        history: List[Dict[str, str]] = []
+        for msg in messages:
+            history.append(
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                }
+            )
+        return history
 
 
 class SystemConfigRepository:
@@ -540,6 +713,7 @@ class SystemConfigRepository:
     @staticmethod
     def delete(db: Session, key: str) -> bool:
         """Delete system config."""
+        require_active_session(db)
         config = SystemConfigRepository.get(db, key)
         if config:
             db.delete(config)
@@ -552,20 +726,46 @@ class DailyRequestCountRepository:
     """Repository for daily request count operations."""
     
     @staticmethod
-    def increment(db: Session, date: datetime) -> DailyRequestCount:
-        """Increment daily request count."""
-        date_str = date.strftime("%Y-%m-%d")
+    def increment(db: Session, household_id: int) -> DailyRequestCount:
+        """Increment today's request count for a household."""
+        require_active_session(db)
+        # #region agent log
+        try:
+            import json as _json, time as _time
+            with open('/Users/karelgustin/Neuroion/Neuroion/.cursor/debug.log', 'a') as _f:
+                _f.write(_json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "H2",
+                    "location": "repository.py:543",
+                    "message": "DailyRequestCountRepository.increment entry",
+                    "data": {"household_id": household_id},
+                    "timestamp": int(_time.time() * 1000),
+                }) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        # Use a date-only value at midnight UTC for the 'date' column
+        today = datetime.utcnow().date()
+        today_start = datetime.combine(today, datetime.min.time())
+        
         count = (
             db.query(DailyRequestCount)
-            .filter(DailyRequestCount.date == date_str)
+            .filter(
+                DailyRequestCount.household_id == household_id,
+                DailyRequestCount.date == today_start,
+            )
             .first()
         )
         
         if count:
             count.count += 1
-            count.updated_at = datetime.utcnow()
         else:
-            count = DailyRequestCount(date=date_str, count=1)
+            count = DailyRequestCount(
+                household_id=household_id,
+                date=today_start,
+                count=1,
+            )
             db.add(count)
             db.commit()
             safe_refresh(db, count)
@@ -576,14 +776,21 @@ class DailyRequestCountRepository:
         return count
     
     @staticmethod
-    def get_today(db: Session) -> Optional[DailyRequestCount]:
-        """Get today's request count."""
-        date_str = datetime.utcnow().strftime("%Y-%m-%d")
-        return (
+    def get_today_count(db: Session, household_id: int) -> int:
+        """Get today's request count for a household."""
+        require_active_session(db)
+        today = datetime.utcnow().date()
+        today_start = datetime.combine(today, datetime.min.time())
+        
+        count = (
             db.query(DailyRequestCount)
-            .filter(DailyRequestCount.date == date_str)
+            .filter(
+                DailyRequestCount.household_id == household_id,
+                DailyRequestCount.date == today_start,
+            )
             .first()
         )
+        return count.count if count else 0
 
 
 class UserIntegrationRepository:
@@ -600,6 +807,7 @@ class UserIntegrationRepository:
         permissions: Optional[Dict[str, Any]] = None,
     ) -> UserIntegration:
         """Create a new user integration."""
+        require_active_session(db)
         import json
         integration = UserIntegration(
             user_id=user_id,
@@ -640,6 +848,7 @@ class UserIntegrationRepository:
         expires_at: Optional[datetime] = None,
     ) -> bool:
         """Update integration tokens."""
+        require_active_session(db)
         integration = UserIntegrationRepository.get_by_user_and_provider(
             db, user_id, provider
         )
@@ -665,6 +874,7 @@ class DashboardLinkRepository:
         expires_at: datetime,
     ) -> DashboardLink:
         """Create a new dashboard link."""
+        require_active_session(db)
         link = DashboardLink(
             user_id=user_id,
             token=token,
@@ -677,19 +887,37 @@ class DashboardLinkRepository:
     
     @staticmethod
     def get_by_token(db: Session, token: str) -> Optional[DashboardLink]:
-        """Get dashboard link by token."""
+        """Get dashboard link by token (valid if expires_at is null or in future)."""
+        from sqlalchemy import or_
         return (
             db.query(DashboardLink)
             .filter(
                 DashboardLink.token == token,
-                DashboardLink.expires_at > datetime.utcnow(),
+                or_(
+                    DashboardLink.expires_at.is_(None),
+                    DashboardLink.expires_at > datetime.utcnow(),
+                ),
             )
             .first()
         )
+
+    @staticmethod
+    def get_or_create(db: Session, user_id: int) -> DashboardLink:
+        """Get existing dashboard link for user or create one (long-lived token)."""
+        require_active_session(db)
+        link = db.query(DashboardLink).filter(DashboardLink.user_id == user_id).first()
+        if link:
+            return link
+        import secrets
+        token = secrets.token_urlsafe(32)
+        # Long-lived: 1 year
+        expires_at = datetime.utcnow() + timedelta(days=365)
+        return DashboardLinkRepository.create(db, user_id, token, expires_at)
     
     @staticmethod
     def update_last_accessed(db: Session, token: str) -> Optional[DashboardLink]:
         """Update last accessed timestamp."""
+        require_active_session(db)
         link = DashboardLinkRepository.get_by_token(db, token)
         if link:
             link.last_accessed_at = datetime.utcnow()
@@ -700,7 +928,19 @@ class DashboardLinkRepository:
 
 class LoginCodeRepository:
     """Repository for login code operations."""
-    
+
+    @staticmethod
+    def create_for_user(
+        db: Session,
+        user_id: int,
+        expires_in_seconds: int = 60,
+    ) -> LoginCode:
+        """Create a new login code (4-6 digits) for the user. Returns the LoginCode."""
+        import secrets
+        code = f"{secrets.randbelow(10**6):06d}"  # 6-digit code
+        expires_at = datetime.utcnow() + timedelta(seconds=expires_in_seconds)
+        return LoginCodeRepository.create(db, user_id, code, expires_at)
+
     @staticmethod
     def create(
         db: Session,
@@ -709,6 +949,7 @@ class LoginCodeRepository:
         expires_at: datetime,
     ) -> LoginCode:
         """Create a new login code."""
+        require_active_session(db)
         login_code = LoginCode(
             user_id=user_id,
             code=code,
@@ -718,7 +959,12 @@ class LoginCodeRepository:
         db.commit()
         safe_refresh(db, login_code)
         return login_code
-    
+
+    @staticmethod
+    def verify(db: Session, code: str) -> Optional[int]:
+        """Verify code, mark as used, and return user_id. Returns None if invalid/expired."""
+        return LoginCodeRepository.mark_used(db, code)
+
     @staticmethod
     def get_by_code(db: Session, code: str) -> Optional[LoginCode]:
         """Get login code by code string."""
@@ -735,6 +981,7 @@ class LoginCodeRepository:
     @staticmethod
     def mark_used(db: Session, code: str) -> Optional[int]:
         """Mark login code as used and return user_id."""
+        require_active_session(db)
         login_code = LoginCodeRepository.get_by_code(db, code)
         if login_code:
             login_code.used_at = datetime.utcnow()
@@ -745,6 +992,7 @@ class LoginCodeRepository:
     @staticmethod
     def cleanup_expired(db: Session) -> int:
         """Delete expired login codes."""
+        require_active_session(db)
         deleted = (
             db.query(LoginCode)
             .filter(LoginCode.expires_at < datetime.utcnow())
@@ -760,6 +1008,7 @@ class DeviceConfigRepository:
     @staticmethod
     def get_or_create(db: Session) -> DeviceConfig:
         """Get or create device config (singleton)."""
+        require_active_session(db)
         config = db.query(DeviceConfig).first()
         if not config:
             config = DeviceConfig()
@@ -782,6 +1031,7 @@ class DeviceConfigRepository:
         retention_policy: Optional[Dict[str, Any]] = None,
     ) -> DeviceConfig:
         """Update device configuration."""
+        require_active_session(db)
         config = DeviceConfigRepository.get_or_create(db)
         
         # Check if any changes are needed
@@ -855,16 +1105,50 @@ class JoinTokenRepository:
     @staticmethod
     def mark_used(db: Session, token: str) -> Optional[JoinToken]:
         """Mark join token as used."""
+        require_active_session(db)
         join_token = JoinTokenRepository.get_by_token(db, token)
         if join_token:
             join_token.used_at = datetime.utcnow()
             db.commit()
             safe_refresh(db, join_token)
         return join_token
-    
+
+    @staticmethod
+    def consume(db: Session, token: str) -> Optional[JoinToken]:
+        """Verify, mark as used, and return the join token. Returns None if invalid."""
+        join_token = JoinTokenRepository.get_by_token(db, token)
+        if not join_token:
+            return None
+        join_token.used_at = datetime.utcnow()
+        try:
+            db.commit()
+            safe_refresh(db, join_token)
+            return join_token
+        except Exception:
+            db.rollback()
+            raise
+
+    @staticmethod
+    def get_active_tokens(
+        db: Session,
+        household_id: Optional[int] = None,
+        created_by_member_id: Optional[int] = None,
+    ) -> List[JoinToken]:
+        """Get active (unused, not expired) join tokens."""
+        q = db.query(JoinToken).filter(
+            JoinToken.used_at.is_(None),
+            JoinToken.expires_at > datetime.utcnow(),
+        )
+        if household_id is not None:
+            q = q.filter(JoinToken.household_id == household_id)
+        if created_by_member_id is not None:
+            q = q.filter(JoinToken.created_by_member_id == created_by_member_id)
+        return q.all()
+
     @staticmethod
     def cleanup_expired(db: Session) -> int:
         """Delete expired join tokens."""
+        require_active_session(db)
         deleted = (
             db.query(JoinToken)
             .filter(JoinToken.expires_at < datetime.utcnow())

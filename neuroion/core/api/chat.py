@@ -85,6 +85,23 @@ def chat(
     household_id = user["household_id"]
     user_id = user["user_id"]
     
+    # #region agent log
+    try:
+        import json as _json, time as _time
+        with open('/Users/karelgustin/Neuroion/Neuroion/.cursor/debug.log', 'a') as _f:
+            _f.write(_json.dumps({
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "H1",
+                "location": "chat.py:84",
+                "message": "chat entry",
+                "data": {"household_id": household_id, "user_id": user_id},
+                "timestamp": int(_time.time() * 1000),
+            }) + "\n")
+    except Exception:
+        pass
+    # #endregion
+    
     # Increment daily request counter
     RequestCounter.increment(db, household_id)
     

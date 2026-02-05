@@ -92,6 +92,37 @@ SQLite database stores:
 
 **Important**: Never stores raw health data, only derived summaries.
 
+#### Database concurrency and connection lifecycle
+
+- The SQLAlchemy engine is created once per process (global) with a SQLite URL and `NullPool`.
+- Sessions are created via a single `SessionLocal` factory, but **never shared**:
+  - API routes obtain a session via the `get_db` FastAPI dependency.
+  - Scripts and background jobs use the `db_session()` context manager.
+  - Each session records its owning thread in `session.info["owner_thread_id"]` and is only valid
+    within that thread and scope.
+- Guardrails:
+  - `require_active_session` raises if a session is closed or used from a different thread than the
+    one that created it.
+  - A `before_flush` SQLAlchemy event (`validate_session_owner_thread`) enforces the same invariant
+    at flush time, failing fast with a clear `RuntimeError` instead of letting SQLite crash.
+- There is **no global shared Session or Connection**; all DB access is single-owner and scoped.
+
+For concurrency/debugging, you can enable extra DB lifecycle logging by setting `DB_DEBUG_LOG=1`
+in the environment (or turning on `DATABASE_ECHO`). This logs session creation/closure together
+with thread identifiers, which is useful when investigating threading issues.
+
+#### uvloop and event loop selection
+
+Neuroion runs on Uvicorn and can use `uvloop` when installed. For isolation tests, you can force
+the standard asyncio event loop:
+
+- Start Uvicorn with the standard loop:
+  - `UVICORN_LOOP=asyncio uvicorn neuroion.core.main:app --host 0.0.0.0 --port 8000`
+- Or make sure `uvloop` is not installed in the environment.
+
+The structural safety comes from the explicit session lifecycle and thread-ownership checks above,
+not from using or avoiding `uvloop`. Disabling `uvloop` is only recommended as a diagnostic step.
+
 ### Security
 
 - **Pairing-based**: Devices pair using short-lived codes

@@ -1,19 +1,19 @@
 .action-button {
   min-height: 80px;
-  padding: 1rem;
-  border: 1px solid #333;
-  border-radius: 12px;
-  background: #111;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 500;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
+  gap: var(--space-2);
+  transition: transform 0.15s ease, background-color 0.2s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -22,36 +22,48 @@
   transform: scale(0.98);
 }
 
+.action-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .action-button.primary {
-  background: #0066ff;
-  border-color: #0066ff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .action-button.primary:hover {
-  background: #0052cc;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .action-button.secondary {
-  background: #333;
-  border-color: #555;
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .action-button.secondary:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .action-button.danger {
-  background: #cc0000;
-  border-color: #cc0000;
+  background: var(--error);
+  border-color: var(--error);
+  color: #fff;
 }
 
 .action-button.danger:hover {
-  background: #990000;
+  background: #e63e35;
+  border-color: #e63e35;
 }
 
 .action-button.confirm {
-  background: #ffaa00;
-  border-color: #ffaa00;
+  background: var(--warning);
+  border-color: var(--warning);
+  color: #000;
   animation: pulse 1s infinite;
 }
 
@@ -60,20 +72,34 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.7;
+    opacity: 0.85;
   }
 }
 
 .action-icon {
-  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
 }
 
 .action-label {
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
 }
 
 .confirm-text {
-  font-size: 0.75rem;
-  color: #000;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  color: inherit;
+  font-weight: var(--font-semibold);
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-button {
+    transition: none;
+  }
+  .action-button.confirm {
+    animation: none;
+  }
 }
