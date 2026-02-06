@@ -97,15 +97,37 @@ export async function setupOwner(name, language, timezone, style_prefs = null, p
   return response.data
 }
 
-export async function setupModelPreset(preset) {
-  const response = await api.post('/setup/model', {
-    preset,
-  })
+export async function setupModelChoice(choice, options = {}) {
+  const body = { choice, ...options }
+  const response = await api.post('/setup/model', body)
   return response.data
 }
 
 export async function checkSetupComplete() {
   const response = await api.get('/setup/complete')
+  return response.data
+}
+
+export async function markSetupComplete() {
+  const response = await api.post('/setup/complete')
+  return response.data
+}
+
+export async function setupDevice(deviceName, timezone) {
+  const response = await api.post('/setup/device', {
+    device_name: deviceName,
+    timezone: timezone || 'Europe/Amsterdam',
+  })
+  return response.data
+}
+
+export async function validateSetup() {
+  const response = await api.post('/setup/validate')
+  return response.data
+}
+
+export async function applyWifi() {
+  const response = await api.post('/setup/wifi/apply')
   return response.data
 }
 

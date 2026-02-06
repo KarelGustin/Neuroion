@@ -94,8 +94,9 @@ if [ "$PLATFORM" != "macos" ]; then
     # Setup mDNS
     sudo "$SCRIPT_DIR/setup-mdns.sh"
     
-    # Reload systemd
+    # Reload systemd and enable setup mode for first boot (no WiFi configured => start in AP)
     sudo systemctl daemon-reload
+    sudo systemctl enable neuroion-setup-mode
 fi
 
 echo ""

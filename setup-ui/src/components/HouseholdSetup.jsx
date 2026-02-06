@@ -81,7 +81,7 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
           />
         </div>
 
-        <div className="form-group">
+        {/* <div className="form-group">
           <label htmlFor="owner-name">Owner Name</label>
           <input
             type="text"
@@ -92,7 +92,7 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
             placeholder="Your name"
             disabled={loading || success}
           />
-        </div>
+        </div> */}
 
         {error && <div className="error-message">{error}</div>}
         {success && (
@@ -112,7 +112,7 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
             className="btn-primary"
             disabled={loading || success || !householdName || !ownerName}
           >
-            {loading ? 'Creating...' : success ? 'Complete!' : 'Finish Setup'}
+            {loading ? 'Creating...' : success ? 'Complete!' : 'Continue'}
           </button>
         </div>
       </form>

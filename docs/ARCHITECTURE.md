@@ -36,7 +36,8 @@ Neuroion is a local-first home intelligence platform built with a strict client-
 │         │                      │                           │
 │  ┌──────▼──────┐      ┌───────▼────────┐                  │
 │  │    LLM      │      │  Tool Registry │                  │
-│  │  (Ollama)   │      │  - Menu Gen    │                  │
+│  │ (Ollama/    │      │  - Menu Gen    │                  │
+│  │  Cloud)     │      │  - Grocery     │                  │
 │  └─────────────┘      │  - Grocery     │                  │
 │                       │  - Preferences │                  │
 │                       └────────────────┘                  │
@@ -65,7 +66,7 @@ The Homebase is the central intelligence hub. It contains:
 
 - **API Layer**: FastAPI endpoints for all client interactions
 - **Agent System**: Interprets user intent and decides on actions
-- **LLM Integration**: Connects to local Ollama instance for reasoning
+- **LLM Integration**: AI provider abstraction (`neuroion.core.llm`). All providers implement the same interface (`LLMClient` in `base.py`): `chat()`, `complete()`, `stream()`. Implementations: `OllamaClient` (local), `CloudLLMClient` (e.g. HuggingFace), `OpenAILLMClient` (OpenAI/Anthropic-compatible). The active provider is chosen from device config via `get_llm_client_from_config(db)`.
 - **Memory Layer**: SQLite database for persistent storage
 - **Security Layer**: Authentication, authorization, and audit logging
 

@@ -114,7 +114,29 @@ function App() {
             icon={<Home size={24} />}
           />
         )}
+        {status?.storage && (
+          <StatusCard
+            title="Storage"
+            status="ok"
+            details={{
+              'Free (GB)': status.storage.free_gb,
+              'Total (GB)': status.storage.total_gb,
+            }}
+            icon={<Sparkles size={24} />}
+          />
+        )}
+        {status?.agent && (
+          <StatusCard
+            title="Neuroion Agent"
+            status={status.agent.status}
+            details={{ Name: status.agent.name }}
+            icon={<Sparkles size={24} />}
+          />
+        )}
       </div>
+      {status?.degraded_message && (
+        <div className="degraded-banner">{status.degraded_message}</div>
+      )}
 
       <div className="actions-grid">
         <ActionButton

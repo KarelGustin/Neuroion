@@ -4,6 +4,7 @@ import PixelAnimation from './PixelAnimation'
 import {
   getDashboardStats,
   getHouseholdMembers,
+  getSetupStatus,
   generateLoginCode,
   createDashboardJoinToken,
   deleteMemberFromDashboard,
@@ -20,6 +21,7 @@ function Dashboard({ isKiosk = false }) {
     days_since_boot: 0,
   })
   const [members, setMembers] = useState([])
+  const [setupComplete, setSetupComplete] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [loginCode, setLoginCode] = useState(null)
@@ -51,14 +53,25 @@ function Dashboard({ isKiosk = false }) {
       }
     }
 
+    const fetchSetupComplete = async () => {
+      try {
+        const s = await getSetupStatus()
+        setSetupComplete(s.is_complete)
+      } catch (_) {
+        setSetupComplete(false)
+      }
+    }
+
     // Initial fetch
     fetchStats()
     fetchMembers()
+    fetchSetupComplete()
 
     // Poll every 5 seconds
     const interval = setInterval(() => {
       fetchStats()
       fetchMembers()
+      fetchSetupComplete()
     }, 5000)
 
     return () => clearInterval(interval)
@@ -205,9 +218,13 @@ function Dashboard({ isKiosk = false }) {
       <section className="dashboard-members" aria-label="Leden">
         <div className="members-header-row">
           <h2 className="members-title">Members</h2>
-          <button type="button" className="add-member-btn" onClick={openAddMemberModal}>
-            + Add member
-          </button>
+          {setupComplete ? (
+            <button type="button" className="add-member-btn" onClick={openAddMemberModal}>
+              + Add member
+            </button>
+          ) : (
+            <span className="members-setup-hint">Complete setup first</span>
+          )}
         </div>
         {members.length > 0 ? (
           <>
@@ -286,8 +303,8 @@ function Dashboard({ isKiosk = false }) {
       {addMemberModal.show && addMemberModal.joinUrl && (
         <div className="login-code-modal add-member-modal">
           <div className="login-code-content add-member-content">
-            <h3>Add member</h3>
-            <p className="add-member-hint">Scan de QR of open de link op je telefoon</p>
+            <h3>Add member to Neuroion</h3>
+            <p className="add-member-hint">Scan de QR of open de link op je telefoon om iemand toe te voegen aan je Neuroion Core.</p>
             <div className="add-member-qr">
               <QRCodeSVG value={addMemberModal.joinUrl} size={220} level="H" includeMargin />
             </div>

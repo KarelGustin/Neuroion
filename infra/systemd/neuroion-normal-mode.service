@@ -7,6 +7,7 @@ Before=neuroion-setup-mode.service
 Type=oneshot
 ExecStart=/usr/local/bin/neuroion-switch-to-normal-mode.sh
 RemainAfterExit=yes
+Restart=on-failure
 StandardOutput=journal
 StandardError=journal
 

@@ -71,6 +71,16 @@
   }
 }
 
+.degraded-banner {
+  background: var(--warning-bg, #fef3c7);
+  border: 1px solid var(--warning-border, #f59e0b);
+  color: var(--warning, #92400e);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+}
+
 .error-banner {
   background: var(--error-bg);
   border: 1px solid var(--error-border);

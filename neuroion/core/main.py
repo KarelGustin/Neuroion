@@ -12,9 +12,11 @@ import logging
 import traceback
 
 from neuroion.core.config import settings
-from neuroion.core.memory.db import init_db
+from neuroion.core.memory.db import init_db, db_session
 from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences, join, members
 from neuroion.core.services.telegram_service import start_telegram_bot, stop_telegram_bot
+from neuroion.core.config_store import get_device_config as config_store_get_device_config
+from neuroion.core.services import openclaw_adapter
 
 # Configure logging
 logging.basicConfig(
@@ -36,10 +38,25 @@ async def lifespan(app: FastAPI):
     
     # Start Telegram bot if configured
     telegram_app = await start_telegram_bot()
-    
+
+    # Optionally start Neuroion Agent (OpenClaw) when setup is complete
+    if openclaw_adapter.is_available():
+        try:
+            with db_session() as db:
+                device = config_store_get_device_config(db)
+                if device.get("setup_completed"):
+                    from pathlib import Path
+                    state_dir = Path(settings.database_path).parent / "openclaw"
+                    openclaw_adapter.write_config(device, state_dir)
+                    if openclaw_adapter.start(config_dir=state_dir):
+                        logger.info("Neuroion Agent (OpenClaw) started")
+        except Exception as e:
+            logger.warning("Could not start Neuroion Agent: %s", e)
+
     yield
-    
+
     # Shutdown
+    openclaw_adapter.stop()
     if telegram_app:
         await stop_telegram_bot()
     logger.info("Neuroion Homebase shutting down")
@@ -61,6 +78,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# CSRF-style protection for setup: reject if Origin is from a different host (LAN-only; allow same host and localhost)
+@app.middleware("http")
+async def setup_csrf_check(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path.startswith("/setup"):
+        origin = request.headers.get("origin") or request.headers.get("referer") or ""
+        if origin:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(origin)
+                origin_host = (parsed.hostname or "").lower()
+                request_host = (request.url.hostname or "").lower()
+                if origin_host and request_host and origin_host != request_host:
+                    if origin_host not in ("localhost", "127.0.0.1") and request_host not in ("localhost", "127.0.0.1"):
+                        return JSONResponse(status_code=403, content={"detail": "Origin not allowed for setup"})
+            except Exception:
+                pass
+    return await call_next(request)
 
 
 # Request logging middleware

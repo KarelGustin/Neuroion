@@ -102,7 +102,7 @@ sudo infra/scripts/setup-softap.sh
 # Setup mDNS
 sudo infra/scripts/setup-mdns.sh
 
-# Enable services
+# Enable services (neuroion-setup-mode so first boot starts in AP)
 sudo systemctl daemon-reload
 sudo systemctl enable neuroion-setup-mode
 ```
@@ -111,11 +111,16 @@ sudo systemctl enable neuroion-setup-mode
 
 ### 1. Initial Boot
 
-On first boot (no WiFi configured), Neuroion will:
+When no home WiFi is configured or setup is not yet completed, the device should start in **Setup Mode (SoftAP)** so the user can connect and complete onboarding.
+
+On first boot (no WiFi configured / setup not complete), Neuroion will:
 - Start in Setup Mode (SoftAP)
-- Create WiFi hotspot: "Neuroion-Setup"
-- Default password: printed on device label (or "neuroion123")
-- IP address: 192.168.4.1
+- Create WiFi hotspot: **"Neuroion-Setup"**
+- **AP password:** Per-device setup secret (no default). Shown once on the touchscreen/kiosk after boot, or via `GET /setup/setup-secret` (e.g. `http://192.168.4.1:8000/setup/setup-secret`). Note it or scan the QR to open the setup page.
+- IP address: **192.168.4.1**
+- Fallback URL if captive portal does not open: **http://192.168.4.1/setup**
+
+Ensure `neuroion-setup-mode` is enabled at install time so the Pi starts in AP on first boot; see install script.
 
 ### 2. Connect to Setup
 

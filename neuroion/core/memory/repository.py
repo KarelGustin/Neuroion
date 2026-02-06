@@ -669,8 +669,8 @@ class SystemConfigRepository:
         return db.query(SystemConfig).filter(SystemConfig.key == key).first()
     
     @staticmethod
-    def set(db: Session, key: str, value: Any) -> SystemConfig:
-        """Set system config value."""
+    def set(db: Session, key: str, value: Any, category: str = "general") -> SystemConfig:
+        """Set system config value. category is used for new records (e.g. wifi, llm, device, privacy)."""
         import json
         config = SystemConfigRepository.get(db, key)
         
@@ -688,8 +688,10 @@ class SystemConfigRepository:
         
         if config:
             config.value = value_str
+            if category != "general":
+                config.category = category
         else:
-            config = SystemConfig(key=key, value=value_str)
+            config = SystemConfig(key=key, value=value_str, category=category)
             db.add(config)
         
         db.commit()

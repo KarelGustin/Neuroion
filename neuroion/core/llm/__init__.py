@@ -7,6 +7,7 @@ from neuroion.core.llm.ollama import OllamaClient
 from neuroion.core.llm.cloud import CloudLLMClient
 from neuroion.core.llm.openai import OpenAILLMClient
 from neuroion.core.memory.repository import SystemConfigRepository
+from neuroion.core.config import settings
 
 
 def get_llm_client_from_config(db: Session) -> LLMClient:
@@ -56,6 +57,22 @@ def get_llm_client_from_config(db: Session) -> LLMClient:
             )
         return CloudLLMClient()
     
+    elif provider == "neuroion_agent":
+        # Neuroion Agent subscription: our API token, latest OpenAI models (€19/member)
+        api_key = settings.neuroion_openai_api_key
+        if not api_key:
+            raise ValueError("Neuroion Agent subscription is not configured (NEUROION_OPENAI_API_KEY)")
+        neuroion_config = SystemConfigRepository.get(db, "llm_neuroion_agent")
+        model = settings.neuroion_openai_model
+        if neuroion_config and isinstance(neuroion_config.value, dict) and neuroion_config.value.get("model"):
+            model = neuroion_config.value["model"]
+        return OpenAILLMClient(
+            api_key=api_key,
+            base_url="https://api.openai.com/v1",
+            model=model,
+            timeout=120,
+        )
+
     elif provider == "custom":
         # Custom API (OpenAI, Anthropic, etc.)
         custom_config = SystemConfigRepository.get(db, "llm_custom")
@@ -68,7 +85,7 @@ def get_llm_client_from_config(db: Session) -> LLMClient:
                 timeout=config.get("timeout", 120),
             )
         raise ValueError("Custom LLM provider configured but no API credentials found")
-    
+
     else:
         # Unknown provider, fall back to local
         return OllamaClient()

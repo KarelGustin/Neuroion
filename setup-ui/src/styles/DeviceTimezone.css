@@ -1,0 +1,70 @@
+.device-timezone {
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.device-timezone .config-header h3 {
+  font-size: clamp(1.125rem, 3.5vw, 1.25rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.device-timezone .config-header p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.device-timezone .field-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+.device-timezone .field-input,
+.device-timezone .field-select {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.device-timezone .field-error {
+  color: var(--status-error);
+  font-size: 0.8125rem;
+  margin-bottom: 0.75rem;
+}
+
+.device-timezone .form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.device-timezone .btn-primary {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--accent-blue);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.device-timezone .btn-secondary {
+  padding: 0.75rem 1rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  cursor: pointer;
+}

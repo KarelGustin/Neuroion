@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
     ollama_timeout: int = int(os.getenv("OLLAMA_TIMEOUT", "120"))
+
+    # Neuroion Agent subscription (OpenAI via our token; €19/member)
+    neuroion_openai_api_key: Optional[str] = os.getenv("NEUROION_OPENAI_API_KEY", None)
+    neuroion_openai_model: str = os.getenv("NEUROION_OPENAI_MODEL", "gpt-4o")
     
     # Database
     database_path: str = os.getenv("DATABASE_PATH", str(Path.home() / ".neuroion" / "neuroion.db"))
@@ -70,6 +74,7 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
 
 
 def get_database_url() -> str:

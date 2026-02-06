@@ -17,6 +17,7 @@ from neuroion.core.agent.onboarding import (
     get_current_onboarding_question,
 )
 from neuroion.core.services.request_counter import RequestCounter
+from neuroion.core.services import openclaw_adapter
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -124,14 +125,20 @@ def chat(
         content=request.message,
     )
     
-    # Process message through agent
-    response = agent.process_message(
-        db=db,
-        household_id=household_id,
-        user_id=user_id,
-        message=request.message,
-        conversation_history=conversation_history,
-    )
+    # Prefer Neuroion Agent (OpenClaw) when running; else use Python agent
+    response = None
+    if openclaw_adapter.is_running():
+        reply = openclaw_adapter.send_chat(request.message)
+        if reply is not None:
+            response = {"message": reply, "reasoning": "", "actions": []}
+    if response is None:
+        response = agent.process_message(
+            db=db,
+            household_id=household_id,
+            user_id=user_id,
+            message=request.message,
+            conversation_history=conversation_history,
+        )
     
     # Save assistant response
     assistant_message = response.get("message", "")

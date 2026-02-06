@@ -1,6 +1,27 @@
 import React, { useState } from 'react'
-import { setupModelPreset } from '../services/api'
+import { setupModelChoice } from '../services/api'
 import '../styles/ModelPreset.css'
+
+const OPTIONS = {
+  local: {
+    name: 'Llama 3.2 3B',
+    description: 'Free, runs on this device',
+    model: 'llama3.2:3b',
+    disabled: false,
+  },
+  neuroion_agent: {
+    name: 'Neuroion Agent',
+    description: '€19 per member — latest OpenAI models via Neuroion (coming soon)',
+    model: null,
+    disabled: true,
+  },
+  custom: {
+    name: 'My own OpenAI API key',
+    description: 'Use your OpenAI account; you pay OpenAI directly',
+    model: null,
+    disabled: false,
+  },
+}
 
 function ModelPreset({ onComplete, onBack, initialData }) {
   const loadFromStorage = () => {
@@ -10,35 +31,19 @@ function ModelPreset({ onComplete, onBack, initialData }) {
         return JSON.parse(saved)
       }
     } catch (err) {
-      console.error('Failed to load model preset from storage:', err)
+      console.error('Failed to load model choice from storage:', err)
     }
     return null
   }
 
   const savedData = initialData || loadFromStorage()
-  const [preset, setPreset] = useState(savedData?.preset || 'balanced')
+  const [choice, setChoice] = useState(savedData?.choice ?? savedData?.preset ?? 'local')
+  const [apiKey, setApiKey] = useState(savedData?.api_key ? '••••••••••••' : '')
+  const [customModel, setCustomModel] = useState(savedData?.model ?? 'gpt-5.2')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
   const [testResult, setTestResult] = useState(null)
-
-  const presets = {
-    fast: {
-      name: 'Fast',
-      description: 'Smaller model, faster responses',
-      model: 'llama3.2:1b',
-    },
-    balanced: {
-      name: 'Balanced',
-      description: 'Good balance of speed and quality',
-      model: 'llama3.2',
-    },
-    quality: {
-      name: 'Quality',
-      description: 'Larger model, higher quality responses',
-      model: 'llama3.2:3b',
-    },
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -48,61 +53,107 @@ function ModelPreset({ onComplete, onBack, initialData }) {
     setTestResult(null)
 
     try {
-      const result = await setupModelPreset(preset)
+      const options = {}
+      if (choice === 'custom') {
+        const key = apiKey.trim()
+        if (!key && savedData?.api_key !== '(saved)') {
+          setError('Please enter your OpenAI API key.')
+          setLoading(false)
+          return
+        }
+        if (key && key !== '••••••••••••') options.api_key = key
+        if (customModel.trim()) options.model = customModel.trim()
+      }
+      const result = await setupModelChoice(choice, options)
       if (result.success) {
         setSuccess(true)
         setTestResult(result.message)
-        const modelData = { preset, model_name: result.model_name }
+        const modelData = { choice, model_name: result.model_name }
+        if (choice === 'custom' && apiKey && apiKey !== '••••••••••••') {
+          modelData.model = customModel
+          modelData.api_key = '(saved)'
+        }
         try {
           localStorage.setItem('neuroion_setup_model', JSON.stringify(modelData))
         } catch (err) {
-          console.error('Failed to save model preset:', err)
+          console.error('Failed to save model choice:', err)
         }
         setTimeout(() => {
           onComplete(modelData)
         }, 1500)
       } else {
-        setError(result.message || 'Failed to configure model preset')
+        setError(result.message || 'Failed to configure model')
       }
     } catch (err) {
-      setError(err.message || 'Failed to configure model preset')
+      setError(err.response?.data?.detail || err.message || 'Failed to configure model')
     } finally {
       setLoading(false)
     }
   }
 
+  const showCustomFields = choice === 'custom'
+
   return (
     <div className="model-preset">
       <div className="config-header">
-        <h3>LLM Model Preset</h3>
-        <p>Choose the model preset that best fits your needs</p>
+        <h3>LLM Model</h3>
+        <p>Choose how you want to run the assistant</p>
       </div>
 
       <form onSubmit={handleSubmit} className="preset-form">
         <div className="preset-selection">
-          {Object.entries(presets).map(([key, presetInfo]) => (
-            <label key={key} className="preset-option">
+          {Object.entries(OPTIONS).map(([key, info]) => (
+            <label
+              key={key}
+              className={`preset-option ${info.disabled ? 'preset-option--disabled' : ''}`}
+            >
               <input
                 type="radio"
-                name="preset"
+                name="choice"
                 value={key}
-                checked={preset === key}
-                onChange={(e) => setPreset(e.target.value)}
-                disabled={loading || success}
+                checked={choice === key}
+                onChange={(e) => !info.disabled && setChoice(e.target.value)}
+                disabled={loading || success || info.disabled}
               />
               <div className="preset-content">
-                <strong>{presetInfo.name}</strong>
-                <span>{presetInfo.description}</span>
-                <span className="preset-model">Model: {presetInfo.model}</span>
+                <strong>{info.name}</strong>
+                <span>{info.description}</span>
+                {info.model && <span className="preset-model">Model: {info.model}</span>}
               </div>
             </label>
           ))}
         </div>
 
+        {showCustomFields && (
+          <div className="custom-fields">
+            <label>
+              <span>OpenAI API key</span>
+              <input
+                type="password"
+                placeholder={savedData?.api_key === '(saved)' ? 'Leave blank to keep saved key' : 'sk-...'}
+                value={apiKey === '••••••••••••' ? '' : apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                disabled={loading || success}
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              <span>Model (optional)</span>
+              <input
+                type="text"
+                placeholder="gpt-3.5-turbo"
+                value={customModel}
+                onChange={(e) => setCustomModel(e.target.value)}
+                disabled={loading || success}
+              />
+            </label>
+          </div>
+        )}
+
         {error && <div className="error-message">{error}</div>}
         {success && (
           <div className="success-message">
-            Model preset configured successfully!
+            Model configured successfully!
             {testResult && <div className="test-result">{testResult}</div>}
           </div>
         )}
@@ -116,7 +167,7 @@ function ModelPreset({ onComplete, onBack, initialData }) {
           <button
             type="submit"
             className="btn-primary"
-            disabled={loading || success}
+            disabled={loading || success || (choice === 'neuroion_agent')}
           >
             {loading ? 'Configuring...' : success ? 'Success!' : 'Continue'}
           </button>

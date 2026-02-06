@@ -19,11 +19,20 @@ from neuroion.core.memory.repository import (
     UserRepository,
     DeviceConfigRepository,
 )
+from neuroion.core.config_store import (
+    set_wifi as config_store_set_wifi,
+    set_setup_completed as config_store_set_setup_completed,
+    set_device as config_store_set_device,
+    get_wifi_config as config_store_get_wifi_config,
+    set_wifi_configured as config_store_set_wifi_configured,
+)
 from neuroion.core.llm import get_llm_client_from_config
 from neuroion.core.llm.ollama import OllamaClient
 from neuroion.core.llm.cloud import CloudLLMClient
 from neuroion.core.llm.openai import OpenAILLMClient
 from neuroion.core.services.wifi_service import WiFiService
+from neuroion.core.services.network_manager import NetworkManager
+from neuroion.core.security.setup_secret import get_or_create as get_setup_secret
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 status_router = APIRouter(prefix="/api", tags=["status"])
@@ -49,6 +58,12 @@ class WiFiConfigRequest(BaseModel):
 
 class WiFiConfigResponse(BaseModel):
     """WiFi configuration response."""
+    success: bool
+    message: str
+
+
+class WiFiApplyResponse(BaseModel):
+    """WiFi apply (connect + switch to LAN) response."""
     success: bool
     message: str
 
@@ -124,15 +139,18 @@ class OwnerSetupResponse(BaseModel):
 
 
 class ModelPresetRequest(BaseModel):
-    """LLM model preset selection request."""
-    preset: str  # fast, balanced, quality
-    model_name: Optional[str] = None  # Optional override
+    """LLM model choice: local (free), neuroion_agent (unavailable), or custom (own API key)."""
+    choice: str  # "local" | "neuroion_agent" | "custom"
+    model_name: Optional[str] = None  # Optional override for local model
+    api_key: Optional[str] = None  # Required when choice is "custom"
+    base_url: Optional[str] = None  # Optional for custom (default OpenAI)
+    model: Optional[str] = None  # Optional for custom (default gpt-3.5-turbo)
 
 
 class ModelPresetResponse(BaseModel):
-    """Model preset response."""
+    """Model choice response."""
     success: bool
-    preset: str
+    choice: str
     model_name: str
     message: str
 
@@ -151,9 +169,46 @@ class StatusResponse(BaseModel):
     model: Dict[str, Any]
     uptime: int
     household: Dict[str, Any]
+    degraded_message: Optional[str] = None  # e.g. "Low memory; responses may be slow."
+    storage: Optional[Dict[str, Any]] = None  # free_gb, total_gb
+    agent: Optional[Dict[str, Any]] = None  # name "Neuroion Agent", status running/stopped
+
+
+class SetupSecretResponse(BaseModel):
+    """One-time setup secret (AP password). Shown on kiosk or sticker."""
+    setup_secret: str
+
+
+class DeviceSetupRequest(BaseModel):
+    """Device name and timezone."""
+    device_name: str
+    timezone: str = "Europe/Amsterdam"
+
+
+class DeviceSetupResponse(BaseModel):
+    """Device setup response."""
+    success: bool
+    message: str
+
+
+class ValidateResponse(BaseModel):
+    """Setup validation result."""
+    network_ok: bool
+    model_ok: bool
+    error: Optional[str] = None
 
 
 # Endpoints
+
+@router.get("/setup-secret", response_model=SetupSecretResponse)
+def get_setup_secret_for_display() -> SetupSecretResponse:
+    """
+    Return the per-device setup secret (AP Wi-Fi password) for one-time display on kiosk or label.
+    Never log this value.
+    """
+    secret = get_setup_secret()
+    return SetupSecretResponse(setup_secret=secret)
+
 
 @router.get("/status", response_model=SetupStatusResponse)
 def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
@@ -254,17 +309,9 @@ def configure_wifi(
     is handled by WiFiService (platform-specific).
     """
     try:
-        # Store WiFi config (repository handles commit internally)
-        SystemConfigRepository.set(
-            db=db,
-            key="wifi",
-            value={
-                "ssid": request.ssid,
-                "password": request.password,
-            },
-            category="wifi",
-        )
-        
+        # Store WiFi config via config_store (single source of truth)
+        config_store_set_wifi(db, request.ssid, request.password)
+
         return WiFiConfigResponse(
             success=True,
             message="WiFi configuration saved successfully",
@@ -279,6 +326,31 @@ def configure_wifi(
             success=False,
             message=f"Failed to configure WiFi: {str(e)}",
         )
+
+
+@router.post("/wifi/apply", response_model=WiFiApplyResponse)
+def apply_wifi(db: Session = Depends(get_db)) -> WiFiApplyResponse:
+    """
+    Apply stored WiFi credentials: connect via WiFiService, then switch to normal mode.
+    On failure returns 4xx and stays in AP mode (rollback).
+    """
+    wifi = config_store_get_wifi_config(db)
+    if not wifi or not wifi.get("ssid"):
+        return WiFiApplyResponse(
+            success=False,
+            message="No WiFi configuration saved. Complete the WiFi step first.",
+        )
+    ssid = wifi.get("ssid", "")
+    password = wifi.get("password", "")
+    success, message = WiFiService.configure_wifi(ssid, password)
+    if not success:
+        return WiFiApplyResponse(success=False, message=message or "Could not join network.")
+    try:
+        config_store_set_wifi_configured(db, True)
+        NetworkManager.stop_softap()
+    except Exception as e:
+        logger.warning("Could not switch to normal mode after WiFi connect: %s", e)
+    return WiFiApplyResponse(success=True, message=message or "Connected and switched to normal mode.")
 
 
 @router.post("/llm", response_model=LLMConfigResponse)
@@ -353,7 +425,7 @@ def configure_llm(
                 category="llm",
             )
         
-        # Test LLM connection
+        # Test LLM connection (never return or log API keys)
         test_result = None
         try:
             llm_client = get_llm_client_from_config(db)
@@ -362,7 +434,8 @@ def configure_llm(
             test_result = f"Connection successful. Test response: {test_response[:50]}..."
         except Exception as test_error:
             test_result = f"Connection test failed: {str(test_error)}"
-        
+
+        # Response must never include api_key or any secret (see CONTRIBUTING.md)
         return LLMConfigResponse(
             success=True,
             message="LLM configuration saved successfully",
@@ -454,12 +527,9 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
     Updates DeviceConfig to mark setup as completed.
     """
     try:
-        # Update device config to mark setup as complete
-        DeviceConfigRepository.update(
-            db=db,
-            setup_completed=True,
-        )
-        
+        # Mark setup complete via config_store
+        config_store_set_setup_completed(db, True)
+
         # Get setup status
         status_response = get_setup_status(db)
         
@@ -514,13 +584,54 @@ def check_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse
 def get_device_config(db: Session = Depends(get_db)) -> DeviceConfigResponse:
     """Get device configuration."""
     config = DeviceConfigRepository.get_or_create(db)
-    
     return DeviceConfigResponse(
         wifi_configured=config.wifi_configured,
         hostname=config.hostname,
         setup_completed=config.setup_completed,
         retention_policy=config.retention_policy,
     )
+
+
+@router.post("/device", response_model=DeviceSetupResponse)
+def setup_device(
+    request: DeviceSetupRequest,
+    db: Session = Depends(get_db),
+) -> DeviceSetupResponse:
+    """Store device name (hostname) and timezone."""
+    try:
+        name = (request.device_name or "Neuroion Core").strip() or "Neuroion Core"
+        config_store_set_device(db, device_name=name, timezone=request.timezone)
+        return DeviceSetupResponse(success=True, message="Device settings saved")
+    except Exception as e:
+        logger.error(f"Error saving device settings: {e}", exc_info=True)
+        return DeviceSetupResponse(success=False, message=str(e))
+
+
+@router.post("/validate", response_model=ValidateResponse)
+def validate_setup(db: Session = Depends(get_db)) -> ValidateResponse:
+    """
+    Check network (and optionally model). Used before marking setup complete.
+    Does not apply WiFi; use /setup/wifi/apply for that.
+    """
+    network_ok = False
+    model_ok = False
+    error = None
+    try:
+        connected, msg = WiFiService.test_connection()
+        network_ok = connected
+        if not connected:
+            error = msg or "No internet connection"
+    except Exception as e:
+        error = str(e)
+    try:
+        llm_client = get_llm_client_from_config(db)
+        test_messages = [{"role": "user", "content": "test"}]
+        llm_client.chat(test_messages, temperature=0.7, max_tokens=1)
+        model_ok = True
+    except Exception:
+        if not error:
+            error = "Model check failed"
+    return ValidateResponse(network_ok=network_ok, model_ok=model_ok, error=error)
 
 
 @router.post("/owner", response_model=OwnerSetupResponse)
@@ -592,45 +703,83 @@ def setup_model_preset(
     db: Session = Depends(get_db),
 ) -> ModelPresetResponse:
     """
-    Select LLM model preset (fast/balanced/quality).
-    
-    Maps preset to specific model and updates LLM configuration.
+    Select LLM: local (free), custom (own OpenAI key), or neuroion_agent (currently unavailable).
     """
     try:
-        # Map preset to model
-        preset_models = {
-            "fast": "llama3.2:1b",  # Smaller, faster model
-            "balanced": "llama3.2",  # Default balanced model
-            "quality": "llama3.2:3b",  # Larger, higher quality model
-        }
-        
-        if request.preset not in preset_models:
+        if request.choice not in ("local", "neuroion_agent", "custom"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid preset: {request.preset}. Must be one of: fast, balanced, quality",
+                detail='Invalid choice. Must be "local", "custom", or "neuroion_agent"',
             )
-        
-        model_name = request.model_name or preset_models[request.preset]
-        
-        # Update LLM config to use local provider with selected model
-        SystemConfigRepository.set(
-            db=db,
-            key="llm_provider",
-            value={"provider": "local"},
-            category="llm",
-        )
-        
-        SystemConfigRepository.set(
-            db=db,
-            key="llm_ollama",
-            value={
-                "base_url": "http://localhost:11434",
-                "model": model_name,
-                "timeout": 120,
-            },
-            category="llm",
-        )
-        
+
+        if request.choice == "neuroion_agent":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Neuroion Agent subscription is currently unavailable.",
+            )
+
+        if request.choice == "local":
+            model_name = request.model_name or "llama3.2:3b"
+            SystemConfigRepository.set(
+                db=db,
+                key="llm_provider",
+                value={"provider": "local"},
+                category="llm",
+            )
+            SystemConfigRepository.set(
+                db=db,
+                key="llm_ollama",
+                value={
+                    "base_url": "http://localhost:11434",
+                    "model": model_name,
+                    "timeout": 120,
+                },
+                category="llm",
+            )
+        else:
+            # custom: user's own OpenAI API key (or keep existing if not provided)
+            api_key = (request.api_key or "").strip()
+            existing_custom = SystemConfigRepository.get(db, "llm_custom")
+            existing_config = existing_custom.value if (existing_custom and isinstance(existing_custom.value, dict)) else {}
+            if not api_key and not existing_config.get("api_key"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="API key is required when using your own OpenAI account.",
+                )
+            model_name = request.model or existing_config.get("model") or "gpt-3.5-turbo"
+            base_url = (request.base_url or "").strip() or existing_config.get("base_url") or "https://api.openai.com/v1"
+            SystemConfigRepository.set(
+                db=db,
+                key="llm_provider",
+                value={"provider": "custom"},
+                category="llm",
+            )
+            if api_key:
+                SystemConfigRepository.set(
+                    db=db,
+                    key="llm_custom",
+                    value={
+                        "api_key": api_key,
+                        "base_url": base_url,
+                        "model": model_name,
+                        "timeout": 120,
+                    },
+                    category="llm",
+                )
+            else:
+                # Keep existing key; only update model if provided
+                SystemConfigRepository.set(
+                    db=db,
+                    key="llm_custom",
+                    value={
+                        "api_key": existing_config.get("api_key", ""),
+                        "base_url": base_url,
+                        "model": model_name,
+                        "timeout": 120,
+                    },
+                    category="llm",
+                )
+
         # Test model availability
         test_result = None
         try:
@@ -641,20 +790,20 @@ def setup_model_preset(
         except Exception as test_error:
             test_result = f"Model test failed: {str(test_error)}"
             logger.warning(f"Model test failed: {test_error}")
-        
+
         return ModelPresetResponse(
             success=True,
-            preset=request.preset,
+            choice=request.choice,
             model_name=model_name,
-            message=f"Model preset configured: {test_result or 'Configuration saved'}",
+            message=test_result or "Configuration saved",
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error setting up model preset: {e}", exc_info=True)
+        logger.error(f"Error setting up model: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to setup model preset: {str(e)}",
+            detail=f"Failed to setup model: {str(e)}",
         )
 
 
@@ -674,8 +823,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         current_ssid = WiFiService.get_current_ssid()
         wifi_configured = device_config.wifi_configured
         
-        # Try to get LAN IP (will be implemented in NetworkManager)
-        lan_ip = "192.168.1.100"  # Placeholder, will use NetworkManager.get_lan_ip()
+        lan_ip = NetworkManager.get_lan_ip() or "—"
         
         network_info = {
             "mode": "lan" if wifi_configured else "setup",
@@ -688,43 +836,73 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         # Get LLM model info
         llm_provider_config = SystemConfigRepository.get(db, "llm_provider")
         llm_ollama_config = SystemConfigRepository.get(db, "llm_ollama")
+        llm_neuroion_config = SystemConfigRepository.get(db, "llm_neuroion_agent")
+        llm_custom_config = SystemConfigRepository.get(db, "llm_custom")
         
-        model_preset = "balanced"
-        model_name = "llama3.2"
+        model_choice = "local"
+        model_name = "llama3.2:3b"
         model_status = "idle"
         model_health = "unknown"
         
         if llm_provider_config and isinstance(llm_provider_config.value, dict):
             provider = llm_provider_config.value.get("provider", "local")
-            
+            model_choice = provider
             if provider == "local" and llm_ollama_config and isinstance(llm_ollama_config.value, dict):
-                model_name = llm_ollama_config.value.get("model", "llama3.2")
-                # Determine preset from model name
-                if "1b" in model_name.lower():
-                    model_preset = "fast"
-                elif "3b" in model_name.lower():
-                    model_preset = "quality"
-                else:
-                    model_preset = "balanced"
-                
-                # Test LLM health
-                try:
-                    llm_client = get_llm_client_from_config(db)
-                    test_messages = [{"role": "user", "content": "test"}]
-                    llm_client.chat(test_messages, temperature=0.7, max_tokens=1)
-                    model_status = "running"
-                    model_health = "ok"
-                except Exception:
-                    model_status = "idle"
-                    model_health = "error"
+                model_name = llm_ollama_config.value.get("model", "llama3.2:3b")
+            elif provider == "neuroion_agent" and llm_neuroion_config and isinstance(llm_neuroion_config.value, dict):
+                model_name = llm_neuroion_config.value.get("model", "gpt-4o")
+            elif provider == "custom" and llm_custom_config and isinstance(llm_custom_config.value, dict):
+                model_name = llm_custom_config.value.get("model", "gpt-3.5-turbo")
+            
+            # Test LLM health
+            try:
+                llm_client = get_llm_client_from_config(db)
+                test_messages = [{"role": "user", "content": "test"}]
+                llm_client.chat(test_messages, temperature=0.7, max_tokens=1)
+                model_status = "running"
+                model_health = "ok"
+            except Exception:
+                model_status = "idle"
+                model_health = "error"
         
         model_info = {
-            "preset": model_preset,
+            "choice": model_choice,
+            "preset": model_choice,
             "name": model_name,
             "status": model_status,
             "health": model_health,
         }
-        
+
+        # Optional resource check: degraded message when memory is low
+        degraded_message = None
+        try:
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemAvailable:"):
+                        kb = int(line.split()[1])
+                        if kb < 500 * 1024:  # < 500 MB
+                            degraded_message = "Low memory; responses may be slow."
+                        break
+        except (FileNotFoundError, ValueError, OSError):
+            pass
+
+        # Storage (disk free)
+        storage_info = None
+        try:
+            import shutil
+            total, used, free = shutil.disk_usage("/")
+            storage_info = {"free_gb": round(free / (1024**3), 1), "total_gb": round(total / (1024**3), 1)}
+        except (OSError, Exception):
+            pass
+
+        # Agent (Neuroion Agent / OpenClaw)
+        agent_info = None
+        try:
+            from neuroion.core.services import openclaw_adapter
+            agent_info = {"name": "Neuroion Agent", "status": "running" if openclaw_adapter.is_running() else "stopped"}
+        except Exception:
+            agent_info = {"name": "Neuroion Agent", "status": "stopped"}
+
         # Calculate uptime
         uptime_seconds = int(time.time() - _startup_time)
         
@@ -749,6 +927,9 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             model=model_info,
             uptime=uptime_seconds,
             household=household_info,
+            degraded_message=degraded_message,
+            storage=storage_info,
+            agent=agent_info,
         )
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)
