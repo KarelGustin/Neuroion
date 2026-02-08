@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Routes, Route, useSearchParams, useParams, useNavigate } from 'react-router-dom'
 import Integrations from './components/Integrations'
 import Preferences from './components/Preferences'
+import Context from './components/Context'
 import OAuthCallback from './components/OAuthCallback'
 import { verifyLoginCode } from './services/api'
 import './styles/App.css'
@@ -15,7 +16,7 @@ function DashboardPage() {
   const [error, setError] = useState(null)
   const [loginCode, setLoginCode] = useState('')
   const [verifying, setVerifying] = useState(false)
-  const [activeTab, setActiveTab] = useState('integrations') // 'integrations' or 'preferences'
+  const [activeTab, setActiveTab] = useState('integrations') // 'integrations' | 'preferences' | 'context'
 
   useEffect(() => {
     // Check for token in URL or localStorage
@@ -123,11 +124,18 @@ function DashboardPage() {
           >
             Preferences
           </button>
+          <button
+            className={`app-tab ${activeTab === 'context' ? 'active' : ''}`}
+            onClick={() => setActiveTab('context')}
+          >
+            Context
+          </button>
         </div>
 
         <main className="app-main">
           {activeTab === 'integrations' && <Integrations userId={parseInt(userId)} />}
           {activeTab === 'preferences' && <Preferences userId={parseInt(userId)} />}
+          {activeTab === 'context' && <Context userId={parseInt(userId)} />}
         </main>
       </div>
     </div>

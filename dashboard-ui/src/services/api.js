@@ -112,4 +112,19 @@ export async function getHouseholdPreferences() {
   return response.data
 }
 
+export async function getContextList(limit = 50) {
+  const response = await api.get('/context', { params: { limit } })
+  return response.data
+}
+
+export async function deleteContext(snapshotId) {
+  const response = await api.delete(`/context/${snapshotId}`)
+  return response.data
+}
+
+export async function addContext(summary) {
+  const response = await api.post('/context', { summary })
+  return response.data
+}
+
 export default api

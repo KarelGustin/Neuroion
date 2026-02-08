@@ -65,8 +65,31 @@ function ValidateStep({ onComplete, onBack }) {
       {status === 'success' && (
         <p className="validate-success">All set. Continuing…</p>
       )}
-      {status === 'error' && error && (
-        <p className="validate-error">{error}</p>
+      {status === 'error' && (
+        <>
+          {error && <p className="validate-error">{error}</p>}
+          <div className="form-actions">
+            {onBack && (
+              <button type="button" className="btn-secondary" onClick={onBack}>
+                Back
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={runApplyWifi}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => onComplete?.({ validated: true, skipped: true })}
+            >
+              Skip
+            </button>
+          </div>
+        </>
       )}
       {status === 'idle' && (
         <>

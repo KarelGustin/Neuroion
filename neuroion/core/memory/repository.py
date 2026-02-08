@@ -518,6 +518,21 @@ class ContextSnapshotRepository:
         
         return query.order_by(ContextSnapshot.timestamp.desc()).limit(limit).all()
 
+    @staticmethod
+    def get_by_id(db: Session, snapshot_id: int) -> Optional[ContextSnapshot]:
+        """Get a context snapshot by id."""
+        return db.query(ContextSnapshot).filter(ContextSnapshot.id == snapshot_id).first()
+
+    @staticmethod
+    def delete(db: Session, snapshot_id: int, user_id: int) -> bool:
+        """Delete a context snapshot if it belongs to the given user. Returns True if deleted."""
+        snapshot = ContextSnapshotRepository.get_by_id(db, snapshot_id)
+        if not snapshot or snapshot.user_id != user_id:
+            return False
+        db.delete(snapshot)
+        db.commit()
+        return True
+
 
 class AuditLogRepository:
     """Repository for audit log operations."""

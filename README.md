@@ -81,6 +81,41 @@ Neuroion is a privacy-first home intelligence system that runs entirely on your 
    python -m telegram.bot
    ```
 
+### Run everything locally (one command)
+
+From the **repository root**, after installing Python and Node dependencies once:
+
+1. **Python**: create a venv and install deps (recommended, especially on Raspberry Pi / Linux where the API script will use it automatically):
+   ```bash
+   python3 -m venv venv
+   ./venv/bin/pip install -r neuroion/core/requirements.txt   # Unix
+   # or: venv\Scripts\pip install -r neuroion/core/requirements.txt   # Windows
+   ```
+2. **Node**: install root and subproject deps (run from repo root):
+   ```bash
+   npm install
+   npm install --prefix setup-ui && npm install --prefix touchscreen-ui && npm install --prefix dashboard-nextjs
+   ```
+3. **Start everything**:
+   ```bash
+   npm run dev
+   ```
+
+The API will use `venv/bin/python` if present, otherwise `python3` (Unix) or `python` (Windows).
+
+This starts:
+
+| Service        | URL                    |
+|----------------|------------------------|
+| Homebase API   | http://localhost:8000  |
+| Setup UI       | http://localhost:3000  |
+| Touchscreen UI | http://localhost:3001  |
+| Dashboard      | http://localhost:3002  |
+
+Useful for **local testing** and **testing on a Raspberry Pi** on your network (open the URLs via the Pi’s IP, e.g. `http://192.168.1.x:3001` for the touchscreen).
+
+**Ollama** (for local LLM) is not started by this command. Run `ollama serve` in a separate terminal if you use the local model.
+
 ### Docker Deployment
 
 1. **Set environment variables**:

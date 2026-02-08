@@ -38,6 +38,18 @@ class MembersListResponse(BaseModel):
     members: List[MemberResponse]
 
 
+class MeResponse(BaseModel):
+    """Current user profile (for user dashboard)."""
+    id: int
+    name: str
+    role: str
+    language: Optional[str] = None
+    timezone: Optional[str] = None
+    household_id: int
+    created_at: str
+    last_seen_at: Optional[str] = None
+
+
 class MemberCreateRequest(BaseModel):
     """Request to create a member."""
     name: str
@@ -67,6 +79,29 @@ class MemberDeleteResponse(BaseModel):
 
 
 # Endpoints
+
+@router.get("/me", response_model=MeResponse)
+def get_me(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> MeResponse:
+    """
+    Get current authenticated user profile (for user dashboard).
+    """
+    member = UserRepository.get_by_id(db, user["user_id"])
+    if not member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return MeResponse(
+        id=member.id,
+        name=member.name or "",
+        role=member.role or "member",
+        language=member.language,
+        timezone=member.timezone,
+        household_id=member.household_id,
+        created_at=member.created_at.isoformat(),
+        last_seen_at=member.last_seen_at.isoformat() if member.last_seen_at else None,
+    )
+
 
 @router.get("/members", response_model=MembersListResponse)
 def get_members(

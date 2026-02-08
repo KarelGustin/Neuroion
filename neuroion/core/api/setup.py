@@ -32,7 +32,10 @@ from neuroion.core.llm.cloud import CloudLLMClient
 from neuroion.core.llm.openai import OpenAILLMClient
 from neuroion.core.services.wifi_service import WiFiService
 from neuroion.core.services.network_manager import NetworkManager
-from neuroion.core.security.setup_secret import get_or_create as get_setup_secret
+from neuroion.core.security.setup_secret import get_or_create as get_setup_secret, clear as setup_secret_clear
+from neuroion.core.memory.models import JoinToken, LoginCode, DashboardLink
+from neuroion.core.config import settings as app_settings
+from neuroion.core.services.network import get_dashboard_base_url
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 status_router = APIRouter(prefix="/api", tags=["status"])
@@ -172,6 +175,9 @@ class StatusResponse(BaseModel):
     degraded_message: Optional[str] = None  # e.g. "Low memory; responses may be slow."
     storage: Optional[Dict[str, Any]] = None  # free_gb, total_gb
     agent: Optional[Dict[str, Any]] = None  # name "Neuroion Agent", status running/stopped
+    dashboard_url: Optional[str] = None  # base URL for dashboard UI (e.g. http://host:3001)
+    telegram_connected: Optional[bool] = None  # True if Telegram bot token is configured
+    agent_running: Optional[bool] = None  # True if Neuroion Agent (OpenClaw) is running
 
 
 class SetupSecretResponse(BaseModel):
@@ -196,6 +202,31 @@ class ValidateResponse(BaseModel):
     network_ok: bool
     model_ok: bool
     error: Optional[str] = None
+
+
+class FactoryResetResponse(BaseModel):
+    """Factory reset response."""
+    success: bool
+    message: str
+
+
+class SetupSummaryMember(BaseModel):
+    """Member in setup summary."""
+    name: str
+    role: str
+
+
+class SetupSummaryResponse(BaseModel):
+    """Onboarding/setup summary for Core dashboard overview."""
+    device_name: str
+    timezone: str
+    wifi_ssid: Optional[str] = None
+    wifi_configured: bool
+    household_name: str
+    members: List[SetupSummaryMember]
+    llm_preset: str
+    llm_model: str
+    retention_policy: Optional[Dict[str, Any]] = None
 
 
 # Endpoints
@@ -557,6 +588,49 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
         )
 
 
+@router.post("/factory-reset", response_model=FactoryResetResponse)
+def factory_reset(db: Session = Depends(get_db)) -> FactoryResetResponse:
+    """
+    Factory reset: wipe all persisted data and return device to onboarding.
+    Deletes join tokens, households (and cascade: users, preferences, chat, etc.),
+    system config keys (wifi, llm, etc.), resets device_config, clears setup secret.
+    """
+    try:
+        # 1. Delete join tokens and user-linked rows (FK to users; must go before households)
+        db.query(JoinToken).delete(synchronize_session=False)
+        db.query(LoginCode).delete(synchronize_session=False)
+        db.query(DashboardLink).delete(synchronize_session=False)
+        db.commit()
+        # 2. Delete all households (cascade removes users, preferences, context_snapshots, audit_logs, chat_messages)
+        households = HouseholdRepository.get_all(db)
+        for h in households:
+            HouseholdRepository.delete(db, h.id)
+        # 3. Delete system config keys so wizard is required again
+        for key in (
+            "wifi", "timezone", "llm_provider", "llm_ollama", "llm_cloud", "llm_custom",
+            "llm_neuroion_agent", "neuroion_core", "privacy",
+        ):
+            SystemConfigRepository.delete(db, key)
+        # 4. Reset device config
+        DeviceConfigRepository.update(
+            db, setup_completed=False, wifi_configured=False, hostname="Neuroion Core"
+        )
+        db.commit()
+        # 5. Clear setup secret so new one is generated
+        setup_secret_clear()
+        return FactoryResetResponse(success=True, message="Factory reset complete")
+    except Exception as e:
+        logger.error(f"Factory reset failed: {e}", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Factory reset failed: {str(e)}",
+        )
+
+
 @router.get("/complete", response_model=SetupCompleteResponse)
 def check_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
     """
@@ -807,6 +881,56 @@ def setup_model_preset(
         )
 
 
+@status_router.get("/setup/summary", response_model=SetupSummaryResponse)
+def get_setup_summary(db: Session = Depends(get_db)) -> SetupSummaryResponse:
+    """
+    Get onboarding/setup summary for Core dashboard: device, network, household, model, privacy.
+    Safe to display; no secrets.
+    """
+    device_config = DeviceConfigRepository.get_or_create(db)
+    device_name = device_config.hostname or "Neuroion Core"
+    timezone_config = SystemConfigRepository.get(db, "timezone")
+    timezone = "Europe/Amsterdam"
+    if timezone_config is not None and isinstance(timezone_config.value, str):
+        timezone = timezone_config.value
+    wifi_ssid = WiFiService.get_current_ssid()
+    wifi_configured = device_config.wifi_configured
+    household_name = "Not configured"
+    members: List[SetupSummaryMember] = []
+    households = HouseholdRepository.get_all(db)
+    if households:
+        household = households[0]
+        household_name = household.name
+        users = UserRepository.get_by_household(db, household.id)
+        members = [SetupSummaryMember(name=u.name or "—", role=u.role or "member") for u in users]
+    llm_provider_config = SystemConfigRepository.get(db, "llm_provider")
+    llm_ollama_config = SystemConfigRepository.get(db, "llm_ollama")
+    llm_neuroion_config = SystemConfigRepository.get(db, "llm_neuroion_agent")
+    llm_custom_config = SystemConfigRepository.get(db, "llm_custom")
+    llm_preset = "local"
+    llm_model = "llama3.2:3b"
+    if llm_provider_config and isinstance(llm_provider_config.value, dict):
+        llm_preset = llm_provider_config.value.get("provider", "local")
+        if llm_preset == "local" and llm_ollama_config and isinstance(llm_ollama_config.value, dict):
+            llm_model = llm_ollama_config.value.get("model", "llama3.2:3b")
+        elif llm_preset == "neuroion_agent" and llm_neuroion_config and isinstance(llm_neuroion_config.value, dict):
+            llm_model = llm_neuroion_config.value.get("model", "gpt-4o")
+        elif llm_preset == "custom" and llm_custom_config and isinstance(llm_custom_config.value, dict):
+            llm_model = llm_custom_config.value.get("model", "gpt-3.5-turbo")
+    retention_policy = getattr(device_config, "retention_policy", None)
+    return SetupSummaryResponse(
+        device_name=device_name,
+        timezone=timezone,
+        wifi_ssid=wifi_ssid or None,
+        wifi_configured=wifi_configured,
+        household_name=household_name,
+        members=members,
+        llm_preset=llm_preset,
+        llm_model=llm_model,
+        retention_policy=retention_policy,
+    )
+
+
 # Status endpoint (separate router for /api/status)
 @status_router.get("/status", response_model=StatusResponse)
 def get_status(db: Session = Depends(get_db)) -> StatusResponse:
@@ -922,6 +1046,10 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             "member_count": member_count,
         }
         
+        dashboard_url = get_dashboard_base_url(app_settings.dashboard_ui_port)
+        telegram_connected = bool(getattr(app_settings, "telegram_bot_token", None))
+        agent_running = agent_info.get("status") == "running" if agent_info else False
+
         return StatusResponse(
             network=network_info,
             model=model_info,
@@ -930,6 +1058,9 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             degraded_message=degraded_message,
             storage=storage_info,
             agent=agent_info,
+            dashboard_url=dashboard_url,
+            telegram_connected=telegram_connected,
+            agent_running=agent_running,
         )
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)

@@ -8,7 +8,7 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: var(--space-6);
+  padding: var(--space-5);
 }
 
 .qr-container {
@@ -47,15 +47,15 @@
 }
 
 .qr-close {
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-6);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
   color: var(--text);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: var(--font-medium);
   cursor: pointer;
-  min-height: 44px;
+  min-height: 52px;
   width: 100%;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.2s ease, transform 0.15s ease;

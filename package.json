@@ -1,4 +1,16 @@
 {
+  "name": "neuroion",
+  "private": true,
+  "description": "Local-first home intelligence platform",
+  "scripts": {
+    "dev": "concurrently -n api,setup,touch,dashboard -c blue,green,yellow,magenta \"npm run dev:api\" \"npm run dev --prefix setup-ui\" \"npm run dev --prefix touchscreen-ui\" \"npm run dev:dashboard\"",
+    "dev:api": "node scripts/dev-api.js",
+    "dev:dashboard": "cross-env PORT=3002 npm run dev --prefix dashboard-nextjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "cross-env": "^7.0.3"
+  },
   "dependencies": {
     "python": "^0.0.4"
   }

@@ -13,15 +13,15 @@ Default URL: `http://localhost:5173/?kiosk=1` (Vite dev port). Set `SETUP_UI_POR
 
 ## Setup
 
-1. Install Chromium on Raspberry Pi:
+1. Install Chromium, xbindkeys (for Ctrl+Shift+Q to exit kiosk), and unclutter (to hide the mouse cursor for an Apple-like kiosk feel) on Raspberry Pi:
    ```bash
    sudo apt-get update
-   sudo apt-get install chromium-browser
+   sudo apt-get install chromium-browser xbindkeys unclutter
    ```
 
-2. Make the script executable:
+2. Make the scripts executable:
    ```bash
-   chmod +x start-kiosk.sh
+   chmod +x start-kiosk.sh exit-kiosk.sh
    ```
 
 3. Configure auto-start (optional):
@@ -32,6 +32,9 @@ Default URL: `http://localhost:5173/?kiosk=1` (Vite dev port). Set `SETUP_UI_POR
    - Or use a systemd service that starts after the setup-ui and API are running.
 
 ## Usage
+
+- **Start kiosk:** run `./start-kiosk.sh`. Chromium opens in fullscreen.
+- **Exit kiosk:** press **Ctrl+Shift+Q** (requires xbindkeys), or run `./exit-kiosk.sh` from another terminal.
 
 Run manually:
 ```bash

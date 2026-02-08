@@ -80,6 +80,15 @@ export default function DashboardPage() {
 
       <nav className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Link
+          href="/overview"
+          className="p-6 bg-[#111] border border-border rounded-xl hover:border-[#555] transition-colors"
+        >
+          <div className="text-2xl mb-2">📋</div>
+          <div className="font-medium">Overzicht</div>
+          <div className="text-sm text-muted mt-1">Onboarding &amp; instellingen</div>
+        </Link>
+
+        <Link
           href="/household"
           className="p-6 bg-[#111] border border-border rounded-xl hover:border-[#555] transition-colors"
         >
@@ -95,6 +104,15 @@ export default function DashboardPage() {
           <div className="text-2xl mb-2">🔗</div>
           <div className="font-medium">Integrations</div>
           <div className="text-sm text-muted mt-1">Connect services</div>
+        </Link>
+
+        <Link
+          href="/user"
+          className="p-6 bg-[#111] border border-border rounded-xl hover:border-[#555] transition-colors"
+        >
+          <div className="text-2xl mb-2">👤</div>
+          <div className="font-medium">Mijn dashboard</div>
+          <div className="text-sm text-muted mt-1">Profiel, context, agent</div>
         </Link>
 
         <Link

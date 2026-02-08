@@ -34,10 +34,32 @@ export async function getStatus() {
   return response.data
 }
 
+/** Create join token (requires owner auth). Prefer createDashboardJoinToken for kiosk. */
 export async function createJoinToken() {
   const response = await api.post('/api/join-token/create', {
     expires_in_minutes: 10,
   })
+  return response.data
+}
+
+/** Create join token from kiosk (no auth). Returns join_url for add-member QR. */
+export async function createDashboardJoinToken() {
+  const response = await api.post('/dashboard/join-token', {
+    expires_in_minutes: 10,
+  })
+  return response.data
+}
+
+/**
+ * Factory reset. After success, clear setup-related localStorage and reload.
+ */
+export async function factoryReset() {
+  const response = await api.post('/setup/factory-reset')
+  const keys = Object.keys(localStorage).filter((k) =>
+    /^neuroion_setup_/i.test(k)
+  )
+  keys.forEach((k) => localStorage.removeItem(k))
+  window.location.reload()
   return response.data
 }
 

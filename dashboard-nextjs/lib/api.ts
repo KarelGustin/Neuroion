@@ -67,6 +67,12 @@ export async function getMembers() {
   return response.data.members
 }
 
+// Current user (requires auth)
+export async function getMe() {
+  const response = await api.get('/api/me')
+  return response.data
+}
+
 export async function createMember(data: any) {
   const response = await api.post('/api/members', data)
   return response.data
@@ -103,6 +109,20 @@ export async function getSetupStatus() {
 
 export async function getDeviceConfig() {
   const response = await api.get('/setup/device-config')
+  return response.data
+}
+
+// Setup summary for Core dashboard overview (onboarding data)
+export async function getSetupSummary() {
+  const response = await api.get('/api/setup/summary')
+  return response.data
+}
+
+export async function updateDevice(deviceName: string, timezone: string) {
+  const response = await api.post('/setup/device', {
+    device_name: deviceName,
+    timezone,
+  })
   return response.data
 }
 

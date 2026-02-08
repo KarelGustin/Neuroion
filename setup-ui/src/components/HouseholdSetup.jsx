@@ -32,12 +32,12 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
     setSuccess(false)
 
     try {
-      const result = await setupHousehold(householdName, ownerName)
+      const result = await setupHousehold(householdName, ownerName || 'Owner')
       if (result.success) {
         setSuccess(true)
         const householdData = {
           householdName,
-          ownerName,
+          ownerName: ownerName || 'Owner',
           householdId: result.household_id,
           userId: result.user_id,
         }
@@ -110,7 +110,7 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
           <button
             type="submit"
             className="btn-primary"
-            disabled={loading || success || !householdName || !ownerName}
+            disabled={loading || success || !householdName}
           >
             {loading ? 'Creating...' : success ? 'Complete!' : 'Continue'}
           </button>
