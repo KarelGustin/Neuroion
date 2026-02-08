@@ -3,9 +3,10 @@
   "private": true,
   "description": "Local-first home intelligence platform",
   "scripts": {
-    "dev": "concurrently -n api,setup,touch,dashboard -c blue,green,yellow,magenta \"npm run dev:api\" \"npm run dev --prefix setup-ui\" \"npm run dev --prefix touchscreen-ui\" \"npm run dev:dashboard\"",
+    "dev": "concurrently -n api,setup,touch,dashboard,softap -c blue,green,yellow,magenta,cyan \"npm run dev:api\" \"npm run dev --prefix setup-ui\" \"npm run dev --prefix touchscreen-ui\" \"npm run dev:dashboard\" \"npm run dev:softap\"",
     "dev:api": "node scripts/dev-api.js",
-    "dev:dashboard": "cross-env PORT=3002 npm run dev --prefix dashboard-nextjs"
+    "dev:dashboard": "cross-env PORT=3002 npm run dev --prefix dashboard-nextjs",
+    "dev:softap": "node scripts/dev-softap.js"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

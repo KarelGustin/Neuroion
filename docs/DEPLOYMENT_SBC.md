@@ -256,6 +256,12 @@ Access at:
 - Touchscreen: http://localhost:3001
 - Dashboard: http://localhost:3002
 
+## Development (Raspberry Pi/Linux)
+
+When running `npm run dev` from the repo root on a Pi/Linux device, the SoftAP
+setup mode is started automatically (non-fatal). If `sudo` prompts for a
+password, the hotspot will be skipped and the dev servers will still start.
+
 ## Production Deployment
 
 ### Systemd Service for Neuroion
