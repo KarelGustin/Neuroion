@@ -146,24 +146,57 @@ class WiFiService:
                     text=True,
                     timeout=5,
                 )
-            
-            # Connect to network
-            # nmcli device wifi connect SSID password PASSWORD
+
+            # Use connection add with explicit wifi-sec.key-mgmt to avoid
+            # "802-11-wireless-security.key-mgmt: property is missing" on some NM versions
+            con_name = "Neuroion-" + "".join(c if c.isalnum() or c in "-_" else "_" for c in ssid)[:32]
+            subprocess.run(
+                ["nmcli", "connection", "delete", con_name],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if password:
+                result = subprocess.run(
+                    [
+                        "nmcli", "connection", "add",
+                        "type", "wifi",
+                        "ifname", "wlan0",
+                        "con-name", con_name,
+                        "ssid", ssid,
+                        "wifi-sec.key-mgmt", "wpa-psk",
+                        "wifi-sec.psk", password,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+            else:
+                result = subprocess.run(
+                    [
+                        "nmcli", "connection", "add",
+                        "type", "wifi",
+                        "ifname", "wlan0",
+                        "con-name", con_name,
+                        "ssid", ssid,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                return (False, f"Failed to add connection: {error_msg}")
+
             result = subprocess.run(
-                [
-                    "nmcli",
-                    "device",
-                    "wifi",
-                    "connect",
-                    ssid,
-                    "password",
-                    password,
-                ],
+                ["nmcli", "connection", "up", con_name],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            
+
             if result.returncode == 0:
                 return (True, f"Successfully connected to {ssid}")
             else:

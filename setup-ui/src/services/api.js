@@ -97,6 +97,12 @@ export async function setupOwner(name, language, timezone, style_prefs = null, p
   return response.data
 }
 
+/** Save initial context for the owner (for Neuroion Agent ion). Used in profile wizard step. */
+export async function saveOwnerContext(summary) {
+  const response = await api.post('/setup/owner-context', { summary: summary || '' })
+  return response.data
+}
+
 export async function setupModelChoice(choice, options = {}) {
   const body = { choice, ...options }
   const response = await api.post('/setup/model', body)

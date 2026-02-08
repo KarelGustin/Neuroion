@@ -116,15 +116,38 @@ def write_config(device_config: Dict[str, Any], state_dir: Path) -> None:
 
     # Defaults from device config (LLM)
     llm = device_config.get("llm_provider") or {}
+    provider = llm.get("provider", "local") if isinstance(llm, dict) else (llm or "local")
     ollama = device_config.get("llm_ollama") or {}
-    model_name = ollama.get("model", "llama3.2:3b") if isinstance(ollama, dict) else "llama3.2:3b"
+    openai = device_config.get("llm_openai") or {}
+    custom = device_config.get("llm_custom") or {}
+    model_name = "llama3.2:3b"
+    defaults_provider = "ollama"
+    provider_base_url = None
+
+    if provider == "local":
+        model_name = ollama.get("model", "llama3.2:3b") if isinstance(ollama, dict) else "llama3.2:3b"
+        defaults_provider = "ollama"
+    elif provider == "openai":
+        model_name = openai.get("model", "gpt-4o-mini") if isinstance(openai, dict) else "gpt-4o-mini"
+        defaults_provider = "openai"
+        if isinstance(openai, dict):
+            provider_base_url = openai.get("base_url")
+    elif provider == "custom":
+        model_name = custom.get("model", "gpt-4o-mini") if isinstance(custom, dict) else "gpt-4o-mini"
+        defaults_provider = "openai"
+        if isinstance(custom, dict):
+            provider_base_url = custom.get("base_url")
 
     # Base config: defaults derived from device
     cfg = {
         "gateway": {"port": 3141, "bind": "lan"},
         "ui": {"assistant": {"name": "Neuroion Agent"}},
-        "models": {"defaults": {"provider": "ollama", "model": model_name}},
+        "models": {"defaults": {"provider": defaults_provider, "model": model_name}},
     }
+
+    if provider_base_url and provider_base_url != "https://api.openai.com/v1":
+        cfg.setdefault("models", {}).setdefault("providers", {})
+        cfg["models"]["providers"]["openai"] = {"baseUrl": provider_base_url}
 
     # Merge neuroion_core blob if present (same config store; rebranded Neuroion Core)
     core = device_config.get("neuroion_core")
@@ -170,3 +193,36 @@ def send_chat(message: str, gateway_port: int = 3141) -> Optional[str]:
     except Exception as e:
         logger.debug("OpenClaw gateway chat request failed: %s", e)
         return None
+
+
+def build_env_extra_from_db(db) -> Dict[str, str]:
+    """
+    Build env vars for OpenClaw from secure config (API keys).
+    Returns a dict; does not log secrets.
+    """
+    from neuroion.core.memory.repository import SystemConfigRepository
+
+    env: Dict[str, str] = {}
+    provider_config = SystemConfigRepository.get(db, "llm_provider")
+    provider = provider_config.value if isinstance(provider_config.value, str) else provider_config.value.get("provider", "local") if provider_config else "local"
+
+    if provider == "openai":
+        openai_config = SystemConfigRepository.get(db, "llm_openai")
+        if openai_config and isinstance(openai_config.value, dict):
+            api_key = openai_config.value.get("api_key")
+            base_url = openai_config.value.get("base_url")
+            if api_key:
+                env["OPENAI_API_KEY"] = api_key
+            if base_url and base_url != "https://api.openai.com/v1":
+                env["OPENAI_BASE_URL"] = base_url
+    elif provider == "custom":
+        custom_config = SystemConfigRepository.get(db, "llm_custom")
+        if custom_config and isinstance(custom_config.value, dict):
+            api_key = custom_config.value.get("api_key")
+            base_url = custom_config.value.get("base_url")
+            if api_key:
+                env["OPENAI_API_KEY"] = api_key
+            if base_url and base_url != "https://api.openai.com/v1":
+                env["OPENAI_BASE_URL"] = base_url
+
+    return env

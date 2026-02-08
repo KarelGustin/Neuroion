@@ -4,6 +4,7 @@ import WiFiConfig from './WiFiConfig'
 import DeviceTimezone from './DeviceTimezone'
 import HouseholdSetup from './HouseholdSetup'
 import OwnerProfile from './OwnerProfile'
+import ProfileTelegramStep from './ProfileTelegramStep'
 import PrivacySettings from './PrivacySettings'
 import ModelPreset from './ModelPreset'
 import ValidateStep from './ValidateStep'
@@ -16,6 +17,7 @@ const STORAGE_KEYS = {
   device: 'neuroion_setup_device',
   household: 'neuroion_setup_household',
   owner: 'neuroion_setup_owner',
+  profileTelegram: 'neuroion_setup_profile_telegram',
   privacy: 'neuroion_setup_privacy',
   model: 'neuroion_setup_model',
 }
@@ -26,10 +28,11 @@ const STEPS = [
   { number: 3, name: 'Device', component: DeviceTimezone },
   { number: 4, name: 'Household', component: HouseholdSetup },
   { number: 5, name: 'Owner', component: OwnerProfile },
-  { number: 6, name: 'Model', component: ModelPreset },
-  { number: 7, name: 'Privacy', component: PrivacySettings },
-  { number: 8, name: 'Validate', component: ValidateStep },
-  { number: 9, name: 'Finish', component: FinishStep },
+  { number: 6, name: 'Profiel & Telegram', component: ProfileTelegramStep },
+  { number: 7, name: 'Model', component: ModelPreset },
+  { number: 8, name: 'Privacy', component: PrivacySettings },
+  { number: 9, name: 'Validate', component: ValidateStep },
+  { number: 10, name: 'Finish', component: FinishStep },
 ]
 
 function SetupWizard({ onComplete }) {
@@ -39,6 +42,7 @@ function SetupWizard({ onComplete }) {
   const [deviceConfig, setDeviceConfig] = useState(null)
   const [householdConfig, setHouseholdConfig] = useState(null)
   const [ownerConfig, setOwnerConfig] = useState(null)
+  const [profileTelegramConfig, setProfileTelegramConfig] = useState(null)
   const [privacyConfig, setPrivacyConfig] = useState(null)
   const [modelConfig, setModelConfig] = useState(null)
 
@@ -70,15 +74,20 @@ function SetupWizard({ onComplete }) {
         setOwnerConfig(JSON.parse(savedOwner))
         step = 6
       }
+      const savedProfileTelegram = localStorage.getItem(STORAGE_KEYS.profileTelegram)
+      if (savedProfileTelegram) {
+        setProfileTelegramConfig(JSON.parse(savedProfileTelegram))
+        step = 7
+      }
       const savedPrivacy = localStorage.getItem(STORAGE_KEYS.privacy)
       if (savedPrivacy) {
         setPrivacyConfig(JSON.parse(savedPrivacy))
-        step = 7
+        step = 8
       }
       const savedModel = localStorage.getItem(STORAGE_KEYS.model)
       if (savedModel) {
         setModelConfig(JSON.parse(savedModel))
-        step = 8
+        step = 9
       }
       setCurrentStep(step)
     } catch (err) {
@@ -87,16 +96,17 @@ function SetupWizard({ onComplete }) {
   }, [])
 
   const getInitialDataForStep = (stepNumber) => {
-    switch (stepNumber) {
-      case 1: return welcomeConfig
-      case 2: return wifiConfig
-      case 3: return deviceConfig
-      case 4: return householdConfig
-      case 5: return ownerConfig
-      case 6: return modelConfig
-      case 7: return privacyConfig
-      default: return null
+    const base = {
+      1: welcomeConfig,
+      2: wifiConfig,
+      3: deviceConfig,
+      4: householdConfig,
+      5: ownerConfig,
+      6: { ...profileTelegramConfig, ownerName: ownerConfig?.name, householdId: householdConfig?.householdId },
+      7: modelConfig,
+      8: privacyConfig,
     }
+    return base[stepNumber] ?? null
   }
 
   const handleStepComplete = (stepNumber, data) => {
@@ -116,14 +126,17 @@ function SetupWizard({ onComplete }) {
       setOwnerConfig(data)
       try { localStorage.setItem(STORAGE_KEYS.owner, JSON.stringify(data)) } catch (_) {}
     } else if (stepNumber === 6) {
+      setProfileTelegramConfig(data)
+      try { localStorage.setItem(STORAGE_KEYS.profileTelegram, JSON.stringify(data)) } catch (_) {}
+    } else if (stepNumber === 7) {
       setModelConfig(data)
       try { localStorage.setItem(STORAGE_KEYS.model, JSON.stringify(data)) } catch (_) {}
-    } else if (stepNumber === 7) {
+    } else if (stepNumber === 8) {
       setPrivacyConfig(data)
       try { localStorage.setItem(STORAGE_KEYS.privacy, JSON.stringify(data)) } catch (_) {}
-    } else if (stepNumber === 8) {
-      // Validate step - just advance
     } else if (stepNumber === 9) {
+      // Validate step - just advance
+    } else if (stepNumber === 10) {
       try {
         Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key))
       } catch (_) {}

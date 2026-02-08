@@ -46,3 +46,14 @@ SETUP_UI_PORT=3000 ./start-kiosk.sh
 ```
 
 Ensure the Neuroion API and Setup UI are already running before starting the kiosk.
+
+## Hotspot (SoftAP) for onboarding on Pi 5
+
+When you run `npm run dev` on the Pi, the setup wizard is reachable from your phone via the hotspot so you can scan the QR code and complete onboarding.
+
+1. **One-time:** allow the hotspot script to run without sudo password (from repo root):
+   ```bash
+   sudo ./infra/scripts/allow-softap-sudo.sh
+   ```
+2. Start dev: `npm run dev`. The SoftAP will start; connect your phone to Wi‑Fi **Neuroion-Core wizard** (password: `neuroion123`).
+3. On your phone open **http://neuroion.core:3000** for the onboarding wizard (or use the QR code on the kiosk). On Pi 5/Bookworm the script may use NetworkManager; then use **http://10.42.0.1:3000** if neuroion.core does not resolve.

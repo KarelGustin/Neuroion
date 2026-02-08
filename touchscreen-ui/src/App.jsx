@@ -77,18 +77,24 @@ function App() {
         return
       }
 
+      let data = null
+      try {
+        data = await getStatus()
+        if (data?.setup_ui_url && !cancelled) {
+          setSetupUrl(data.setup_ui_url)
+          return
+        }
+      } catch (err) {
+        // Fall through to fallback
+      }
+
       const setupPort = import.meta.env.VITE_SETUP_UI_PORT || '3000'
       const protocol = window.location.protocol || 'http:'
       const currentHost = window.location.hostname
       let resolvedHost = currentHost
 
       if (!currentHost || currentHost === 'localhost' || currentHost === '127.0.0.1') {
-        try {
-          const data = await getStatus()
-          resolvedHost = data?.network?.hostname || data?.network?.ip
-        } catch (err) {
-          resolvedHost = null
-        }
+        resolvedHost = data?.network?.hostname || data?.network?.ip || null
         if (!resolvedHost) {
           resolvedHost = import.meta.env.VITE_SETUP_UI_HOST || 'neuroion.core'
         }

@@ -19,7 +19,7 @@ def get_device_config(db: Session) -> Dict[str, Any]:
     Return the full device config and runtime state as a single dict.
     Keys: device_name (hostname), timezone, wifi_configured, setup_completed,
     hostname, retention_policy, wifi (ssid only, no password), llm_provider,
-    llm_ollama, llm_cloud, llm_custom (no api_key), neuroion_core, privacy.
+    llm_ollama, llm_cloud, llm_openai, llm_custom (no api_key), neuroion_core, privacy.
     """
     device = DeviceConfigRepository.get_or_create(db)
     sys_all = SystemConfigRepository.get_all(db)
@@ -30,7 +30,9 @@ def get_device_config(db: Session) -> Dict[str, Any]:
 
     llm_ollama = sys_all.get("llm_ollama") or {}
     llm_cloud = sys_all.get("llm_cloud") or {}
+    llm_openai = sys_all.get("llm_openai") or {}
     llm_custom = sys_all.get("llm_custom") or {}
+    llm_openai_safe = {k: v for k, v in llm_openai.items() if k != "api_key"}
     llm_custom_safe = {k: v for k, v in llm_custom.items() if k != "api_key"}
 
     neuroion_core = sys_all.get("neuroion_core")
@@ -46,6 +48,7 @@ def get_device_config(db: Session) -> Dict[str, Any]:
         "llm_provider": sys_all.get("llm_provider"),
         "llm_ollama": llm_ollama,
         "llm_cloud": {k: v for k, v in llm_cloud.items() if k != "api_key"},
+        "llm_openai": llm_openai_safe,
         "llm_custom": llm_custom_safe,
         "neuroion_core": neuroion_core,
         "privacy": sys_all.get("privacy"),

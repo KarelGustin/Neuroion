@@ -9,17 +9,23 @@ const OPTIONS = {
     model: 'llama3.2:3b',
     disabled: false,
   },
+  openai: {
+    name: 'OpenAI',
+    description: 'Use your OpenAI API key',
+    model: null,
+    disabled: false,
+  },
+  custom: {
+    name: 'OpenAI-compatible',
+    description: 'Use any OpenAI-compatible API endpoint',
+    model: null,
+    disabled: false,
+  },
   neuroion_agent: {
     name: 'Neuroion Agent',
     description: '€19 per member — latest OpenAI models via Neuroion (coming soon)',
     model: null,
     disabled: true,
-  },
-  custom: {
-    name: 'My own OpenAI API key',
-    description: 'Use your OpenAI account; you pay OpenAI directly',
-    model: null,
-    disabled: false,
   },
 }
 
@@ -39,7 +45,10 @@ function ModelPreset({ onComplete, onBack, initialData }) {
   const savedData = initialData || loadFromStorage()
   const [choice, setChoice] = useState(savedData?.choice ?? savedData?.preset ?? 'local')
   const [apiKey, setApiKey] = useState(savedData?.api_key ? '••••••••••••' : '')
-  const [customModel, setCustomModel] = useState(savedData?.model ?? 'gpt-5.2')
+  const [customModel, setCustomModel] = useState(savedData?.model ?? 'gpt-4o-mini')
+  const [customBaseUrl, setCustomBaseUrl] = useState(
+    savedData?.base_url ?? 'https://api.openai.com/v1',
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
@@ -54,7 +63,7 @@ function ModelPreset({ onComplete, onBack, initialData }) {
 
     try {
       const options = {}
-      if (choice === 'custom') {
+      if (choice === 'openai' || choice === 'custom') {
         const key = apiKey.trim()
         if (!key && savedData?.api_key !== '(saved)') {
           setError('Please enter your OpenAI API key.')
@@ -63,14 +72,20 @@ function ModelPreset({ onComplete, onBack, initialData }) {
         }
         if (key && key !== '••••••••••••') options.api_key = key
         if (customModel.trim()) options.model = customModel.trim()
+        if (choice === 'custom' && customBaseUrl.trim()) {
+          options.base_url = customBaseUrl.trim()
+        }
       }
       const result = await setupModelChoice(choice, options)
       if (result.success) {
         setSuccess(true)
         setTestResult(result.message)
         const modelData = { choice, model_name: result.model_name }
-        if (choice === 'custom' && apiKey && apiKey !== '••••••••••••') {
+        if ((choice === 'openai' || choice === 'custom') && apiKey && apiKey !== '••••••••••••') {
           modelData.model = customModel
+          if (choice === 'custom') {
+            modelData.base_url = customBaseUrl
+          }
           modelData.api_key = '(saved)'
         }
         try {
@@ -91,7 +106,8 @@ function ModelPreset({ onComplete, onBack, initialData }) {
     }
   }
 
-  const showCustomFields = choice === 'custom'
+  const showApiFields = choice === 'openai' || choice === 'custom'
+  const showBaseUrl = choice === 'custom'
 
   return (
     <div className="model-preset">
@@ -124,7 +140,7 @@ function ModelPreset({ onComplete, onBack, initialData }) {
           ))}
         </div>
 
-        {showCustomFields && (
+        {showApiFields && (
           <div className="custom-fields">
             <label>
               <span>OpenAI API key</span>
@@ -141,12 +157,24 @@ function ModelPreset({ onComplete, onBack, initialData }) {
               <span>Model (optional)</span>
               <input
                 type="text"
-                placeholder="gpt-3.5-turbo"
+                placeholder="gpt-4o-mini"
                 value={customModel}
                 onChange={(e) => setCustomModel(e.target.value)}
                 disabled={loading || success}
               />
             </label>
+            {showBaseUrl && (
+              <label>
+                <span>Base URL</span>
+                <input
+                  type="text"
+                  placeholder="https://api.openai.com/v1"
+                  value={customBaseUrl}
+                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  disabled={loading || success}
+                />
+              </label>
+            )}
           </div>
         )}
 

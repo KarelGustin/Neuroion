@@ -48,7 +48,8 @@ async def lifespan(app: FastAPI):
                     from pathlib import Path
                     state_dir = Path(settings.database_path).parent / "openclaw"
                     openclaw_adapter.write_config(device, state_dir)
-                    if openclaw_adapter.start(config_dir=state_dir):
+                    env_extra = openclaw_adapter.build_env_extra_from_db(db)
+                    if openclaw_adapter.start(config_dir=state_dir, env_extra=env_extra):
                         logger.info("Neuroion Agent (OpenClaw) started")
         except Exception as e:
             logger.warning("Could not start Neuroion Agent: %s", e)

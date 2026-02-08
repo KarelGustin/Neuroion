@@ -180,6 +180,7 @@ sudo /usr/local/bin/neuroion-switch-network-mode.sh [setup|normal]
 - **Touchscreen UI**: http://neuroion.local:3001
 - **API**: http://neuroion.local:8000
 - **Setup UI**: http://neuroion.local:3000 (or your custom host, e.g. http://neuroion.core:3000)
+- **Neuroion Agent (OpenClaw) state**: stored under the Neuroion data directory at `OPENCLAW_STATE_DIR/openclaw.json` (managed automatically; no CLI required)
 
 ### Adding Members
 
@@ -261,6 +262,9 @@ Access at:
 When running `npm run dev` from the repo root on a Pi/Linux device, the SoftAP
 setup mode is started automatically (non-fatal). If `sudo` prompts for a
 password, the hotspot will be skipped and the dev servers will still start.
+
+Kiosk mode is also started automatically (non-fatal). If Chromium is missing or
+the kiosk script fails, the dev servers will still start.
 
 ## Production Deployment
 

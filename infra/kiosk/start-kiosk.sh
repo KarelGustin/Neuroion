@@ -39,8 +39,25 @@ else
 	echo "Warning: xbindkeys not installed. Install with: sudo apt-get install xbindkeys (Ctrl+Shift+Q will not work)."
 fi
 
-# Touchscreen UI port (dashboard on Pi): 3001 typical, or 5174 for Vite dev
+# Touchscreen UI: same port as touchscreen-ui/vite.config.js (3001 in dev)
 TOUCHSCREEN_UI_PORT="${TOUCHSCREEN_UI_PORT:-3001}"
+# Use 127.0.0.1 so Chromium connects via IPv4; localhost can resolve to ::1 and cause white/blank page
+KIOSK_URL="http://127.0.0.1:${TOUCHSCREEN_UI_PORT}/"
+
+# Wait for the touchscreen UI dev server to be ready (avoids white screen)
+echo "Waiting for touchscreen UI at $KIOSK_URL..."
+WAIT_MAX=60
+WAIT_N=0
+while ! (echo >/dev/tcp/127.0.0.1/${TOUCHSCREEN_UI_PORT}) 2>/dev/null; do
+  sleep 1
+  WAIT_N=$((WAIT_N + 1))
+  if [ "$WAIT_N" -ge "$WAIT_MAX" ]; then
+    echo "Warning: port $TOUCHSCREEN_UI_PORT not ready after ${WAIT_MAX}s, starting Chromium anyway."
+    break
+  fi
+done
+[ "$WAIT_N" -lt "$WAIT_MAX" ] && echo "Touchscreen UI ready at $KIOSK_URL"
+
 chromium \
     --kiosk \
     --noerrdialogs \
@@ -48,7 +65,7 @@ chromium \
     --disable-session-crashed-bubble \
     --disable-restore-session-state \
     --autoplay-policy=no-user-gesture-required \
-    "http://localhost:${TOUCHSCREEN_UI_PORT}/" &
+    "$KIOSK_URL" &
 
 # Wait for Chromium to start
 sleep 5

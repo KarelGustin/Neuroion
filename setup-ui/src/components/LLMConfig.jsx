@@ -24,6 +24,10 @@ function LLMConfig({ onComplete, onBack, initialData }) {
   const [testResult, setTestResult] = useState(null)
 
   // Custom API fields
+  const [openaiApiKey, setOpenaiApiKey] = useState(savedData?.openaiApiKey || '')
+  const [openaiModel, setOpenaiModel] = useState(
+    savedData?.openaiModel || 'gpt-4o-mini',
+  )
   const [customApiKey, setCustomApiKey] = useState(savedData?.customApiKey || '')
   const [customBaseUrl, setCustomBaseUrl] = useState(
     savedData?.customBaseUrl || 'https://api.openai.com/v1',
@@ -45,7 +49,7 @@ function LLMConfig({ onComplete, onBack, initialData }) {
   }
   const ollamaUrl = getOllamaUrl()
   const [ollamaModel, setOllamaModel] = useState(
-    savedData?.ollamaModel || 'llama3.2',
+    savedData?.ollamaModel || 'llama3.2:3b',
   )
 
   const handleSubmit = async (e) => {
@@ -62,6 +66,18 @@ function LLMConfig({ onComplete, onBack, initialData }) {
         config = {
           base_url: ollamaUrl,
           model: ollamaModel,
+          timeout: 120,
+        }
+      } else if (provider === 'openai') {
+        if (!openaiApiKey) {
+          setError('API key is required for OpenAI')
+          setLoading(false)
+          return
+        }
+        config = {
+          api_key: openaiApiKey,
+          base_url: 'https://api.openai.com/v1',
+          model: openaiModel,
           timeout: 120,
         }
       } else if (provider === 'cloud') {
@@ -90,6 +106,8 @@ function LLMConfig({ onComplete, onBack, initialData }) {
         const llmData = {
           provider,
           config,
+          openaiApiKey,
+          openaiModel,
           customApiKey,
           customBaseUrl,
           customModel,
@@ -139,6 +157,21 @@ function LLMConfig({ onComplete, onBack, initialData }) {
             </div>
           </label>
 
+          <label className="radio-option">
+            <input
+              type="radio"
+              name="provider"
+              value="openai"
+              checked={provider === 'openai'}
+              onChange={(e) => setProvider(e.target.value)}
+              disabled={loading || success}
+            />
+            <div className="radio-content">
+              <strong>OpenAI</strong>
+              <span>Use your own OpenAI API key</span>
+            </div>
+          </label>
+
           <label className="radio-option disabled">
             <input
               type="radio"
@@ -164,8 +197,8 @@ function LLMConfig({ onComplete, onBack, initialData }) {
               disabled={loading || success}
             />
             <div className="radio-content">
-              <strong>Custom API</strong>
-              <span>Use your own OpenAI, Anthropic, or compatible API</span>
+              <strong>OpenAI-compatible</strong>
+              <span>Use any OpenAI-compatible API endpoint</span>
             </div>
           </label>
         </div>
@@ -186,6 +219,34 @@ function LLMConfig({ onComplete, onBack, initialData }) {
             <p className="info-text">
               Ollama is pre-installed on your device
             </p>
+          </div>
+        )}
+
+        {provider === 'openai' && (
+          <div className="provider-config">
+            <div className="form-group">
+              <label htmlFor="openai-key">API Key *</label>
+              <input
+                type="password"
+                id="openai-key"
+                value={openaiApiKey}
+                onChange={(e) => setOpenaiApiKey(e.target.value)}
+                required
+                placeholder="Enter your API key"
+                disabled={loading || success}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="openai-model">Model Name</label>
+              <input
+                type="text"
+                id="openai-model"
+                value={openaiModel}
+                onChange={(e) => setOpenaiModel(e.target.value)}
+                placeholder="gpt-4o-mini"
+                disabled={loading || success}
+              />
+            </div>
           </div>
         )}
 
@@ -258,6 +319,7 @@ function LLMConfig({ onComplete, onBack, initialData }) {
             disabled={
               loading ||
               success ||
+              (provider === 'openai' && !openaiApiKey) ||
               (provider === 'custom' && !customApiKey)
             }
           >

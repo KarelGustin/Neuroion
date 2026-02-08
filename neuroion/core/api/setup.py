@@ -18,6 +18,7 @@ from neuroion.core.memory.repository import (
     HouseholdRepository,
     UserRepository,
     DeviceConfigRepository,
+    ContextSnapshotRepository,
 )
 from neuroion.core.config_store import (
     set_wifi as config_store_set_wifi,
@@ -25,6 +26,7 @@ from neuroion.core.config_store import (
     set_device as config_store_set_device,
     get_wifi_config as config_store_get_wifi_config,
     set_wifi_configured as config_store_set_wifi_configured,
+    get_device_config as config_store_get_device_config,
 )
 from neuroion.core.llm import get_llm_client_from_config
 from neuroion.core.llm.ollama import OllamaClient
@@ -73,7 +75,7 @@ class WiFiApplyResponse(BaseModel):
 
 class LLMConfigRequest(BaseModel):
     """LLM configuration request."""
-    provider: str  # local, cloud, custom
+    provider: str  # local, cloud, openai, custom
     config: Dict[str, Any]  # Provider-specific config
 
 
@@ -141,9 +143,20 @@ class OwnerSetupResponse(BaseModel):
     message: str
 
 
+class OwnerContextRequest(BaseModel):
+    """Save initial context for the owner (for Neuroion Agent ion)."""
+    summary: str
+
+
+class OwnerContextResponse(BaseModel):
+    """Response after saving owner context."""
+    success: bool
+    message: str
+
+
 class ModelPresetRequest(BaseModel):
-    """LLM model choice: local (free), neuroion_agent (unavailable), or custom (own API key)."""
-    choice: str  # "local" | "neuroion_agent" | "custom"
+    """LLM model choice: local (free), openai (own key), custom (OpenAI-compatible), or neuroion_agent (unavailable)."""
+    choice: str  # "local" | "openai" | "custom" | "neuroion_agent"
     model_name: Optional[str] = None  # Optional override for local model
     api_key: Optional[str] = None  # Required when choice is "custom"
     base_url: Optional[str] = None  # Optional for custom (default OpenAI)
@@ -176,6 +189,7 @@ class StatusResponse(BaseModel):
     storage: Optional[Dict[str, Any]] = None  # free_gb, total_gb
     agent: Optional[Dict[str, Any]] = None  # name "Neuroion Agent", status running/stopped
     dashboard_url: Optional[str] = None  # base URL for dashboard UI (e.g. http://host:3001)
+    setup_ui_url: Optional[str] = None  # URL for setup wizard (QR on kiosk; e.g. http://10.42.0.1:3000)
     telegram_connected: Optional[bool] = None  # True if Telegram bot token is configured
     agent_running: Optional[bool] = None  # True if Neuroion Agent (OpenClaw) is running
 
@@ -399,7 +413,7 @@ def configure_llm(
     """
     try:
         # Validate provider
-        if request.provider not in ["local", "cloud", "custom"]:
+        if request.provider not in ["local", "cloud", "openai", "custom"]:
             raise ValueError(f"Invalid provider: {request.provider}")
         
         # Store provider selection
@@ -424,6 +438,24 @@ def configure_llm(
                 category="llm",
             )
         
+        elif request.provider == "openai":
+            api_key = request.config.get("api_key", "")
+            if not api_key:
+                raise ValueError("OpenAI provider requires API key")
+
+            config = {
+                "api_key": api_key,
+                "base_url": request.config.get("base_url", "https://api.openai.com/v1"),
+                "model": request.config.get("model", "gpt-4o-mini"),
+                "timeout": request.config.get("timeout", 120),
+            }
+            SystemConfigRepository.set(
+                db=db,
+                key="llm_openai",
+                value=config,
+                category="llm",
+            )
+
         elif request.provider == "cloud":
             config = {
                 "model": request.config.get("model", "mistralai/Mixtral-8x7B-Instruct-v0.1"),
@@ -446,7 +478,7 @@ def configure_llm(
             config = {
                 "api_key": api_key,
                 "base_url": request.config.get("base_url", "https://api.openai.com/v1"),
-                "model": request.config.get("model", "gpt-3.5-turbo"),
+                "model": request.config.get("model", "gpt-4o-mini"),
                 "timeout": request.config.get("timeout", 120),
             }
             SystemConfigRepository.set(
@@ -465,6 +497,21 @@ def configure_llm(
             test_result = f"Connection successful. Test response: {test_response[:50]}..."
         except Exception as test_error:
             test_result = f"Connection test failed: {str(test_error)}"
+
+        # Restart Neuroion Agent (OpenClaw) if setup is complete
+        try:
+            from neuroion.core.services import openclaw_adapter
+            if openclaw_adapter.is_available():
+                device = config_store_get_device_config(db)
+                if device.get("setup_completed"):
+                    from pathlib import Path
+                    state_dir = Path(app_settings.database_path).parent / "openclaw"
+                    openclaw_adapter.write_config(device, state_dir)
+                    env_extra = openclaw_adapter.build_env_extra_from_db(db)
+                    openclaw_adapter.stop()
+                    openclaw_adapter.start(config_dir=state_dir, env_extra=env_extra)
+        except Exception as agent_error:
+            logger.warning("Could not restart Neuroion Agent after LLM change: %s", agent_error)
 
         # Response must never include api_key or any secret (see CONTRIBUTING.md)
         return LLMConfigResponse(
@@ -571,6 +618,20 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
             missing_steps.append("llm")
         if not status_response.steps.get("household", False):
             missing_steps.append("household")
+
+        # Start Neuroion Agent (OpenClaw) now that setup is complete
+        try:
+            from neuroion.core.services import openclaw_adapter
+            if openclaw_adapter.is_available() and status_response.is_complete:
+                from pathlib import Path
+                device = config_store_get_device_config(db)
+                state_dir = Path(app_settings.database_path).parent / "openclaw"
+                openclaw_adapter.write_config(device, state_dir)
+                env_extra = openclaw_adapter.build_env_extra_from_db(db)
+                openclaw_adapter.stop()
+                openclaw_adapter.start(config_dir=state_dir, env_extra=env_extra)
+        except Exception as agent_error:
+            logger.warning("Could not start Neuroion Agent after setup: %s", agent_error)
         
         return SetupCompleteResponse(
             is_complete=status_response.is_complete,
@@ -607,7 +668,7 @@ def factory_reset(db: Session = Depends(get_db)) -> FactoryResetResponse:
             HouseholdRepository.delete(db, h.id)
         # 3. Delete system config keys so wizard is required again
         for key in (
-            "wifi", "timezone", "llm_provider", "llm_ollama", "llm_cloud", "llm_custom",
+            "wifi", "timezone", "llm_provider", "llm_ollama", "llm_cloud", "llm_openai", "llm_custom",
             "llm_neuroion_agent", "neuroion_core", "privacy",
         ):
             SystemConfigRepository.delete(db, key)
@@ -771,6 +832,51 @@ def setup_owner(
         )
 
 
+@router.post("/owner-context", response_model=OwnerContextResponse)
+def setup_owner_context(
+    request: OwnerContextRequest,
+    db: Session = Depends(get_db),
+) -> OwnerContextResponse:
+    """
+    Save initial context for the first user (owner) for the Neuroion Agent (ion).
+    Called during the personal profile wizard step. No auth required (setup phase).
+    """
+    try:
+        households = HouseholdRepository.get_all(db)
+        if not households:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Household must be created first",
+            )
+        users = UserRepository.get_by_household(db, households[0].id)
+        owner = next((u for u in users if u.role == "owner"), None)
+        if not owner:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Owner must be created first",
+            )
+        summary = (request.summary or "").strip()
+        if not summary:
+            return OwnerContextResponse(success=True, message="No context to save")
+        ContextSnapshotRepository.create(
+            db=db,
+            household_id=households[0].id,
+            event_type="note",
+            summary=summary,
+            context_metadata=None,
+            user_id=owner.id,
+        )
+        return OwnerContextResponse(success=True, message="Context saved for Neuroion Agent")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving owner context: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save context: {str(e)}",
+        )
+
+
 @router.post("/model", response_model=ModelPresetResponse)
 def setup_model_preset(
     request: ModelPresetRequest,
@@ -780,10 +886,10 @@ def setup_model_preset(
     Select LLM: local (free), custom (own OpenAI key), or neuroion_agent (currently unavailable).
     """
     try:
-        if request.choice not in ("local", "neuroion_agent", "custom"):
+        if request.choice not in ("local", "openai", "custom", "neuroion_agent"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail='Invalid choice. Must be "local", "custom", or "neuroion_agent"',
+                detail='Invalid choice. Must be "local", "openai", "custom", or "neuroion_agent"',
             )
 
         if request.choice == "neuroion_agent":
@@ -810,17 +916,58 @@ def setup_model_preset(
                 },
                 category="llm",
             )
+        elif request.choice == "openai":
+            api_key = (request.api_key or "").strip()
+            existing_openai = SystemConfigRepository.get(db, "llm_openai")
+            existing_config = existing_openai.value if (existing_openai and isinstance(existing_openai.value, dict)) else {}
+            if not api_key and not existing_config.get("api_key"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="API key is required when using your OpenAI account.",
+                )
+            model_name = request.model or existing_config.get("model") or "gpt-4o-mini"
+            base_url = (request.base_url or "").strip() or existing_config.get("base_url") or "https://api.openai.com/v1"
+            SystemConfigRepository.set(
+                db=db,
+                key="llm_provider",
+                value={"provider": "openai"},
+                category="llm",
+            )
+            if api_key:
+                SystemConfigRepository.set(
+                    db=db,
+                    key="llm_openai",
+                    value={
+                        "api_key": api_key,
+                        "base_url": base_url,
+                        "model": model_name,
+                        "timeout": 120,
+                    },
+                    category="llm",
+                )
+            else:
+                SystemConfigRepository.set(
+                    db=db,
+                    key="llm_openai",
+                    value={
+                        "api_key": existing_config.get("api_key", ""),
+                        "base_url": base_url,
+                        "model": model_name,
+                        "timeout": 120,
+                    },
+                    category="llm",
+                )
         else:
-            # custom: user's own OpenAI API key (or keep existing if not provided)
+            # custom: OpenAI-compatible API (or keep existing if not provided)
             api_key = (request.api_key or "").strip()
             existing_custom = SystemConfigRepository.get(db, "llm_custom")
             existing_config = existing_custom.value if (existing_custom and isinstance(existing_custom.value, dict)) else {}
             if not api_key and not existing_config.get("api_key"):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="API key is required when using your own OpenAI account.",
+                    detail="API key is required when using a custom OpenAI-compatible API.",
                 )
-            model_name = request.model or existing_config.get("model") or "gpt-3.5-turbo"
+            model_name = request.model or existing_config.get("model") or "gpt-4o-mini"
             base_url = (request.base_url or "").strip() or existing_config.get("base_url") or "https://api.openai.com/v1"
             SystemConfigRepository.set(
                 db=db,
@@ -854,16 +1001,20 @@ def setup_model_preset(
                     category="llm",
                 )
 
-        # Test model availability
+        # Test model availability (non-blocking: config is always saved)
         test_result = None
         try:
             llm_client = get_llm_client_from_config(db)
             test_messages = [{"role": "user", "content": "Hello"}]
-            test_response = llm_client.chat(test_messages, temperature=0.7, max_tokens=10)
+            llm_client.chat(test_messages, temperature=0.7, max_tokens=10)
             test_result = "Model available and responding"
         except Exception as test_error:
-            test_result = f"Model test failed: {str(test_error)}"
             logger.warning(f"Model test failed: {test_error}")
+            err_str = str(test_error)
+            if request.choice == "local" and ("404" in err_str or "Connection" in err_str or "11434" in err_str):
+                test_result = "Config opgeslagen. Ollama was niet bereikbaar – start Ollama voor lokaal model."
+            else:
+                test_result = f"Config opgeslagen. Test mislukt: {err_str[:80]}{'…' if len(err_str) > 80 else ''}"
 
         return ModelPresetResponse(
             success=True,
@@ -906,6 +1057,7 @@ def get_setup_summary(db: Session = Depends(get_db)) -> SetupSummaryResponse:
     llm_provider_config = SystemConfigRepository.get(db, "llm_provider")
     llm_ollama_config = SystemConfigRepository.get(db, "llm_ollama")
     llm_neuroion_config = SystemConfigRepository.get(db, "llm_neuroion_agent")
+    llm_openai_config = SystemConfigRepository.get(db, "llm_openai")
     llm_custom_config = SystemConfigRepository.get(db, "llm_custom")
     llm_preset = "local"
     llm_model = "llama3.2:3b"
@@ -915,8 +1067,10 @@ def get_setup_summary(db: Session = Depends(get_db)) -> SetupSummaryResponse:
             llm_model = llm_ollama_config.value.get("model", "llama3.2:3b")
         elif llm_preset == "neuroion_agent" and llm_neuroion_config and isinstance(llm_neuroion_config.value, dict):
             llm_model = llm_neuroion_config.value.get("model", "gpt-4o")
+        elif llm_preset == "openai" and llm_openai_config and isinstance(llm_openai_config.value, dict):
+            llm_model = llm_openai_config.value.get("model", "gpt-4o-mini")
         elif llm_preset == "custom" and llm_custom_config and isinstance(llm_custom_config.value, dict):
-            llm_model = llm_custom_config.value.get("model", "gpt-3.5-turbo")
+            llm_model = llm_custom_config.value.get("model", "gpt-4o-mini")
     retention_policy = getattr(device_config, "retention_policy", None)
     return SetupSummaryResponse(
         device_name=device_name,
@@ -961,6 +1115,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         llm_provider_config = SystemConfigRepository.get(db, "llm_provider")
         llm_ollama_config = SystemConfigRepository.get(db, "llm_ollama")
         llm_neuroion_config = SystemConfigRepository.get(db, "llm_neuroion_agent")
+        llm_openai_config = SystemConfigRepository.get(db, "llm_openai")
         llm_custom_config = SystemConfigRepository.get(db, "llm_custom")
         
         model_choice = "local"
@@ -975,8 +1130,10 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
                 model_name = llm_ollama_config.value.get("model", "llama3.2:3b")
             elif provider == "neuroion_agent" and llm_neuroion_config and isinstance(llm_neuroion_config.value, dict):
                 model_name = llm_neuroion_config.value.get("model", "gpt-4o")
+            elif provider == "openai" and llm_openai_config and isinstance(llm_openai_config.value, dict):
+                model_name = llm_openai_config.value.get("model", "gpt-4o-mini")
             elif provider == "custom" and llm_custom_config and isinstance(llm_custom_config.value, dict):
-                model_name = llm_custom_config.value.get("model", "gpt-3.5-turbo")
+                model_name = llm_custom_config.value.get("model", "gpt-4o-mini")
             
             # Test LLM health
             try:
@@ -1047,6 +1204,9 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         }
         
         dashboard_url = get_dashboard_base_url(app_settings.dashboard_ui_port)
+        setup_ui_url = NetworkManager.get_setup_ui_base_url(
+            getattr(app_settings, "setup_ui_port", 3000)
+        )
         telegram_connected = bool(getattr(app_settings, "telegram_bot_token", None))
         agent_running = agent_info.get("status") == "running" if agent_info else False
 
@@ -1059,6 +1219,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             storage=storage_info,
             agent=agent_info,
             dashboard_url=dashboard_url,
+            setup_ui_url=setup_ui_url,
             telegram_connected=telegram_connected,
             agent_running=agent_running,
         )

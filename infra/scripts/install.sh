@@ -82,11 +82,11 @@ if [ "$PLATFORM" != "macos" ]; then
     sudo cp "$SCRIPT_DIR/../systemd/neuroion-setup-mode.service" /etc/systemd/system/
     sudo cp "$SCRIPT_DIR/../systemd/neuroion-normal-mode.service" /etc/systemd/system/
     
-    # Copy scripts
-    sudo cp "$SCRIPT_DIR/switch-to-setup-mode.sh" /usr/local/bin/
-    sudo cp "$SCRIPT_DIR/switch-to-normal-mode.sh" /usr/local/bin/
-    sudo cp "$SCRIPT_DIR/switch-network-mode.sh" /usr/local/bin/
-    sudo chmod +x /usr/local/bin/neuroion-*.sh
+    # Copy scripts (names expected by systemd and dev-softap.js)
+    sudo cp "$SCRIPT_DIR/switch-to-setup-mode.sh" /usr/local/bin/neuroion-switch-to-setup-mode.sh
+    sudo cp "$SCRIPT_DIR/switch-to-normal-mode.sh" /usr/local/bin/neuroion-switch-to-normal-mode.sh
+    sudo cp "$SCRIPT_DIR/switch-network-mode.sh" /usr/local/bin/neuroion-switch-network-mode.sh
+    sudo chmod +x /usr/local/bin/neuroion-switch-*.sh /usr/local/bin/neuroion-switch-network-mode.sh
     
     # Setup SoftAP
     sudo "$SCRIPT_DIR/setup-softap.sh"

@@ -208,3 +208,41 @@ class NetworkManager:
         # For now, check if we can get a LAN IP
         ip = NetworkManager.get_lan_ip()
         return ip is not None and not ip.startswith("192.168.4.")  # SoftAP IP range
+
+    @staticmethod
+    def get_setup_ui_base_url(port: int = 3000) -> str:
+        """
+        Get the setup UI base URL reachable from clients on the current network.
+        Used for QR code on kiosk so the phone opens the correct onboarding URL.
+
+        Returns:
+            URL string (e.g. http://10.42.0.1:3000 for nmcli hotspot,
+            http://192.168.4.1:3000 for hostapd, http://<lan_ip>:3000 otherwise).
+        """
+        import subprocess
+        if platform.system() != "Linux":
+            ip = NetworkManager.get_lan_ip()
+            host = ip if ip else "localhost"
+            return f"http://{host}:{port}"
+        try:
+            # Check if nmcli hotspot (Neuroion-Setup) is active
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "NAME,STATE", "connection", "show", "--active"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout:
+                for line in result.stdout.strip().split("\n"):
+                    if ":" in line:
+                        name, state = line.split(":", 1)
+                        if name.strip() == "Neuroion-Setup" and "activated" in state.lower():
+                            return f"http://10.42.0.1:{port}"
+        except Exception:
+            pass
+        # Hostapd (classic SoftAP) active?
+        if NetworkManager.get_current_mode() == "setup":
+            return f"http://192.168.4.1:{port}"
+        ip = NetworkManager.get_lan_ip()
+        host = ip if ip else "localhost"
+        return f"http://{host}:{port}"

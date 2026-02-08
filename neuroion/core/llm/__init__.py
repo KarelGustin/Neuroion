@@ -73,6 +73,18 @@ def get_llm_client_from_config(db: Session) -> LLMClient:
             timeout=120,
         )
 
+    elif provider == "openai":
+        openai_config = SystemConfigRepository.get(db, "llm_openai")
+        if openai_config and isinstance(openai_config.value, dict):
+            config = openai_config.value
+            return OpenAILLMClient(
+                api_key=config.get("api_key", ""),
+                base_url=config.get("base_url", "https://api.openai.com/v1"),
+                model=config.get("model", "gpt-4o-mini"),
+                timeout=config.get("timeout", 120),
+            )
+        raise ValueError("OpenAI provider configured but no API credentials found")
+
     elif provider == "custom":
         # Custom API (OpenAI, Anthropic, etc.)
         custom_config = SystemConfigRepository.get(db, "llm_custom")
@@ -81,7 +93,7 @@ def get_llm_client_from_config(db: Session) -> LLMClient:
             return OpenAILLMClient(
                 api_key=config.get("api_key", ""),
                 base_url=config.get("base_url", "https://api.openai.com/v1"),
-                model=config.get("model", "gpt-3.5-turbo"),
+                model=config.get("model", "gpt-4o-mini"),
                 timeout=config.get("timeout", 120),
             )
         raise ValueError("Custom LLM provider configured but no API credentials found")
