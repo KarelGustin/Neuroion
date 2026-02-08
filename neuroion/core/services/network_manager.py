@@ -125,6 +125,13 @@ class NetworkManager:
                     text=True,
                     timeout=30,
                 )
+                # Ensure NetworkManager is running after onboarding/AP mode
+                subprocess.run(
+                    ["systemctl", "start", "NetworkManager"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
                 return True
             except Exception as e:
                 logger.error(f"Error stopping SoftAP: {e}", exc_info=True)

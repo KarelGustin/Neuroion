@@ -608,6 +608,27 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
         # Mark setup complete via config_store
         config_store_set_setup_completed(db, True)
 
+        # If WiFi credentials were provided but not yet applied, apply now so the
+        # device can switch to the touchscreen dashboard after onboarding.
+        wifi_apply_error = None
+        try:
+            device_config = DeviceConfigRepository.get_or_create(db)
+            wifi_cfg = config_store_get_wifi_config(db)
+            if wifi_cfg and wifi_cfg.get("ssid") and not device_config.wifi_configured:
+                ssid = wifi_cfg.get("ssid", "")
+                password = wifi_cfg.get("password", "")
+                success, message = WiFiService.configure_wifi(ssid, password)
+                if success:
+                    config_store_set_wifi_configured(db, True)
+                    try:
+                        NetworkManager.stop_softap()
+                    except Exception as e:
+                        logger.warning("Could not switch to normal mode after WiFi connect: %s", e)
+                else:
+                    wifi_apply_error = message or "Could not join network."
+        except Exception as e:
+            wifi_apply_error = str(e)
+
         # Get setup status
         status_response = get_setup_status(db)
         
@@ -618,6 +639,9 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
             missing_steps.append("llm")
         if not status_response.steps.get("household", False):
             missing_steps.append("household")
+        if wifi_apply_error and "wifi" not in missing_steps:
+            missing_steps.append("wifi")
+            logger.warning("WiFi apply failed at setup completion: %s", wifi_apply_error)
 
         # Start Neuroion Agent (OpenClaw) now that setup is complete
         try:
