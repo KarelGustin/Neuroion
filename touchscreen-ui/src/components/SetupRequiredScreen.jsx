@@ -58,7 +58,14 @@ function SetupRequiredScreen({ setupUrl }) {
         <h2 className="setup-required-title">Neuroion setup</h2>
         <p className="setup-required-instruction">Scan om te configureren</p>
         <div className="setup-required-code">
-          <QRCodeSVG value={setupUrl} size={qrSize} level="H" includeMargin />
+          <QRCodeSVG
+            value={setupUrl}
+            size={qrSize}
+            level="H"
+            includeMargin
+            bgColor="#000000"
+            fgColor="#FFFFFF"
+          />
         </div>
         <p className="setup-required-url">{setupUrl}</p>
       </div>

@@ -49,7 +49,8 @@
 .setup-required-code {
   display: inline-flex;
   padding: var(--space-3);
-  background: #fff;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   margin-bottom: var(--space-4);
 }

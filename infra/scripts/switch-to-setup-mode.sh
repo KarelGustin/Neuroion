@@ -5,7 +5,7 @@
 set -e
 
 WIFI_INTERFACE="${WIFI_INTERFACE:-wlan0}"
-SOFTAP_SSID="${SOFTAP_SSID:-Neuroion-Setup}"
+SOFTAP_SSID="${SOFTAP_SSID:-Neuroion-Core wizard}"
 SOFTAP_PASSWORD="${SOFTAP_PASSWORD:-neuroion123}"
 SOFTAP_IP="192.168.4.1"
 

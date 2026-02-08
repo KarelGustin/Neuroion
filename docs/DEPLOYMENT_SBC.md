@@ -115,18 +115,18 @@ When no home WiFi is configured or setup is not yet completed, the device should
 
 On first boot (no WiFi configured / setup not complete), Neuroion will:
 - Start in Setup Mode (SoftAP)
-- Create WiFi hotspot: **"Neuroion-Setup"**
+- Create WiFi hotspot: **"Neuroion-Core wizard"**
 - **AP password:** Per-device setup secret (no default). Shown once on the touchscreen/kiosk after boot, or via `GET /setup/setup-secret` (e.g. `http://192.168.4.1:8000/setup/setup-secret`). Note it or scan the QR to open the setup page.
 - IP address: **192.168.4.1**
-- Fallback URL if captive portal does not open: **http://192.168.4.1/setup**
+- Fallback URL if captive portal does not open: **http://192.168.4.1:3000**
 
 Ensure `neuroion-setup-mode` is enabled at install time so the Pi starts in AP on first boot; see install script.
 
 ### 2. Connect to Setup
 
-1. Connect your phone/iPad to "Neuroion-Setup" WiFi
+1. Connect your phone/iPad to "Neuroion-Core wizard" WiFi
 2. Captive portal should automatically open setup page
-3. If not, manually visit: http://192.168.4.1/setup
+3. If not, manually visit: http://192.168.4.1:3000
 
 ### 3. Complete Setup
 
@@ -148,7 +148,7 @@ After completing all steps:
 ## Network Modes
 
 ### Setup Mode (SoftAP)
-- SSID: "Neuroion-Setup"
+- SSID: "Neuroion-Core wizard"
 - IP: 192.168.4.1
 - Captive portal enabled
 - Used during initial setup
@@ -179,7 +179,7 @@ sudo /usr/local/bin/neuroion-switch-network-mode.sh [setup|normal]
 - **Dashboard**: http://neuroion.local/dashboard
 - **Touchscreen UI**: http://neuroion.local:3001
 - **API**: http://neuroion.local:8000
-- **Setup UI**: http://neuroion.local:3000
+- **Setup UI**: http://neuroion.local:3000 (or your custom host, e.g. http://neuroion.core:3000)
 
 ### Adding Members
 
