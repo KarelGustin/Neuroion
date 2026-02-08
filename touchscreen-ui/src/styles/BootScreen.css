@@ -1,0 +1,51 @@
+.boot-screen {
+  min-height: min(100vh, 100dvh);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.boot-logo {
+  width: min(28vw, 220px);
+  height: auto;
+  opacity: 0;
+  filter: drop-shadow(0 0 12px rgba(0, 113, 227, 0.2));
+  animation: boot-logo-fade-in 2s ease forwards,
+    boot-logo-flicker 3.5s ease-in-out 2s infinite;
+}
+
+.boot-logo svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+@keyframes boot-logo-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes boot-logo-flicker {
+  0%,
+  100% {
+    opacity: 0.95;
+    filter: drop-shadow(0 0 18px rgba(0, 113, 227, 0.35));
+  }
+  40% {
+    opacity: 0.85;
+    filter: drop-shadow(0 0 12px rgba(0, 113, 227, 0.25));
+  }
+  70% {
+    opacity: 1;
+    filter: drop-shadow(0 0 22px rgba(0, 113, 227, 0.4));
+  }
+}

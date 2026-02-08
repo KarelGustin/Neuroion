@@ -34,6 +34,11 @@ export async function getStatus() {
   return response.data
 }
 
+export async function getSetupStatus() {
+  const response = await api.get('/setup/status')
+  return response.data
+}
+
 /** Create join token (requires owner auth). Prefer createDashboardJoinToken for kiosk. */
 export async function createJoinToken() {
   const response = await api.post('/api/join-token/create', {

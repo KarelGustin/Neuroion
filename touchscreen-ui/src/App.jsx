@@ -3,22 +3,114 @@ import StatusCard from './components/StatusCard'
 import ActionButton from './components/ActionButton'
 import QRDisplay from './components/QRDisplay'
 import SettingsPanel from './components/SettingsPanel'
+import BootScreen from './components/BootScreen'
+import SetupRequiredScreen from './components/SetupRequiredScreen'
 import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
-import { getStatus, createDashboardJoinToken, factoryReset } from './services/api'
+import { getStatus, getSetupStatus, createDashboardJoinToken, factoryReset } from './services/api'
 import './styles/App.css'
 
 function App() {
   const [status, setStatus] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [statusLoading, setStatusLoading] = useState(true)
   const [qrData, setQrData] = useState(null)
   const [error, setError] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [view, setView] = useState('boot')
+  const [setupComplete, setSetupComplete] = useState(null)
+  const [bootReady, setBootReady] = useState(false)
+  const [setupUrl, setSetupUrl] = useState('')
 
   useEffect(() => {
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 5000) // Refresh every 5 seconds
-    return () => clearInterval(interval)
+    const timer = setTimeout(() => setBootReady(true), 1800)
+    return () => clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const checkSetup = async () => {
+      try {
+        const data = await getSetupStatus()
+        if (!cancelled) {
+          setSetupComplete(Boolean(data?.is_complete))
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSetupComplete(false)
+        }
+      }
+    }
+    checkSetup()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!bootReady || setupComplete === null) return
+    setView(setupComplete ? 'dashboard' : 'setup')
+  }, [bootReady, setupComplete])
+
+  useEffect(() => {
+    if (view !== 'setup') return
+    const interval = setInterval(async () => {
+      try {
+        const data = await getSetupStatus()
+        if (data?.is_complete) {
+          setSetupComplete(true)
+        }
+      } catch (err) {
+        // Ignore transient errors while polling
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [view])
+
+  useEffect(() => {
+    if (view !== 'setup') return
+    let cancelled = false
+    const resolveSetupUrl = async () => {
+      const explicitUrl = import.meta.env.VITE_SETUP_UI_URL
+      if (explicitUrl) {
+        if (!cancelled) {
+          setSetupUrl(explicitUrl)
+        }
+        return
+      }
+
+      const setupPort = import.meta.env.VITE_SETUP_UI_PORT || '3000'
+      const protocol = window.location.protocol || 'http:'
+      const currentHost = window.location.hostname
+      let resolvedHost = currentHost
+
+      if (!currentHost || currentHost === 'localhost' || currentHost === '127.0.0.1') {
+        try {
+          const data = await getStatus()
+          resolvedHost = data?.network?.hostname || data?.network?.ip
+        } catch (err) {
+          resolvedHost = null
+        }
+        if (!resolvedHost) {
+          resolvedHost = import.meta.env.VITE_SETUP_UI_HOST || 'neuroion.local'
+        }
+      }
+
+      if (!cancelled) {
+        setSetupUrl(`${protocol}//${resolvedHost}:${setupPort}`)
+      }
+    }
+    resolveSetupUrl()
+    return () => {
+      cancelled = true
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (view !== 'dashboard') return
+    setStatusLoading(true)
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 5000)
+    return () => clearInterval(interval)
+  }, [view])
 
   const fetchStatus = async () => {
     try {
@@ -28,7 +120,7 @@ function App() {
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      setStatusLoading(false)
     }
   }
 
@@ -68,7 +160,15 @@ function App() {
     }
   }
 
-  if (loading) {
+  if (view === 'boot') {
+    return <BootScreen />
+  }
+
+  if (view === 'setup') {
+    return <SetupRequiredScreen setupUrl={setupUrl} />
+  }
+
+  if (statusLoading) {
     return (
       <div className="app">
         <div className="loading">
