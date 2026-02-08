@@ -90,7 +90,7 @@ function App() {
           resolvedHost = null
         }
         if (!resolvedHost) {
-          resolvedHost = import.meta.env.VITE_SETUP_UI_HOST || 'neuroion.local'
+          resolvedHost = import.meta.env.VITE_SETUP_UI_HOST || 'neuroion.core'
         }
       }
 
