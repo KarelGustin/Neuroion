@@ -1,0 +1,36 @@
+{
+  "name": "@neuroion/zalo",
+  "version": "2026.2.4",
+  "description": "Neuroion Zalo channel plugin",
+  "type": "module",
+  "dependencies": {
+    "neuroion": "workspace:*",
+    "undici": "7.20.0"
+  },
+  "devDependencies": {
+    "neuroion": "workspace:*"
+  },
+  "neuroion": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "zalo",
+      "label": "Zalo",
+      "selectionLabel": "Zalo (Bot API)",
+      "docsPath": "/channels/zalo",
+      "docsLabel": "zalo",
+      "blurb": "Vietnam-focused messaging platform with Bot API.",
+      "aliases": [
+        "zl"
+      ],
+      "order": 80,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@neuroion/zalo",
+      "localPath": "extensions/zalo",
+      "defaultChoice": "npm"
+    }
+  }
+}

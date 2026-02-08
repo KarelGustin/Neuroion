@@ -1,0 +1,9 @@
+.neuroion-gateway-step {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.neuroion-gateway-step .gateway-form {
+  display: grid;
+  gap: 1rem;
+}

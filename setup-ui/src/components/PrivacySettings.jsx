@@ -94,8 +94,8 @@ function PrivacySettings({ onComplete, onBack, initialData }) {
   return (
     <div className="privacy-settings">
       <div className="config-header">
-        <h3>Privacy Settings</h3>
-        <p>Configure how your data is stored and retained</p>
+        <h3>Services & privacy</h3>
+        <p>Core services are enabled by default. Choose how data is stored and retained.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="privacy-form">

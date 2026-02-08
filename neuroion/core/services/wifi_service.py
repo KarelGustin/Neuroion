@@ -6,6 +6,7 @@ Platform-specific WiFi configuration for macOS and Linux (Raspberry Pi).
 import platform
 import subprocess
 import logging
+import os
 from typing import Optional, Tuple, List, Dict
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,11 @@ class WiFiService:
         This is the standard approach for Raspberry Pi and most Linux systems.
         """
         try:
+            def nmcli_cmd(args: List[str]) -> List[str]:
+                if os.geteuid() != 0:
+                    return ["sudo", "-n", "nmcli"] + args
+                return ["nmcli"] + args
+
             # Check if nmcli is available
             result = subprocess.run(
                 ["which", "nmcli"],
@@ -132,7 +138,7 @@ class WiFiService:
             
             # Check if WiFi is enabled
             result = subprocess.run(
-                ["nmcli", "radio", "wifi"],
+                nmcli_cmd(["radio", "wifi"]),
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -141,7 +147,7 @@ class WiFiService:
             if "enabled" not in result.stdout.lower():
                 # Enable WiFi
                 subprocess.run(
-                    ["nmcli", "radio", "wifi", "on"],
+                    nmcli_cmd(["radio", "wifi", "on"]),
                     capture_output=True,
                     text=True,
                     timeout=5,
@@ -151,7 +157,7 @@ class WiFiService:
             # "802-11-wireless-security.key-mgmt: property is missing" on some NM versions
             con_name = "Neuroion-" + "".join(c if c.isalnum() or c in "-_" else "_" for c in ssid)[:32]
             subprocess.run(
-                ["nmcli", "connection", "delete", con_name],
+                nmcli_cmd(["connection", "delete", con_name]),
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -159,28 +165,28 @@ class WiFiService:
 
             if password:
                 result = subprocess.run(
-                    [
-                        "nmcli", "connection", "add",
+                    nmcli_cmd([
+                        "connection", "add",
                         "type", "wifi",
                         "ifname", "wlan0",
                         "con-name", con_name,
                         "ssid", ssid,
                         "wifi-sec.key-mgmt", "wpa-psk",
                         "wifi-sec.psk", password,
-                    ],
+                    ]),
                     capture_output=True,
                     text=True,
                     timeout=15,
                 )
             else:
                 result = subprocess.run(
-                    [
-                        "nmcli", "connection", "add",
+                    nmcli_cmd([
+                        "connection", "add",
                         "type", "wifi",
                         "ifname", "wlan0",
                         "con-name", con_name,
                         "ssid", ssid,
-                    ],
+                    ]),
                     capture_output=True,
                     text=True,
                     timeout=15,
@@ -191,7 +197,7 @@ class WiFiService:
                 return (False, f"Failed to add connection: {error_msg}")
 
             result = subprocess.run(
-                ["nmcli", "connection", "up", con_name],
+                nmcli_cmd(["connection", "up", con_name]),
                 capture_output=True,
                 text=True,
                 timeout=30,

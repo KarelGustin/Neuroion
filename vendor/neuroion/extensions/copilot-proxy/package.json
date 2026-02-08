@@ -1,0 +1,14 @@
+{
+  "name": "@neuroion/copilot-proxy",
+  "version": "2026.2.4",
+  "description": "Neuroion Copilot Proxy provider plugin",
+  "type": "module",
+  "devDependencies": {
+    "neuroion": "workspace:*"
+  },
+  "neuroion": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

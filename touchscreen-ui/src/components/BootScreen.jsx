@@ -1,7 +1,7 @@
 import React from 'react'
 import '../styles/BootScreen.css'
 
-function BootScreen() {
+function BootScreen({ progress = 0, stage = 'starting' }) {
   return (
     <div className="boot-screen">
       <div className="boot-logo" aria-label="Neuroion">
@@ -30,6 +30,13 @@ function BootScreen() {
             strokeLinecap="round"
           />
         </svg>
+      </div>
+      <div className="boot-loader" aria-live="polite">
+        <div className="boot-stage">{stage.replace(/-/g, ' ')}</div>
+        <div className="boot-bar">
+          <div className="boot-bar-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+        </div>
+        <div className="boot-percent">{Math.min(100, Math.max(0, progress))}%</div>
       </div>
     </div>
   )

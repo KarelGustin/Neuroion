@@ -1,0 +1,40 @@
+.neuroion-telegram-step {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.neuroion-telegram-step .telegram-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.neuroion-telegram-step .telegram-card {
+  border: 1px solid var(--border-default, #ddd);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--bg-secondary, #f7f7f7);
+}
+
+.neuroion-telegram-step .telegram-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.neuroion-telegram-step .toggle-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.neuroion-telegram-step .telegram-warning {
+  color: var(--error, #c00);
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.neuroion-telegram-step .telegram-help {
+  color: var(--text-secondary, #666);
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+}

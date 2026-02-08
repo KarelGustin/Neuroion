@@ -1,0 +1,14 @@
+.device-household-step {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.device-household-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.device-household-form .form-group {
+  display: grid;
+  gap: 0.4rem;
+}

@@ -53,14 +53,14 @@ function ValidateStep({ onComplete, onBack }) {
   return (
     <div className="validate-step">
       <div className="config-header">
-        <h3>Checking connection</h3>
-        <p>Verifying network and model.</p>
+        <h3>Activation check</h3>
+        <p>Verify network and model, then connect to your home Wi-Fi.</p>
       </div>
       {status === 'checking' && (
         <p className="validate-status">Checking…</p>
       )}
       {status === 'applying' && (
-        <p className="validate-status">Connecting to Wi‑Fi…</p>
+        <p className="validate-status">Connecting to Wi-Fi…</p>
       )}
       {status === 'success' && (
         <p className="validate-success">All set. Continuing…</p>
@@ -107,7 +107,7 @@ function ValidateStep({ onComplete, onBack }) {
               className="btn-primary"
               onClick={runApplyWifi}
             >
-              Connect to home Wi‑Fi
+              Connect to home Wi-Fi
             </button>
             <button
               type="button"

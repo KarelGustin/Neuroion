@@ -1,0 +1,14 @@
+{
+  "name": "@neuroion/signal",
+  "version": "2026.2.4",
+  "description": "Neuroion Signal channel plugin",
+  "type": "module",
+  "devDependencies": {
+    "neuroion": "workspace:*"
+  },
+  "neuroion": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

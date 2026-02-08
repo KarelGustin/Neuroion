@@ -109,6 +109,26 @@ export async function setupModelChoice(choice, options = {}) {
   return response.data
 }
 
+export async function getTelegramInfo() {
+  const response = await api.get('/setup/telegram-info')
+  return response.data
+}
+
+export async function saveNeuroionGateway(payload) {
+  const response = await api.post('/setup/neuroion/gateway', payload)
+  return response.data
+}
+
+export async function saveNeuroionWorkspace(payload) {
+  const response = await api.post('/setup/neuroion/workspace', payload)
+  return response.data
+}
+
+export async function saveNeuroionChannels(payload) {
+  const response = await api.post('/setup/neuroion/channels', payload)
+  return response.data
+}
+
 export async function checkSetupComplete() {
   const response = await api.get('/setup/complete')
   return response.data

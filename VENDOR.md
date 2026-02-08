@@ -1,2 +1,2 @@
-git fetch openclaw
-git subtree pull --prefix=vendor/openclaw openclaw main --squash
+git fetch neuroion
+git subtree pull --prefix=vendor/neuroion neuroion main --squash

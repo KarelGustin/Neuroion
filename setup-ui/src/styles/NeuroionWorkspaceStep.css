@@ -1,0 +1,9 @@
+.neuroion-workspace-step {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.neuroion-workspace-step .workspace-form {
+  display: grid;
+  gap: 1rem;
+}

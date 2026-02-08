@@ -1,0 +1,14 @@
+{
+  "name": "@neuroion/google-gemini-cli-auth",
+  "version": "2026.2.4",
+  "description": "Neuroion Gemini CLI OAuth provider plugin",
+  "type": "module",
+  "devDependencies": {
+    "neuroion": "workspace:*"
+  },
+  "neuroion": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

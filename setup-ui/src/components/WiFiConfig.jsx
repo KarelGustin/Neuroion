@@ -137,17 +137,19 @@ function WiFiConfig({ onComplete, onBack, initialData }) {
   return (
     <div className="wifi-config">
       <div className="config-header">
-        <h3>WiFi Configuration</h3>
-        <p>Connect your Neuroion Homebase to your WiFi network</p>
+        <h3>Network connection</h3>
+        <p>
+          Choose the Wi-Fi network for Neuroion. We will connect after setup finishes.
+        </p>
         {checkingInternet ? (
           <p className="internet-status checking">Checking internet connection...</p>
         ) : internetConnected ? (
           <p className="internet-status connected">
-            ✓ Internet connection detected - WiFi mode recommended
+            ✓ Internet connection detected - Wi-Fi mode recommended
           </p>
         ) : (
           <p className="off-grid-note">
-            You can continue without WiFi for offline operation
+            You can continue without Wi-Fi for offline operation
           </p>
         )}
       </div>
@@ -162,8 +164,8 @@ function WiFiConfig({ onComplete, onBack, initialData }) {
           >
             <span className="off-grid-icon">📡</span>
             <div className="off-grid-content">
-              <strong>Continue Off Grid</strong>
-              <span>Skip WiFi setup and use offline mode</span>
+              <strong>Continue offline</strong>
+              <span>Skip Wi-Fi setup and use offline mode</span>
             </div>
           </button>
         </div>

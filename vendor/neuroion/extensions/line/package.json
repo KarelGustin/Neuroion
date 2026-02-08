@@ -1,0 +1,29 @@
+{
+  "name": "@neuroion/line",
+  "version": "2026.2.4",
+  "description": "Neuroion LINE channel plugin",
+  "type": "module",
+  "devDependencies": {
+    "neuroion": "workspace:*"
+  },
+  "neuroion": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "line",
+      "label": "LINE",
+      "selectionLabel": "LINE (Messaging API)",
+      "docsPath": "/channels/line",
+      "docsLabel": "line",
+      "blurb": "LINE Messaging API bot for Japan/Taiwan/Thailand markets.",
+      "order": 75,
+      "quickstartAllowFrom": true
+    },
+    "install": {
+      "npmSpec": "@neuroion/line",
+      "localPath": "extensions/line",
+      "defaultChoice": "npm"
+    }
+  }
+}

@@ -6,7 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import BootScreen from './components/BootScreen'
 import SetupRequiredScreen from './components/SetupRequiredScreen'
 import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
-import { getStatus, getSetupStatus, createDashboardJoinToken, factoryReset } from './services/api'
+import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset } from './services/api'
 import './styles/App.css'
 
 function App() {
@@ -19,13 +19,49 @@ function App() {
   const [setupComplete, setSetupComplete] = useState(null)
   const [bootReady, setBootReady] = useState(false)
   const [setupUrl, setSetupUrl] = useState('')
+  const [devProgress, setDevProgress] = useState({ progress: 0, stage: 'starting' })
+  const [neuroionLaunched, setOpenclawLaunched] = useState(false)
+
+  const isDev = import.meta.env.DEV
 
   useEffect(() => {
+    if (isDev) return
     const timer = setTimeout(() => setBootReady(true), 1800)
     return () => clearTimeout(timer)
-  }, [])
+  }, [isDev])
 
   useEffect(() => {
+    if (!isDev) return
+    let cancelled = false
+    const fallback = setTimeout(() => {
+      if (!cancelled) setBootReady(true)
+    }, 15000)
+    const poll = async () => {
+      try {
+        const data = await getDevStatus()
+        if (cancelled) return
+        const progress = Number(data?.progress ?? 0)
+        const stage = data?.stage ?? 'starting'
+        setDevProgress({ progress, stage })
+        if (progress >= 100) {
+          setBootReady(true)
+          clearTimeout(fallback)
+        }
+      } catch (_) {
+        // Ignore errors while dev services boot
+      }
+    }
+    poll()
+    const interval = setInterval(poll, 1000)
+    return () => {
+      cancelled = true
+      clearTimeout(fallback)
+      clearInterval(interval)
+    }
+  }, [isDev])
+
+  useEffect(() => {
+    if (isDev && !bootReady) return
     let cancelled = false
     const checkSetup = async () => {
       try {
@@ -43,7 +79,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [bootReady, isDev])
 
   useEffect(() => {
     if (!bootReady || setupComplete === null) return
@@ -118,6 +154,15 @@ function App() {
     return () => clearInterval(interval)
   }, [view])
 
+  useEffect(() => {
+    if (view !== 'dashboard' || !status || neuroionLaunched) return
+    const autoLaunch = import.meta.env.VITE_NEUROION_AUTOLAUNCH !== '0'
+    if (!autoLaunch) return
+    const url = status?.neuroion_ui_url || 'http://127.0.0.1:3141/neuroion/'
+    setOpenclawLaunched(true)
+    window.location.href = url
+  }, [view, status, neuroionLaunched])
+
   const fetchStatus = async () => {
     try {
       const data = await getStatus()
@@ -159,6 +204,11 @@ function App() {
     })
   }
 
+  const handleOpenNeuroion = () => {
+    const url = status?.neuroion_ui_url || 'http://127.0.0.1:3141/neuroion/'
+    window.location.href = url
+  }
+
   const handleRestart = () => {
     if (window.confirm('Are you sure you want to restart Neuroion?')) {
       // This would call a restart API endpoint
@@ -167,7 +217,9 @@ function App() {
   }
 
   if (view === 'boot') {
-    return <BootScreen />
+    const progress = isDev ? devProgress.progress : 0
+    const stage = isDev ? devProgress.stage : 'starting'
+    return <BootScreen progress={progress} stage={stage} />
   }
 
   if (view === 'setup') {
@@ -260,6 +312,12 @@ function App() {
           label="Open Dashboard"
           icon={<Smartphone size={36} />}
           onClick={handleOpenDashboard}
+          variant="primary"
+        />
+        <ActionButton
+          label="Neuroion UI"
+          icon={<Sparkles size={36} />}
+          onClick={handleOpenNeuroion}
           variant="primary"
         />
         <ActionButton

@@ -2,7 +2,7 @@
 
 ## Coding conventions
 
-- **Branding:** Use "Neuroion", "Neuroion Agent", and "Neuroion Core" in all user-facing strings. Do not expose "OpenClaw" or other vendor names in the UI.
+- **Branding:** Use "Neuroion", "Neuroion Agent", and "Neuroion Core" in all user-facing strings. Do not expose "Neuroion" or other vendor names in the UI.
 - **Naming:** Prefer consumer-friendly, clear names for APIs and UI (e.g. "Add Member" not "CreateUser" in copy).
 - **Config:** Device config and runtime state are centralized; see [CONFIG_SCHEMA.md](CONFIG_SCHEMA.md). Use `neuroion.core.config_store` for setup-related reads/writes where applicable.
 - **Secrets:** Never log API keys, WiFi passwords, or setup secrets. Never return keys in API responses.
@@ -33,4 +33,4 @@ Use this to verify core flows after changes. Full step-by-step checklist: [SMOKE
 - [ ] CONFIG_SCHEMA.md and migration steps updated if config changed.
 - [ ] [SMOKE_TEST.md](SMOKE_TEST.md) run on target platform (e.g. Raspberry Pi or dev).
 - [ ] Changelog or release notes updated.
-- [ ] No OpenClaw or vendor names in user-facing UI (Neuroion branding only).
+- [ ] No Neuroion or vendor names in user-facing UI (Neuroion branding only).

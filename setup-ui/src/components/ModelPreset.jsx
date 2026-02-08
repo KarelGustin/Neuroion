@@ -4,28 +4,22 @@ import '../styles/ModelPreset.css'
 
 const OPTIONS = {
   local: {
-    name: 'Llama 3.2 3B',
-    description: 'Free, runs on this device',
+    name: 'Ollama 3.2 3B (local)',
+    description: 'Runs on this device, works offline',
     model: 'llama3.2:3b',
     disabled: false,
   },
   openai: {
-    name: 'OpenAI',
+    name: 'OpenAI API',
     description: 'Use your OpenAI API key',
     model: null,
     disabled: false,
   },
   custom: {
-    name: 'OpenAI-compatible',
+    name: 'OpenAI-compatible API',
     description: 'Use any OpenAI-compatible API endpoint',
     model: null,
     disabled: false,
-  },
-  neuroion_agent: {
-    name: 'Neuroion Agent',
-    description: '€19 per member — latest OpenAI models via Neuroion (coming soon)',
-    model: null,
-    disabled: true,
   },
 }
 
@@ -43,7 +37,8 @@ function ModelPreset({ onComplete, onBack, initialData }) {
   }
 
   const savedData = initialData || loadFromStorage()
-  const [choice, setChoice] = useState(savedData?.choice ?? savedData?.preset ?? 'local')
+  const initialChoice = savedData?.choice ?? savedData?.preset ?? 'local'
+  const [choice, setChoice] = useState(OPTIONS[initialChoice] ? initialChoice : 'local')
   const [apiKey, setApiKey] = useState(savedData?.api_key ? '••••••••••••' : '')
   const [customModel, setCustomModel] = useState(savedData?.model ?? 'gpt-4o-mini')
   const [customBaseUrl, setCustomBaseUrl] = useState(
@@ -112,8 +107,8 @@ function ModelPreset({ onComplete, onBack, initialData }) {
   return (
     <div className="model-preset">
       <div className="config-header">
-        <h3>LLM Model</h3>
-        <p>Choose how you want to run the assistant</p>
+        <h3>AI model</h3>
+        <p>Kies lokaal (Ollama 3.2 3B) of een API-provider.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="preset-form">
@@ -195,7 +190,7 @@ function ModelPreset({ onComplete, onBack, initialData }) {
           <button
             type="submit"
             className="btn-primary"
-            disabled={loading || success || (choice === 'neuroion_agent')}
+            disabled={loading || success}
           >
             {loading ? 'Configuring...' : success ? 'Success!' : 'Continue'}
           </button>

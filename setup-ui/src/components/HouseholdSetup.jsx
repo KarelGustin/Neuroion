@@ -63,8 +63,8 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
   return (
     <div className="household-setup">
       <div className="config-header">
-        <h3>Household Setup</h3>
-        <p>Create your household and set up the first user (owner)</p>
+        <h3>Household</h3>
+        <p>Create the household and the first owner account.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="household-form">

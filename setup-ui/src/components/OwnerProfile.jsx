@@ -118,8 +118,8 @@ function OwnerProfile({ onComplete, onBack, initialData }) {
   return (
     <div className="owner-profile">
       <div className="config-header">
-        <h3>Owner Profile</h3>
-        <p>Set up your profile as the household owner</p>
+        <h3>Owner profile</h3>
+        <p>Set up the first user profile for your household.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="owner-form">

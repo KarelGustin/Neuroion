@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { saveOwnerContext, getPairingCode } from '../services/api'
+import React, { useState, useEffect } from 'react'
+import { saveOwnerContext, getPairingCode, getTelegramInfo } from '../services/api'
 import '../styles/ProfileTelegramStep.css'
 
 /**
@@ -14,9 +14,32 @@ function ProfileTelegramStep({ onComplete, onBack, initialData }) {
   const [success, setSuccess] = useState(false)
   const [pairingCode, setPairingCode] = useState(null)
   const [pairingLoading, setPairingLoading] = useState(false)
+  const [botUsername, setBotUsername] = useState(null)
+  const [botConnected, setBotConnected] = useState(null)
 
   const householdId = saved.householdId || 1
   const ownerName = saved.ownerName || 'Owner'
+
+  useEffect(() => {
+    let cancelled = false
+    const loadTelegramInfo = async () => {
+      try {
+        const info = await getTelegramInfo()
+        if (cancelled) return
+        setBotUsername(info?.bot_username || null)
+        setBotConnected(Boolean(info?.connected))
+      } catch (_) {
+        if (!cancelled) {
+          setBotUsername(null)
+          setBotConnected(null)
+        }
+      }
+    }
+    loadTelegramInfo()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleShowPairingCode = async () => {
     setPairingLoading(true)
@@ -64,8 +87,8 @@ function ProfileTelegramStep({ onComplete, onBack, initialData }) {
   return (
     <div className="profile-telegram-step">
       <div className="config-header">
-        <h3>Profiel & Telegram</h3>
-        <p>Context voor de Neuroion Agent (ion) en optioneel Telegram koppelen</p>
+        <h3>Profiel & kanaal</h3>
+        <p>Optionele context voor de Neuroion Agent (ion) en Telegram koppelen.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="profile-telegram-form">
@@ -86,10 +109,24 @@ function ProfileTelegramStep({ onComplete, onBack, initialData }) {
         </div>
 
         <section className="telegram-section">
-          <h4>Telegram koppelen</h4>
+          <h4>Telegram koppelen (aanbevolen)</h4>
           <p className="telegram-explanation">
-            Koppel Telegram om met de Neuroion Agent (ion) te chatten. Open Telegram, zoek de bot en voer de koppelcode in.
+            Koppel Telegram om met de Neuroion Agent (ion) te chatten. Open Telegram, zoek de bot en voer de koppelcode in. Je kunt dit ook later doen.
           </p>
+          {botUsername ? (
+            <p className="telegram-bot-name">
+              Gebruik bot: <strong>@{botUsername}</strong>
+            </p>
+          ) : (
+            <p className="telegram-bot-name">
+              Telegram-bot is niet geconfigureerd. Vraag je beheerder om dit in te stellen.
+            </p>
+          )}
+          {botConnected === false && (
+            <p className="telegram-bot-status">
+              Bot-token ontbreekt in de omgeving. Koppelen werkt pas na configuratie.
+            </p>
+          )}
           {!pairingCode ? (
             <button
               type="button"

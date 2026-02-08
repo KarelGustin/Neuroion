@@ -1,0 +1,14 @@
+{
+  "name": "@neuroion/open-prose",
+  "version": "2026.2.4",
+  "description": "OpenProse VM skill pack plugin (slash command + telemetry).",
+  "type": "module",
+  "devDependencies": {
+    "neuroion": "workspace:*"
+  },
+  "neuroion": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

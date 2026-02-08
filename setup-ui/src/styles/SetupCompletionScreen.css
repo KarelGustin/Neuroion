@@ -1,0 +1,44 @@
+.setup-completion-screen {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.completion-card {
+  text-align: center;
+  padding: 2rem;
+  border-radius: 16px;
+  background: var(--bg-secondary, #f5f5f5);
+  border: 1px solid var(--border-default, #ddd);
+  min-width: 320px;
+}
+
+.completion-logo {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.completion-text {
+  color: var(--text-secondary, #666);
+  margin-bottom: 1.5rem;
+}
+
+.completion-bar {
+  height: 10px;
+  background: #e0e0e0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.completion-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6c5ce7, #00b894);
+  transition: width 0.2s ease;
+}
+
+.completion-percent {
+  margin-top: 0.75rem;
+  font-weight: 600;
+}

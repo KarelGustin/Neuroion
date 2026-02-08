@@ -5,10 +5,13 @@ Handles WiFi configuration, LLM provider setup, and household initialization.
 """
 import logging
 import time
+import os
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,8 @@ from neuroion.core.config_store import (
     get_wifi_config as config_store_get_wifi_config,
     set_wifi_configured as config_store_set_wifi_configured,
     get_device_config as config_store_get_device_config,
+    get_neuroion_core_config as config_store_get_neuroion_core_config,
+    set_neuroion_core_config as config_store_set_neuroion_core_config,
 )
 from neuroion.core.llm import get_llm_client_from_config
 from neuroion.core.llm.ollama import OllamaClient
@@ -42,6 +47,17 @@ from neuroion.core.services.network import get_dashboard_base_url
 router = APIRouter(prefix="/setup", tags=["setup"])
 status_router = APIRouter(prefix="/api", tags=["status"])
 
+
+def _deep_merge_dict(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge nested dicts (update overrides base)."""
+    result = dict(base or {})
+    for key, value in (update or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge_dict(result[key], value)
+        else:
+            result[key] = value
+    return result
+
 # Track startup time for uptime calculation
 _startup_time = time.time()
 
@@ -53,6 +69,14 @@ class SetupStatusResponse(BaseModel):
     is_complete: bool
     steps: Dict[str, bool]  # wifi, llm, household
     message: str
+    reset_at: Optional[str] = None
+
+
+class DevStatusResponse(BaseModel):
+    """Dev startup status response (sequenced dev launcher)."""
+    progress: int
+    stage: str
+    updated_at: Optional[str] = None
 
 
 class WiFiConfigRequest(BaseModel):
@@ -191,12 +215,43 @@ class StatusResponse(BaseModel):
     dashboard_url: Optional[str] = None  # base URL for dashboard UI (e.g. http://host:3001)
     setup_ui_url: Optional[str] = None  # URL for setup wizard (QR on kiosk; e.g. http://10.42.0.1:3000)
     telegram_connected: Optional[bool] = None  # True if Telegram bot token is configured
-    agent_running: Optional[bool] = None  # True if Neuroion Agent (OpenClaw) is running
+    agent_running: Optional[bool] = None  # True if Neuroion Agent (Neuroion) is running
+    neuroion_ui_url: Optional[str] = None  # URL for Neuroion Control UI
 
 
 class SetupSecretResponse(BaseModel):
     """One-time setup secret (AP password). Shown on kiosk or sticker."""
     setup_secret: str
+
+
+class TelegramInfoResponse(BaseModel):
+    """Telegram bot info for onboarding display."""
+    bot_username: Optional[str] = None
+    connected: bool
+
+
+class NeuroionGatewayRequest(BaseModel):
+    """Neuroion gateway basics."""
+    port: int = 3141
+    bind: str = "lan"
+    token: str
+
+
+class NeuroionWorkspaceRequest(BaseModel):
+    """Neuroion workspace settings."""
+    workspace: str
+
+
+class NeuroionChannelsRequest(BaseModel):
+    """Neuroion channel settings (Telegram only)."""
+    enabled: bool = True
+    dm_policy: str = "pairing"
+
+
+class NeuroionSetupResponse(BaseModel):
+    """Neuroion setup response."""
+    success: bool
+    message: str
 
 
 class DeviceSetupRequest(BaseModel):
@@ -255,6 +310,82 @@ def get_setup_secret_for_display() -> SetupSecretResponse:
     return SetupSecretResponse(setup_secret=secret)
 
 
+@router.get("/telegram-info", response_model=TelegramInfoResponse)
+def get_telegram_info() -> TelegramInfoResponse:
+    """
+    Return Telegram bot info for onboarding display (no secrets).
+    """
+    bot_username = getattr(app_settings, "telegram_bot_username", None)
+    bot_token = getattr(app_settings, "telegram_bot_token", None)
+    return TelegramInfoResponse(
+        bot_username=bot_username,
+        connected=bool(bot_token),
+    )
+
+
+@router.post("/neuroion/gateway", response_model=NeuroionSetupResponse)
+def setup_neuroion_gateway(
+    request: NeuroionGatewayRequest,
+    db: Session = Depends(get_db),
+) -> NeuroionSetupResponse:
+    """Store Neuroion gateway basics in neuroion_core config."""
+    try:
+        core = config_store_get_neuroion_core_config(db) or {}
+        gateway = core.get("gateway") if isinstance(core.get("gateway"), dict) else {}
+        gateway_update = {
+            "port": request.port,
+            "bind": request.bind,
+            "auth": {"mode": "token", "token": request.token},
+        }
+        core = _deep_merge_dict(core, {"gateway": _deep_merge_dict(gateway, gateway_update)})
+        config_store_set_neuroion_core_config(db, core)
+        return NeuroionSetupResponse(success=True, message="Gateway saved")
+    except Exception as e:
+        logger.error("Failed to save Neuroion gateway: %s", e, exc_info=True)
+        return NeuroionSetupResponse(success=False, message=str(e))
+
+
+@router.post("/neuroion/workspace", response_model=NeuroionSetupResponse)
+def setup_neuroion_workspace(
+    request: NeuroionWorkspaceRequest,
+    db: Session = Depends(get_db),
+) -> NeuroionSetupResponse:
+    """Store Neuroion workspace path in neuroion_core config."""
+    try:
+        core = config_store_get_neuroion_core_config(db) or {}
+        agents = core.get("agents") if isinstance(core.get("agents"), dict) else {}
+        defaults = agents.get("defaults") if isinstance(agents.get("defaults"), dict) else {}
+        defaults["workspace"] = request.workspace
+        agents["defaults"] = defaults
+        core = _deep_merge_dict(core, {"agents": agents})
+        config_store_set_neuroion_core_config(db, core)
+        return NeuroionSetupResponse(success=True, message="Workspace saved")
+    except Exception as e:
+        logger.error("Failed to save Neuroion workspace: %s", e, exc_info=True)
+        return NeuroionSetupResponse(success=False, message=str(e))
+
+
+@router.post("/neuroion/channels", response_model=NeuroionSetupResponse)
+def setup_neuroion_channels(
+    request: NeuroionChannelsRequest,
+    db: Session = Depends(get_db),
+) -> NeuroionSetupResponse:
+    """Store Neuroion channel config (Telegram only)."""
+    try:
+        core = config_store_get_neuroion_core_config(db) or {}
+        channels = core.get("channels") if isinstance(core.get("channels"), dict) else {}
+        if request.enabled:
+            channels["telegram"] = {"dmPolicy": request.dm_policy}
+        else:
+            channels.pop("telegram", None)
+        core = _deep_merge_dict(core, {"channels": channels})
+        config_store_set_neuroion_core_config(db, core)
+        return NeuroionSetupResponse(success=True, message="Channels saved")
+    except Exception as e:
+        logger.error("Failed to save Neuroion channels: %s", e, exc_info=True)
+        return NeuroionSetupResponse(success=False, message=str(e))
+
+
 @router.get("/status", response_model=SetupStatusResponse)
 def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
     """
@@ -289,11 +420,40 @@ def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
         missing = [step for step, done in steps.items() if not done]
         message = f"Setup incomplete. Missing: {', '.join(missing)}"
     
+    reset_at = None
+    try:
+        reset_cfg = SystemConfigRepository.get(db, "setup_reset_at")
+        if reset_cfg and isinstance(reset_cfg.value, str):
+            reset_at = reset_cfg.value
+    except Exception:
+        pass
+
     return SetupStatusResponse(
         is_complete=is_complete,
         steps=steps,
         message=message,
+        reset_at=reset_at,
     )
+
+
+@router.get("/dev-status", response_model=DevStatusResponse)
+def get_dev_status() -> DevStatusResponse:
+    """
+    Dev-only startup progress for sequenced npm run dev.
+    Reads progress from NEUROION_DEV_STATUS_PATH (defaults to /tmp/neuroion-dev-status.json).
+    """
+    status_path = os.environ.get("NEUROION_DEV_STATUS_PATH", "/tmp/neuroion-dev-status.json")
+    try:
+        if os.path.exists(status_path):
+            with open(status_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            progress = int(data.get("progress", 0))
+            stage = str(data.get("stage", "starting"))
+            updated_at = data.get("updated_at")
+            return DevStatusResponse(progress=progress, stage=stage, updated_at=updated_at)
+    except Exception as e:
+        logger.debug("Failed to read dev status file: %s", e)
+    return DevStatusResponse(progress=0, stage="starting", updated_at=None)
 
 
 @router.get("/internet/check", response_model=InternetCheckResponse)
@@ -498,18 +658,18 @@ def configure_llm(
         except Exception as test_error:
             test_result = f"Connection test failed: {str(test_error)}"
 
-        # Restart Neuroion Agent (OpenClaw) if setup is complete
+        # Restart Neuroion Agent (Neuroion) if setup is complete
         try:
-            from neuroion.core.services import openclaw_adapter
-            if openclaw_adapter.is_available():
+            from neuroion.core.services import neuroion_adapter
+            if neuroion_adapter.is_available():
                 device = config_store_get_device_config(db)
                 if device.get("setup_completed"):
                     from pathlib import Path
-                    state_dir = Path(app_settings.database_path).parent / "openclaw"
-                    openclaw_adapter.write_config(device, state_dir)
-                    env_extra = openclaw_adapter.build_env_extra_from_db(db)
-                    openclaw_adapter.stop()
-                    openclaw_adapter.start(config_dir=state_dir, env_extra=env_extra)
+                    state_dir = Path(app_settings.database_path).parent / "neuroion"
+                    neuroion_adapter.write_config(device, state_dir)
+                    env_extra = neuroion_adapter.build_env_extra_from_db(db)
+                    neuroion_adapter.stop()
+                    neuroion_adapter.start(config_dir=state_dir, env_extra=env_extra)
         except Exception as agent_error:
             logger.warning("Could not restart Neuroion Agent after LLM change: %s", agent_error)
 
@@ -617,7 +777,16 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
             if wifi_cfg and wifi_cfg.get("ssid") and not device_config.wifi_configured:
                 ssid = wifi_cfg.get("ssid", "")
                 password = wifi_cfg.get("password", "")
-                success, message = WiFiService.configure_wifi(ssid, password)
+                success = False
+                message = None
+                for attempt in range(1, 4):
+                    success, message = WiFiService.configure_wifi(ssid, password)
+                    if success:
+                        break
+                    wifi_apply_error = message or "Could not join network."
+                    logger.warning("WiFi connect attempt %s/3 failed: %s", attempt, wifi_apply_error)
+                    if attempt < 3:
+                        time.sleep(2)
                 if success:
                     config_store_set_wifi_configured(db, True)
                     try:
@@ -643,17 +812,17 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
             missing_steps.append("wifi")
             logger.warning("WiFi apply failed at setup completion: %s", wifi_apply_error)
 
-        # Start Neuroion Agent (OpenClaw) now that setup is complete
+        # Start Neuroion Agent (Neuroion) now that setup is complete
         try:
-            from neuroion.core.services import openclaw_adapter
-            if openclaw_adapter.is_available() and status_response.is_complete:
+            from neuroion.core.services import neuroion_adapter
+            if neuroion_adapter.is_available() and status_response.is_complete:
                 from pathlib import Path
                 device = config_store_get_device_config(db)
-                state_dir = Path(app_settings.database_path).parent / "openclaw"
-                openclaw_adapter.write_config(device, state_dir)
-                env_extra = openclaw_adapter.build_env_extra_from_db(db)
-                openclaw_adapter.stop()
-                openclaw_adapter.start(config_dir=state_dir, env_extra=env_extra)
+                state_dir = Path(app_settings.database_path).parent / "neuroion"
+                neuroion_adapter.write_config(device, state_dir)
+                env_extra = neuroion_adapter.build_env_extra_from_db(db)
+                neuroion_adapter.stop()
+                neuroion_adapter.start(config_dir=state_dir, env_extra=env_extra)
         except Exception as agent_error:
             logger.warning("Could not start Neuroion Agent after setup: %s", agent_error)
         
@@ -700,8 +869,12 @@ def factory_reset(db: Session = Depends(get_db)) -> FactoryResetResponse:
         DeviceConfigRepository.update(
             db, setup_completed=False, wifi_configured=False, hostname="Neuroion Core"
         )
+        # 5. Store reset marker for onboarding UI (clears prefilled inputs)
+        SystemConfigRepository.set(
+            db, "setup_reset_at", datetime.utcnow().isoformat(), category="setup"
+        )
         db.commit()
-        # 5. Clear setup secret so new one is generated
+        # 6. Clear setup secret so new one is generated
         setup_secret_clear()
         return FactoryResetResponse(success=True, message="Factory reset complete")
     except Exception as e:
@@ -760,6 +933,16 @@ def setup_device(
     try:
         name = (request.device_name or "Neuroion Core").strip() or "Neuroion Core"
         config_store_set_device(db, device_name=name, timezone=request.timezone)
+        # Prepare Neuroion config early (agent identity) without starting the agent yet.
+        try:
+            from neuroion.core.services import neuroion_adapter
+            if neuroion_adapter.is_available():
+                from pathlib import Path
+                device = config_store_get_device_config(db)
+                state_dir = Path(app_settings.database_path).parent / "neuroion"
+                neuroion_adapter.write_config(device, state_dir)
+        except Exception as agent_error:
+            logger.warning("Could not write Neuroion config after device setup: %s", agent_error)
         return DeviceSetupResponse(success=True, message="Device settings saved")
     except Exception as e:
         logger.error(f"Error saving device settings: {e}", exc_info=True)
@@ -1200,11 +1383,11 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         except (OSError, Exception):
             pass
 
-        # Agent (Neuroion Agent / OpenClaw)
+        # Agent (Neuroion Agent / Neuroion)
         agent_info = None
         try:
-            from neuroion.core.services import openclaw_adapter
-            agent_info = {"name": "Neuroion Agent", "status": "running" if openclaw_adapter.is_running() else "stopped"}
+            from neuroion.core.services import neuroion_adapter
+            agent_info = {"name": "Neuroion Agent", "status": "running" if neuroion_adapter.is_running() else "stopped"}
         except Exception:
             agent_info = {"name": "Neuroion Agent", "status": "stopped"}
 
@@ -1231,6 +1414,8 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         setup_ui_url = NetworkManager.get_setup_ui_base_url(
             getattr(app_settings, "setup_ui_port", 3000)
         )
+        neuroion_host = lan_ip if lan_ip and lan_ip != "—" else "127.0.0.1"
+        neuroion_ui_url = f"http://{neuroion_host}:3141/neuroion/"
         telegram_connected = bool(getattr(app_settings, "telegram_bot_token", None))
         agent_running = agent_info.get("status") == "running" if agent_info else False
 
@@ -1246,6 +1431,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             setup_ui_url=setup_ui_url,
             telegram_connected=telegram_connected,
             agent_running=agent_running,
+            neuroion_ui_url=neuroion_ui_url,
         )
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)

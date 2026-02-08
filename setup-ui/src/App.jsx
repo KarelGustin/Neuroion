@@ -3,6 +3,7 @@ import PairingQR from './components/PairingQR'
 import Status from './components/Status'
 import Logo from './components/Logo'
 import SetupWizard from './components/SetupWizard'
+import SetupCompletionScreen from './components/SetupCompletionScreen'
 import Dashboard from './components/Dashboard'
 import ConfigQR from './components/ConfigQR'
 import { getPairingCode, checkHealth, getSetupStatus } from './services/api'
@@ -19,6 +20,7 @@ function App() {
   const [error, setError] = useState(null)
   const [setupComplete, setSetupComplete] = useState(false)
   const [checkingSetup, setCheckingSetup] = useState(true)
+  const [showCompletion, setShowCompletion] = useState(false)
 
   useEffect(() => {
     checkHealth()
@@ -56,6 +58,19 @@ function App() {
     try {
       const setupStatus = await getSetupStatus()
       setSetupComplete(setupStatus.is_complete)
+      if (!setupStatus.is_complete && setupStatus.reset_at) {
+        try {
+          const storedReset = localStorage.getItem('neuroion_setup_reset_at')
+          if (storedReset !== setupStatus.reset_at) {
+            Object.keys(localStorage).forEach((key) => {
+              if (key.startsWith('neuroion_setup_')) {
+                localStorage.removeItem(key)
+              }
+            })
+            localStorage.setItem('neuroion_setup_reset_at', setupStatus.reset_at)
+          }
+        } catch (_) {}
+      }
       if (setupStatus.is_complete) {
         await startPairing()
       }
@@ -82,6 +97,7 @@ function App() {
 
   const handleSetupComplete = async () => {
     setSetupComplete(true)
+    setShowCompletion(true)
     // Immediately fetch pairing code to show Telegram QR
     await startPairing()
   }
@@ -113,6 +129,16 @@ function App() {
       <div className="app app-kiosk">
         <div className="container">
           <Dashboard isKiosk />
+        </div>
+      </div>
+    )
+  }
+
+  if (showCompletion) {
+    return (
+      <div className="app">
+        <div className="container">
+          <SetupCompletionScreen onDone={() => setShowCompletion(false)} />
         </div>
       </div>
     )

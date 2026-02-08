@@ -126,7 +126,7 @@ terminalcommando’s
 
 configuratiebestanden
 
-CLI-flows van OpenClaw
+CLI-flows van Neuroion
 
 Door:
 
@@ -136,11 +136,11 @@ met uitleg, keuzes en defaults
 
 gestuurd door een Neuroion agent
 
-5.2 Integratie van OpenClaw
+5.2 Integratie van Neuroion
 
-OpenClaw wordt niet verwijderd, maar:
+Neuroion wordt niet verwijderd, maar:
 
-de CLI-wizard van OpenClaw wordt vertaald naar UI-stappen
+de CLI-wizard van Neuroion wordt vertaald naar UI-stappen
 
 alle acties die normaal in de terminal gebeuren:
 
@@ -155,9 +155,9 @@ gebeuren via de onboarding wizard
 
 Conceptueel:
 
-Neuroion Agent = UI-laag bovenop OpenClaw
+Neuroion Agent = UI-laag bovenop Neuroion
 
-De gebruiker hoeft niet te weten wat OpenClaw is.
+De gebruiker hoeft niet te weten wat Neuroion is.
 
 6. Default configuratie (opinioned, maar aanpasbaar)
 6.1 LLM
@@ -230,6 +230,53 @@ focust op core-functionaliteit
 geen overload aan keuzes
 
 “advanced” pas later
+
+8.1 Neuroion onboarding — Functionele ontleding
+
+Neuroion is geen "app", maar een agent runtime + service orchestrator.
+De onboarding van Neuroion heeft drie doelen:
+
+Agent identity vastleggen
+
+LLM & execution context instellen
+
+Communicatiekanalen koppelen
+
+Neuroion vertaalt dit 1-op-1 naar een consumer flow, zonder CLI-concepten te tonen.
+
+Fase 0 — Pre-onboarding (Touchscreen, Neuroion-only)
+Doel: toegang krijgen
+Touchscreen toont QR + hotspot info, geen keuzes
+
+Fase 1 — Welkom & context (Agent identity)
+UI: naam systeem, korte context
+Onder de motorkap: neuroion init, agent ID, basis config
+
+Fase 2 — LLM setup (vereenvoudigd)
+UI: lokale AI is default (Ollama), geen keuze
+Onder de motorkap: check Ollama, register local LLM
+
+Fase 3 — Communicatiekanaal (Telegram default)
+UI: Telegram koppelen of later
+Onder de motorkap: neuroion channel add telegram, polling/webhook
+
+Fase 4 — Netwerkconfiguratie (Neuroion-specifiek)
+UI: Wi-Fi kiezen en verbinden
+Onder de motorkap: hotspot stoppen, wifi client config, netwerk herstart
+
+Fase 5 — Services & permissions (minimaal)
+UI: standaard services actief, geen overload
+Onder de motorkap: enable core services, memory/persistence
+
+Fase 6 — Activatie & handoff
+UI: Neuroion is actief, status + hostname
+Onder de motorkap: neuroion start, watchdog, autostart
+
+Conceptueel:
+Neuroion is het brein.
+Neuroion is het lichaam en gezicht.
+De onboarding wizard is een state machine die Neuroion commando's
+deterministisch uitvoert zonder de gebruiker ooit Neuroion te tonen.
 
 9. Filosofie & UX-principes
 

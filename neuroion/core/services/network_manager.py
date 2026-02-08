@@ -5,6 +5,7 @@ Provides platform-agnostic interface for managing SoftAP and LAN modes.
 """
 import platform
 import logging
+import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -82,9 +83,12 @@ class NetworkManager:
         elif platform_name in ["raspberry_pi", "jetson", "linux"]:
             import subprocess
             try:
+                cmd = ["systemctl", "start", "neuroion-setup-mode"]
+                if os.geteuid() != 0:
+                    cmd = ["sudo", "-n"] + cmd
                 # Start setup mode service
                 result = subprocess.run(
-                    ["systemctl", "start", "neuroion-setup-mode"],
+                    cmd,
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -112,22 +116,29 @@ class NetworkManager:
         elif platform_name in ["raspberry_pi", "jetson", "linux"]:
             import subprocess
             try:
+                stop_setup = ["systemctl", "stop", "neuroion-setup-mode"]
+                start_normal = ["systemctl", "start", "neuroion-normal-mode"]
+                start_nm = ["systemctl", "start", "NetworkManager"]
+                if os.geteuid() != 0:
+                    stop_setup = ["sudo", "-n"] + stop_setup
+                    start_normal = ["sudo", "-n"] + start_normal
+                    start_nm = ["sudo", "-n"] + start_nm
                 # Stop setup mode, start normal mode
                 subprocess.run(
-                    ["systemctl", "stop", "neuroion-setup-mode"],
+                    stop_setup,
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
                 subprocess.run(
-                    ["systemctl", "start", "neuroion-normal-mode"],
+                    start_normal,
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
                 # Ensure NetworkManager is running after onboarding/AP mode
                 subprocess.run(
-                    ["systemctl", "start", "NetworkManager"],
+                    start_nm,
                     capture_output=True,
                     text=True,
                     timeout=30,

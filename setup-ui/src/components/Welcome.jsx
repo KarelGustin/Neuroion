@@ -2,8 +2,8 @@ import React from 'react'
 import '../styles/Welcome.css'
 
 /**
- * Step 0: Welcome — "Connect to Neuroion Core Wi-Fi" + fallback URL + CTA Start.
- * One tap to continue to WiFi step.
+ * Step 0: Welcome — brief intro + fallback URL + CTA Start.
+ * One tap to continue.
  */
 function Welcome({ onComplete, onBack }) {
   const setupUrl = typeof window !== 'undefined'
@@ -13,13 +13,13 @@ function Welcome({ onComplete, onBack }) {
   return (
     <div className="welcome-step">
       <div className="welcome-content">
-        <h3 className="welcome-title">Connect to Neuroion Core Wi‑Fi</h3>
+        <h3 className="welcome-title">Welcome to Neuroion Core</h3>
         <p className="welcome-text">
-          Connect your phone or tablet to the <strong>Neuroion-Setup</strong> Wi‑Fi network.
-          Then open the setup page to configure your Neuroion Core.
+          In a few steps we will set up your system identity, local AI, and how you want to talk to Neuroion.
+          You will connect to your home Wi-Fi near the end of the setup.
         </p>
         <p className="welcome-fallback">
-          If the setup page doesn’t open automatically, go to:
+          If the setup page doesn't open automatically, go to:
         </p>
         <p className="welcome-url">{setupUrl}</p>
         <button

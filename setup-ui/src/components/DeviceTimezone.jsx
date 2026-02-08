@@ -47,8 +47,8 @@ function DeviceTimezone({ onComplete, onBack, initialData }) {
   return (
     <div className="device-timezone">
       <div className="config-header">
-        <h3>Device & timezone</h3>
-        <p>Name your Neuroion Core and set your timezone.</p>
+        <h3>System identity</h3>
+        <p>Name your Neuroion Core and set its timezone.</p>
       </div>
       <form onSubmit={handleSubmit}>
         <label className="field-label">Device name</label>

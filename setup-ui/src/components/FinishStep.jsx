@@ -25,8 +25,8 @@ function FinishStep({ onComplete, onBack }) {
   return (
     <div className="finish-step">
       <div className="config-header">
-        <h3>You're all set</h3>
-        <p>Tap Finish to complete setup. Your Neuroion Core will then show the dashboard. The Neuroion Agent will be started and, if Telegram is configured, it will be connected to the agent.</p>
+        <h3>You are all set</h3>
+        <p>Tap Finish to complete setup. We will start Neuroion Agent and switch to your Wi‑Fi.</p>
       </div>
       {status === 'idle' && (
         <div className="form-actions">

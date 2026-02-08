@@ -1,7 +1,7 @@
 """
-Agent API: status and future proxy to Neuroion Agent (OpenClaw).
+Agent API: status and future proxy to Neuroion Agent (Neuroion).
 
-All agent-related access goes through this API; no OpenClaw branding in responses.
+All agent-related access goes through this API; no Neuroion branding in responses.
 """
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -21,8 +21,8 @@ def get_agent_status() -> AgentStatusResponse:
     Get Neuroion Agent status. Use this API as the single entry point for agent status.
     """
     try:
-        from neuroion.core.services import openclaw_adapter
-        running = openclaw_adapter.is_running()
+        from neuroion.core.services import neuroion_adapter
+        running = neuroion_adapter.is_running()
     except Exception:
         running = False
     return AgentStatusResponse(name="Neuroion Agent", running=running)

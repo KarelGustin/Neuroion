@@ -180,7 +180,7 @@ sudo /usr/local/bin/neuroion-switch-network-mode.sh [setup|normal]
 - **Touchscreen UI**: http://neuroion.local:3001
 - **API**: http://neuroion.local:8000
 - **Setup UI**: http://neuroion.local:3000 (or your custom host, e.g. http://neuroion.core:3000)
-- **Neuroion Agent (OpenClaw) state**: stored under the Neuroion data directory at `OPENCLAW_STATE_DIR/openclaw.json` (managed automatically; no CLI required)
+- **Neuroion Agent (Neuroion) state**: stored under the Neuroion data directory at `NEUROION_STATE_DIR/neuroion.json` (managed automatically; no CLI required)
 
 ### Adding Members
 
