@@ -1,0 +1,28 @@
+{
+  "name": "neuroion-monorepo-ui",
+  "private": true,
+  "scripts": {
+    "lint:js": "eslint \"project/**/*.{js,jsx,ts,tsx}\"",
+    "lint:css": "stylelint \"project/**/*.{css,scss}\"",
+    "storybook": "start-storybook -p 6006 -c project/dashboard-ui/.storybook",
+    "test:storybook": "storybook test-runner -c project/dashboard-ui/.storybook",
+    "lhci": "lhci autorun"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "^6.5.0",
+    "@storybook/addon-viewport": "^6.5.0",
+    "@storybook/react-vite": "^6.5.0",
+    "@storybook/test-runner": "^0.1.0",
+    "eslint": "^8.0.0",
+    "eslint-plugin-jsx-a11y": "^6.4.1",
+    "eslint-plugin-react": "^7.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "stylelint": "^14.0.0",
+    "stylelint-config-css-modules": "^3.0.0",
+    "stylelint-config-standard": "^24.0.0",
+    "stylelint-prettier": "^2.0.0",
+    "lighthouse": "^10.0.0",
+    "@lhci/cli": "^0.8.0"
+  }
+}
