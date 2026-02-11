@@ -178,7 +178,9 @@ def build_chat_messages(
     
     if context_snapshots:
         system_parts.append("\n" + format_context_snapshots(context_snapshots))
-    
+    if user_preferences or household_preferences:
+        system_parts.append("\n" + format_preferences(user_preferences, household_preferences))
+
     messages.append({
         "role": "system",
         "content": "\n".join(system_parts),

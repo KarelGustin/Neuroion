@@ -102,16 +102,14 @@ def chat(
     # Increment daily request counter
     RequestCounter.increment(db, household_id)
     
-    # Get conversation history if not provided
-    conversation_history = request.conversation_history
-    if conversation_history is None:
-        conversation_history = ChatMessageRepository.get_conversation_history(
-            db=db,
-            household_id=household_id,
-            user_id=user_id,
-            limit=20,
-        )
-    
+    # Always fetch conversation history from DB (server is source of truth; works after offline/restart)
+    conversation_history = ChatMessageRepository.get_conversation_history(
+        db=db,
+        household_id=household_id,
+        user_id=user_id,
+        limit=20,
+    )
+
     # Save user message
     ChatMessageRepository.create(
         db=db,

@@ -78,7 +78,7 @@ class Agent:
         if user_id is not None:
             PreferenceRepository.delete_onboarding_preferences(db, household_id, user_id)
 
-        # Get context
+        # Get context (memories + preferences)
         context_snapshots = ContextSnapshotRepository.get_recent(
             db, household_id, limit=10, user_id=user_id
         )
@@ -90,7 +90,9 @@ class Agent:
             }
             for snap in context_snapshots
         ]
-        
+        user_preferences = PreferenceRepository.get_all(db, household_id, user_id=user_id) if db else None
+        household_preferences = PreferenceRepository.get_all(db, household_id, user_id=None) if db else None
+
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)
 
@@ -129,8 +131,8 @@ class Agent:
             conversation_history=filtered_history,
             llm=self.llm,
             context_snapshots=context_dicts,
-            user_preferences=None,
-            household_preferences=None,
+            user_preferences=user_preferences,
+            household_preferences=household_preferences,
         )
         # Post-process response: strip markdown bold syntax and trim
         llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)
