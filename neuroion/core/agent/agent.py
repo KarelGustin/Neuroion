@@ -34,10 +34,7 @@ from neuroion.core.agent.policies.guardrails import get_guardrails
 from neuroion.core.agent.policies.validator import get_validator
 from neuroion.core.observability.tracing import start_run, end_run
 from neuroion.core.observability.metrics import record_run_result
-from neuroion.core.memory.repository import (
-    ContextSnapshotRepository,
-    PreferenceRepository,
-)
+from neuroion.core.memory.repository import ContextSnapshotRepository
 from neuroion.core.security.audit import AuditLogger
 
 
@@ -61,7 +58,6 @@ class Agent:
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         force_task_mode: bool = False,
-        skip_onboarding: bool = False,
     ) -> Dict[str, Any]:
         """
         Process a user message and return structured response.
@@ -89,17 +85,6 @@ class Agent:
             for snap in context_snapshots
         ]
         
-        # Get preferences: user-specific and household-level separately
-        # PreferenceRepository.get_all returns Dict[str, Any]
-        household_prefs_dict = PreferenceRepository.get_all(
-            db, household_id, user_id=None
-        )
-        user_prefs_dict = {}
-        if user_id:
-            user_prefs_dict = PreferenceRepository.get_all(
-                db, household_id, user_id=user_id
-            )
-        
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)
 
@@ -112,20 +97,6 @@ class Agent:
             if result is not None:
                 return result
 
-        # Check if in onboarding mode
-        in_onboarding = False
-        current_question = None
-        if user_id and not skip_onboarding:
-            from neuroion.core.agent.onboarding import (
-                get_current_onboarding_question,
-                save_onboarding_answer,
-                advance_onboarding,
-                is_onboarding_completed,
-            )
-            
-            current_question = get_current_onboarding_question(db, household_id, user_id)
-            in_onboarding = current_question is not None
-        
         llm_response = run_agent_turn(
             db=db,
             household_id=household_id,
@@ -134,42 +105,14 @@ class Agent:
             conversation_history=conversation_history,
             llm=self.llm,
             context_snapshots=context_dicts,
-            user_preferences=user_prefs_dict if user_prefs_dict else None,
-            household_preferences=household_prefs_dict if household_prefs_dict else None,
+            user_preferences=None,
+            household_preferences=None,
         )
         # Post-process response: strip markdown bold syntax and trim
         llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)
         llm_response = llm_response.strip()
         
-        # Handle onboarding if in progress
-        if in_onboarding and current_question:
-            # Save the answer to current question
-            save_onboarding_answer(
-                db=db,
-                household_id=household_id,
-                user_id=user_id,
-                question_key=current_question["key"],
-                answer=message,
-                category=current_question["category"],
-            )
-            
-            # Advance to next question
-            next_question = advance_onboarding(db, household_id, user_id)
-            
-            # If there's a next question, modify response to include it
-            if next_question:
-                llm_response = f"{llm_response}\n\n{next_question['question']}"
-            elif is_onboarding_completed(db, household_id, user_id):
-                llm_response = f"{llm_response}\n\nGreat! Thanks for answering all the questions. I know you better now and can help you more personally. What can I help you with today?"
-            
-            # During onboarding, don't propose actions
-            return {
-                "message": llm_response,
-                "reasoning": "",
-                "actions": [],
-            }
-        
-        if user_id and not in_onboarding:
+        if user_id:
             self._store_context_snapshot(
                 db=db,
                 household_id=household_id,

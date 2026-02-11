@@ -9,13 +9,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from neuroion.core.memory.db import get_db
-from neuroion.core.memory.repository import HouseholdRepository, UserRepository, ChatMessageRepository
+from neuroion.core.memory.repository import HouseholdRepository, UserRepository
 from neuroion.core.security.tokens import TokenManager, PairingCodeStore
-from neuroion.core.agent.onboarding import (
-    is_onboarding_completed,
-    get_current_onboarding_question,
-)
-from neuroion.core.agent.agent import Agent
 
 router = APIRouter(prefix="/pair", tags=["pairing"])
 
@@ -152,26 +147,11 @@ def confirm_pairing(
         "device_id": request.device_id,
     })
     
-    # Start onboarding conversation if new user or not completed
-    onboarding_message = None
-    if is_new_user or not is_onboarding_completed(db, household_id, user.id):
-        first_question = get_current_onboarding_question(db, household_id, user.id)
-        if first_question:
-            onboarding_message = first_question["question"]
-            # Save the initial onboarding message as assistant message
-            ChatMessageRepository.create(
-                db=db,
-                household_id=household_id,
-                user_id=user.id,
-                role="assistant",
-                content=onboarding_message,
-            )
-    
     return PairConfirmResponse(
         token=token,
         household_id=household_id,
         household_name=household_name,
         user_id=user.id,
         expires_in_hours=8760,  # 1 year from config
-        onboarding_message=onboarding_message,
+        onboarding_message=None,
     )

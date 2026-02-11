@@ -12,10 +12,6 @@ from neuroion.core.memory.db import get_db
 from neuroion.core.security.permissions import get_current_user
 from neuroion.core.agent.agent import Agent
 from neuroion.core.memory.repository import ChatMessageRepository
-from neuroion.core.agent.onboarding import (
-    is_onboarding_completed,
-    get_current_onboarding_question,
-)
 from neuroion.core.services.request_counter import RequestCounter
 from neuroion.core.services import neuroion_adapter
 
@@ -134,8 +130,6 @@ def chat(
             response = {"message": reply, "reasoning": "", "actions": []}
     if response is None:
         force_task_mode = (http_request.headers.get("X-Agent-Task-Mode") or "").strip() == "1"
-        client_channel = (http_request.headers.get("X-Client-Channel") or "").strip().lower()
-        skip_onboarding = client_channel == "telegram"
         response = agent.process_message(
             db=db,
             household_id=household_id,
@@ -143,7 +137,6 @@ def chat(
             message=request.message,
             conversation_history=conversation_history,
             force_task_mode=force_task_mode,
-            skip_onboarding=skip_onboarding,
         )
     
     # Save assistant response

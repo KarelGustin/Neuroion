@@ -25,6 +25,8 @@ def get_system_prompt() -> str:
     """Get the main system prompt for the agent."""
     return """You are ion, a personal home intelligence assistant.
 
+TONE: Talk like a friend would: warm, natural, a bit of personality. You're not a corporate assistant; you're someone they can chat with at the end of the day. You remember things about them—use that subtly when it fits, but don't recite a list. Let the conversation flow.
+
 STRICT IDENTITY GUIDELINES:
 - You MUST always identify as "ion" and ONLY as "ion"
 - Never use any other name or refer to yourself differently
@@ -55,7 +57,7 @@ When a user asks something:
 
 You have access to tools. Use them when they match what the user is asking for (or when the user confirms a suggestion); otherwise answer in text. Ask for clarification only when required information is missing.
 
-Be conversational, friendly, and personal while strictly adhering to these guidelines. Remember context from previous interactions and use it to provide personalized assistance."""
+Be authentic and friend-like: conversational, warm, personal. Use what you know about them naturally when it fits; never as a formal list."""
 
 
 def get_scheduling_prompt_addition() -> str:
@@ -90,24 +92,17 @@ def get_structured_tool_prompt(tools: List[Dict[str, Any]]) -> str:
 
 def format_context_snapshots(snapshots: List[Dict[str, Any]]) -> str:
     """
-    Format context snapshots for inclusion in prompts.
-    
-    Args:
-        snapshots: List of context snapshot dicts
-    
-    Returns:
-        Formatted string for prompt
+    Format context snapshots for inclusion in prompts (soft: limit 6, don't dominate).
     """
     if not snapshots:
-        return "No recent context available."
-    
-    lines = ["Recent context:"]
-    for snap in snapshots[:10]:  # Limit to 10 most recent
-        timestamp = snap.get("timestamp", "")
+        return ""
+    lines = [
+        "Things you've picked up about this person (use naturally when relevant; don't list them back or let them dominate the conversation):"
+    ]
+    for snap in snapshots[:6]:
         event_type = snap.get("event_type", "")
         summary = snap.get("summary", "")
-        lines.append(f"- [{timestamp}] {event_type}: {summary}")
-    
+        lines.append(f"- {event_type}: {summary}")
     return "\n".join(lines)
 
 
@@ -166,7 +161,6 @@ def build_chat_messages(
 ) -> List[Dict[str, str]]:
     """
     Build message list for LLM chat completion.
-    db, household_id, user_id are used only for onboarding and for preferences/context.
     Returns list of message dicts for LLM (system, optional history, user message).
     """
     messages = []
@@ -177,25 +171,6 @@ def build_chat_messages(
     if soul:
         system_parts.append(soul)
     system_parts.append(get_scheduling_prompt_addition())
-
-    # Add onboarding instructions if in onboarding mode
-    if db and household_id and user_id:
-        from neuroion.core.agent.onboarding import get_onboarding_prompt_addition
-        onboarding_prompt = get_onboarding_prompt_addition(db, household_id, user_id)
-        if onboarding_prompt:
-            system_parts.append(onboarding_prompt)
-    
-    # Format preferences (use new format if user/household provided, otherwise fallback to old format)
-    if user_preferences is not None or household_preferences is not None:
-        prefs_text = format_preferences(
-            user_preferences=user_preferences,
-            household_preferences=household_preferences,
-        )
-        if prefs_text != "No preferences stored.":
-            system_parts.append("\n" + prefs_text)
-    elif preferences:
-        # Fallback to old format for backwards compatibility
-        system_parts.append("\n" + format_preferences(household_preferences=preferences))
     
     if context_snapshots:
         system_parts.append("\n" + format_context_snapshots(context_snapshots))
@@ -258,18 +233,6 @@ def build_tool_result_messages(
     if soul:
         system_parts.append(soul)
     system_parts.append(get_scheduling_prompt_addition())
-    if db and household_id and user_id:
-        from neuroion.core.agent.onboarding import get_onboarding_prompt_addition
-        onboarding_prompt = get_onboarding_prompt_addition(db, household_id, user_id)
-        if onboarding_prompt:
-            system_parts.append(onboarding_prompt)
-    if user_preferences is not None or household_preferences is not None:
-        prefs_text = format_preferences(
-            user_preferences=user_preferences,
-            household_preferences=household_preferences,
-        )
-        if prefs_text != "No preferences stored.":
-            system_parts.append("\n" + prefs_text)
     if context_snapshots:
         system_parts.append("\n" + format_context_snapshots(context_snapshots))
     system_parts.append(
@@ -302,21 +265,24 @@ def build_context_extraction_messages(
     user_message: str,
     assistant_message: str,
 ) -> List[Dict[str, str]]:
-    """Build messages for context extraction."""
+    """Build messages for context extraction (organic preference and fact capture)."""
     system_prompt = (
         "Extract durable user or household context from the conversation. "
-        "Only capture information that is likely to be useful later (preferences, routines, constraints, "
-        "important facts). If nothing useful, return type=none.\n\n"
+        "When the user states a preference or fact about themselves (name, how they want to be addressed, "
+        "what they like, routine, communication style, what they care about), store it as type=context with "
+        "event_type preference or note and a short factual summary (e.g. 'User prefers to be called Karel', "
+        "'User likes short answers', 'User mentioned they work from home'). "
+        "Only capture information that is likely to be useful later. Do not capture one-off small talk or greetings. "
+        "If nothing useful, return type=none.\n\n"
         "Respond with exactly one JSON object and no other text.\n"
         "Allowed forms:\n"
-        "1) {\"type\":\"context\",\"event_type\":\"note\",\"summary\":\"...\",\"metadata\":{...},\"scope\":\"user\"}\n"
+        "1) {\"type\":\"context\",\"event_type\":\"preference\" or \"note\",\"summary\":\"...\",\"metadata\":{...},\"scope\":\"user\"}\n"
         "2) {\"type\":\"none\"}\n\n"
         "Guidelines:\n"
-        "- summary must be concise, factual, and standalone (1 sentence).\n"
+        "- summary: concise, factual, one sentence.\n"
         "- scope: \"user\" or \"household\" (default user).\n"
-        "- event_type: short label like preference, schedule, home, health, location, note.\n"
-        "- metadata is optional and should be small.\n"
-        "- Do NOT include onboarding questions or meta commentary.\n\n"
+        "- event_type: preference, note, schedule, home, health, location.\n"
+        "- metadata is optional and small.\n\n"
         "Conversation:\n"
         f"User: {user_message}\n"
         f"Assistant: {assistant_message}"
