@@ -11,7 +11,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.add",
-                "description": "Add a new scheduled job. Use for reminders, one-off at a time, or recurring (every N minutes or cron). Default timezone Europe/Amsterdam.",
+                "description": "Add a new scheduled job. Do not use for greetings, 'hoe gaat het', 'how are you', or general conversation; only when the user explicitly asks for a reminder or schedule (e.g. 'herinner me over 20 min', 'elke dag om 8'). For reminders: at (one-off), every (everyMs >= 60000), or cron (5-field). Default timezone Europe/Amsterdam.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -49,7 +49,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.update",
-                "description": "Update an existing cron job by jobId.",
+                "description": "Update an existing cron job by jobId. Do not use for greetings or general conversation; only when the user explicitly asks to change an existing reminder or schedule.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -68,7 +68,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.remove",
-                "description": "Remove a cron job by jobId.",
+                "description": "Remove a cron job by jobId. Do not use for greetings or general conversation; only when the user explicitly asks to cancel or delete a reminder or scheduled job.",
                 "parameters": {
                     "type": "object",
                     "properties": {"jobId": {"type": "string"}},
@@ -80,7 +80,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.list",
-                "description": "List all cron jobs for the user.",
+                "description": "List all cron jobs for the user. Do not use for greetings or general conversation; only when the user explicitly asks to see their reminders or scheduled jobs.",
                 "parameters": {"type": "object", "properties": {}},
             },
         },
@@ -88,7 +88,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.run",
-                "description": "Run a cron job once immediately by jobId.",
+                "description": "Run a cron job once immediately by jobId. Do not use for greetings or general conversation; only when the user explicitly asks to run or trigger a scheduled job now.",
                 "parameters": {
                     "type": "object",
                     "properties": {"jobId": {"type": "string"}},
@@ -100,7 +100,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.runs",
-                "description": "Get run history for a job. jobId and optional limit.",
+                "description": "Get run history for a job. Do not use for greetings or general conversation; only when the user explicitly asks for the history or log of a scheduled job. jobId and optional limit.",
                 "parameters": {
                     "type": "object",
                     "properties": {
