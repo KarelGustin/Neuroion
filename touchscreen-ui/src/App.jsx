@@ -317,7 +317,7 @@ function App() {
             icon={<Home size={36} />}
           />
         )}
-        {status?.storage && (
+        {/* {status?.storage && (
           <StatusCard
             title="Storage"
             status="ok"
@@ -335,7 +335,7 @@ function App() {
             details={{ Name: status.agent.name }}
             icon={<Sparkles size={36} />}
           />
-        )}
+        )} */}
       </div>
       {status?.degraded_message && (
         <div className="degraded-banner">{status.degraded_message}</div>
@@ -348,12 +348,12 @@ function App() {
           onClick={handleOpenDashboard}
           variant="primary"
         />
-        <ActionButton
+        {/* <ActionButton
           label="Neuroion UI"
           icon={<Sparkles size={36} />}
           onClick={handleOpenNeuroion}
           variant="primary"
-        />
+        /> */}
         <ActionButton
           label="Add Member"
           icon={<UserPlus size={36} />}
