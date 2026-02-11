@@ -328,3 +328,6 @@ def get_dashboard_link(
 
 
 _load_skill_modules()
+
+# Register read-only codebase tools (codebase.read_file, codebase.list_directory, codebase.search)
+import neuroion.core.agent.tools.codebase_tools  # noqa: F401

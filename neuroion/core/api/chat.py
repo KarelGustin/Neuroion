@@ -13,7 +13,6 @@ from neuroion.core.security.permissions import get_current_user
 from neuroion.core.agent.agent import Agent
 from neuroion.core.memory.repository import ChatMessageRepository
 from neuroion.core.services.request_counter import RequestCounter
-from neuroion.core.services import neuroion_adapter
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -122,15 +121,10 @@ def chat(
         content=request.message,
     )
     
-    # Prefer Neuroion Agent (Neuroion) when running; else use Python agent
-    response = None
-    if neuroion_adapter.is_running():
-        reply = neuroion_adapter.send_chat(request.message)
-        if reply is not None:
-            response = {"message": reply, "reasoning": "", "actions": []}
-    if response is None:
-        force_task_mode = (http_request.headers.get("X-Agent-Task-Mode") or "").strip() == "1"
-        response = agent.process_message(
+    # Always use Python agent for user-scoped chat so user_id is enforced (conversation history,
+    # context and preferences stay strictly per user; neuroion_adapter does not receive user_id).
+    force_task_mode = (http_request.headers.get("X-Agent-Task-Mode") or "").strip() == "1"
+    response = agent.process_message(
             db=db,
             household_id=household_id,
             user_id=user_id,
@@ -138,7 +132,7 @@ def chat(
             conversation_history=conversation_history,
             force_task_mode=force_task_mode,
         )
-    
+
     # Save assistant response
     assistant_message = response.get("message", "")
     ChatMessageRepository.create(

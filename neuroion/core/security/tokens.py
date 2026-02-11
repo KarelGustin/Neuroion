@@ -108,42 +108,51 @@ _pairing_codes: Dict[str, Dict[str, Any]] = {}
 
 class PairingCodeStore:
     """Temporary store for pairing codes (expires after timeout)."""
-    
+
     @staticmethod
-    def store(code: str, household_id: int, expires_in_minutes: int = None) -> None:
-        """Store a pairing code with expiration."""
+    def store(
+        code: str,
+        household_id: int,
+        member_id: Optional[int] = None,
+        expires_in_minutes: Optional[int] = None,
+    ) -> None:
+        """Store a pairing code with expiration. Optionally bind to a specific member (for join → Telegram link)."""
         expires_in = expires_in_minutes or settings.pairing_code_expire_minutes
         expires_at = datetime.utcnow() + timedelta(minutes=expires_in)
-        
+
         hashed = TokenManager.hash_pairing_code(code)
         _pairing_codes[hashed] = {
             "household_id": household_id,
+            "member_id": member_id,
             "expires_at": expires_at,
         }
-    
+
     @staticmethod
-    def verify(code: str) -> Optional[int]:
+    def verify(code: str) -> Optional[Dict[str, Any]]:
         """
-        Verify a pairing code and return household_id if valid.
-        
+        Verify a pairing code and return stored data if valid.
+
         Returns:
-            household_id if valid, None otherwise
+            Dict with "household_id" and optionally "member_id" if valid; None otherwise.
         """
         hashed = TokenManager.hash_pairing_code(code)
         entry = _pairing_codes.get(hashed)
-        
+
         if not entry:
             return None
-        
+
         # Check expiration
         if datetime.utcnow() > entry["expires_at"]:
             del _pairing_codes[hashed]
             return None
-        
-        # Return household_id and remove code (one-time use)
-        household_id = entry["household_id"]
+
+        # Return data and remove code (one-time use)
+        result = {
+            "household_id": entry["household_id"],
+            "member_id": entry.get("member_id"),
+        }
         del _pairing_codes[hashed]
-        return household_id
+        return result
     
     @staticmethod
     def cleanup_expired() -> None:

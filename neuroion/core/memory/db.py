@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 engine = create_engine(
     get_database_url(),
     connect_args={
-        "timeout": 30,  # 30 second timeout for database operations
+        "timeout": 60,  # 60 second timeout for database operations
     },
     poolclass=NullPool,  # New connection per session; no sharing across threads
     pool_pre_ping=False,  # Not needed with NullPool
@@ -47,6 +47,9 @@ DB_DEBUG_LOG = (
 # We intentionally avoid scoped_session here and rely on explicit lifetime
 # via get_db()/db_session() combined with thread-ownership checks.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Global lock to serialize SQLite writes so only one commit runs at a time (avoids "database is locked").
+_sqlite_write_lock = threading.Lock()
 
 # Global lock to ensure only one thread initializes/migrates the database at a time.
 _init_lock = threading.Lock()
@@ -246,9 +249,29 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     # Enable WAL mode for better concurrency (allows concurrent reads)
     cursor.execute("PRAGMA journal_mode=WAL")
-    # Set busy timeout to handle locks (30 seconds)
-    cursor.execute("PRAGMA busy_timeout=30000")
+    # Set busy timeout to handle locks (60 seconds)
+    cursor.execute("PRAGMA busy_timeout=60000")
     cursor.close()
+
+
+# Serialize all SQLite commits so only one write runs at a time (avoids "database is locked").
+@event.listens_for(Session, "before_commit")
+def _acquire_sqlite_write_lock(session):
+    _sqlite_write_lock.acquire()
+
+
+def _release_sqlite_write_lock(session):
+    _sqlite_write_lock.release()
+
+
+@event.listens_for(Session, "after_commit")
+def _release_sqlite_write_lock_after_commit(session):
+    _release_sqlite_write_lock(session)
+
+
+@event.listens_for(Session, "after_rollback")
+def _release_sqlite_write_lock_after_rollback(session):
+    _release_sqlite_write_lock(session)
 
 
 # Auto-serialize SystemConfig values before flush

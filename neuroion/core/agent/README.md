@@ -2,6 +2,10 @@
 
 The agent turns each user message into **one** response: either a direct answer or a single follow-up after a tool call (confirmation or one clarification).
 
+## Data isolation (per user)
+
+All user-facing chat is **strictly per `user_id`**. The gateway and agent receive `user_id` from the authenticated request (e.g. JWT from Telegram or dashboard). Conversation history, context snapshots, and user preferences are loaded and stored only for that user. **Data of one user must never be shown or used in another user's conversation.** When adding context, preferences, or tools, always scope by the current `user_id`; household-level data may be used only where explicitly intended (e.g. shared household preferences), and must not include other members' personal data.
+
 ## Goal
 
 - **One answer per message**: Either answer the question directly, or perform one action (e.g. create a reminder) and respond with one short confirmation (e.g. "Herinnering gepland") or one clarification question.

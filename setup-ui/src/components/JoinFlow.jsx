@@ -18,6 +18,7 @@ function JoinFlow() {
   const [submitting, setSubmitting] = useState(false)
   const [pageName, setPageName] = useState(null)
   const [householdId, setHouseholdId] = useState(null)
+  const [memberId, setMemberId] = useState(null)
   const [pairingCode, setPairingCode] = useState(null)
   const [pairingError, setPairingError] = useState(null)
   const [copied, setCopied] = useState(false)
@@ -51,12 +52,12 @@ function JoinFlow() {
     return () => { cancelled = true }
   }, [token, step])
 
-  // Step 3: fetch pairing code when complete
+  // Step 3: fetch pairing code when complete (member_id binds code to this member so Telegram links to same user)
   useEffect(() => {
     if (step !== 'complete' || !householdId || pairingCode != null) return
 
     let cancelled = false
-    getPairingCode(householdId, 'telegram_join', 'telegram', 'Telegram')
+    getPairingCode(householdId, 'telegram_join', 'telegram', 'Telegram', memberId)
       .then((code) => {
         if (!cancelled) setPairingCode(code)
       })
@@ -64,7 +65,7 @@ function JoinFlow() {
         if (!cancelled) setPairingError(err.response?.data?.detail || err.message || 'Kon koppelcode niet ophalen.')
       })
     return () => { cancelled = true }
-  }, [step, householdId, pairingCode])
+  }, [step, householdId, memberId, pairingCode])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -79,6 +80,7 @@ function JoinFlow() {
       })
       setPageName(result.page_name)
       setHouseholdId(result.household_id)
+      setMemberId(result.member_id)
       setStep('complete')
     } catch (err) {
       setError(err.response?.data?.detail || err.message || 'Lid toevoegen mislukt.')

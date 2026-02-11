@@ -41,13 +41,16 @@ export async function checkHealth() {
   return response.data
 }
 
-export async function getPairingCode(householdId, deviceId, deviceType, name) {
-  const response = await api.post('/pair/start', {
+/** Get pairing code. Pass memberId to link device (e.g. Telegram) to the newly created member after join. */
+export async function getPairingCode(householdId, deviceId, deviceType, name, memberId = null) {
+  const body = {
     household_id: householdId,
     device_id: deviceId,
     device_type: deviceType,
     name: name,
-  })
+  }
+  if (memberId != null) body.member_id = memberId
+  const response = await api.post('/pair/start', body)
   return response.data.pairing_code
 }
 

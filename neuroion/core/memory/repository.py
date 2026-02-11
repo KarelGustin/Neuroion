@@ -272,6 +272,8 @@ class UserRepository:
         consent_json: Optional[str] = None,
         page_name: Optional[str] = None,
         passcode_hash: Optional[str] = None,
+        device_id: Optional[str] = None,
+        device_type: Optional[str] = None,
     ) -> Optional[User]:
         """Update user."""
         require_active_session(db)
@@ -299,6 +301,10 @@ class UserRepository:
             user.passcode_hash = passcode_hash
             user.setup_token = None
             user.setup_token_expires_at = None
+        if device_id is not None:
+            user.device_id = device_id
+        if device_type is not None:
+            user.device_type = device_type
 
         try:
             db.commit()

@@ -28,6 +28,8 @@ function App() {
   const [setupUrl, setSetupUrl] = useState('')
   const [devProgress, setDevProgress] = useState({ progress: 0, stage: 'starting' })
   const [neuroionLaunched, setOpenclawLaunched] = useState(false)
+  const [addMemberLoading, setAddMemberLoading] = useState(false)
+  const [addMemberError, setAddMemberError] = useState(null)
 
   const isDev = import.meta.env.DEV
 
@@ -192,13 +194,30 @@ function App() {
   }
 
   const handleAddMember = async () => {
+    setAddMemberLoading(true)
+    setError(null)
+    setAddMemberError(null)
     try {
       const tokenData = await createDashboardJoinToken()
-      const url = tokenData.join_url || tokenData.qr_url
-      setQrData({ url, title: 'Add Member - Scan to Join' })
-      setError(null)
+      const url = tokenData?.join_url || tokenData?.qr_url
+      if (url) {
+        setQrData({ url, title: 'Add Member - Scan to Join' })
+      } else {
+        const detail = 'Geen join-URL ontvangen.'
+        setError(detail)
+        setAddMemberError(detail)
+      }
     } catch (err) {
-      setError(`Failed to create join token: ${err.message}`)
+      const detail = err.response?.data?.detail
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
+          : err.message || 'Kon geen koppelcode aanmaken.'
+      setError(message)
+      setAddMemberError(message)
+    } finally {
+      setAddMemberLoading(false)
     }
   }
 
@@ -340,6 +359,7 @@ function App() {
           icon={<UserPlus size={36} />}
           onClick={handleAddMember}
           variant="primary"
+          disabled={addMemberLoading}
         />
         <ActionButton
           label="Instellingen"
@@ -363,6 +383,18 @@ function App() {
           onClose={() => setQrData(null)}
           openOnDeviceLabel={qrData.title && qrData.title.includes('Add Member') ? 'Open op dit scherm' : undefined}
         />
+      )}
+
+      {addMemberError && (
+        <div className="qr-overlay" onClick={() => setAddMemberError(null)}>
+          <div className="qr-container" onClick={(e) => e.stopPropagation()}>
+            <h3>Kon geen koppelcode aanmaken</h3>
+            <p className="qr-url" style={{ marginBottom: 'var(--space-6)' }}>{addMemberError}</p>
+            <button type="button" className="qr-close" onClick={() => setAddMemberError(null)}>
+              Sluiten
+            </button>
+          </div>
+        </div>
       )}
 
       {settingsOpen && (

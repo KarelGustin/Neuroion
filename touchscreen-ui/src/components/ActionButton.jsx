@@ -1,9 +1,20 @@
 import React, { useState, useRef } from 'react'
 import '../styles/ActionButton.css'
 
-function ActionButton({ label, icon, onClick, variant = 'primary', requiresLongPress = false }) {
+const DEBOUNCE_MS = 300
+
+function ActionButton({ label, icon, onClick, variant = 'primary', requiresLongPress = false, disabled = false }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const longPressTimerRef = useRef(null)
+  const lastInvokeRef = useRef(0)
+
+  const invokeOnce = () => {
+    if (disabled) return
+    const now = Date.now()
+    if (now - lastInvokeRef.current < DEBOUNCE_MS) return
+    lastInvokeRef.current = now
+    onClick()
+  }
 
   const handlePressStart = () => {
     if (requiresLongPress) {
@@ -25,7 +36,14 @@ function ActionButton({ label, icon, onClick, variant = 'primary', requiresLongP
         setShowConfirm(false)
       }
     } else {
-      onClick()
+      invokeOnce()
+    }
+  }
+
+  const handleClick = () => {
+    if (disabled) return
+    if (!requiresLongPress) {
+      invokeOnce()
     }
   }
 
@@ -33,10 +51,12 @@ function ActionButton({ label, icon, onClick, variant = 'primary', requiresLongP
     <button
       type="button"
       className={`action-button ${variant} ${showConfirm ? 'confirm' : ''}`}
+      disabled={disabled}
       onTouchStart={handlePressStart}
       onTouchEnd={handlePressEnd}
       onMouseDown={handlePressStart}
       onMouseUp={handlePressEnd}
+      onClick={handleClick}
     >
       {icon && <span className="action-icon">{icon}</span>}
       <span className="action-label">{label}</span>

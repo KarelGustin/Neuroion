@@ -3,11 +3,18 @@ Join token management for secure member onboarding.
 
 Handles creation, validation, and consumption of single-use join tokens.
 """
+import time
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from neuroion.core.memory.repository import JoinTokenRepository
+
+# Retry backoff (seconds) for transient SQLite "database is locked" / "busy" errors.
+_JOIN_TOKEN_CREATE_RETRY_DELAYS = (0.1, 0.2, 0.4)
+_MAX_JOIN_TOKEN_CREATE_ATTEMPTS = 1 + len(_JOIN_TOKEN_CREATE_RETRY_DELAYS)
 
 
 class JoinTokenManager:
@@ -40,13 +47,26 @@ class JoinTokenManager:
         import secrets
         token_str = secrets.token_urlsafe(32)
         expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
-        join_token = JoinTokenRepository.create(
-            db=db,
-            token=token_str,
-            household_id=household_id,
-            created_by_member_id=created_by_member_id,
-            expires_at=expires_at,
-        )
+
+        join_token = None
+        for attempt in range(_MAX_JOIN_TOKEN_CREATE_ATTEMPTS):
+            try:
+                join_token = JoinTokenRepository.create(
+                    db=db,
+                    token=token_str,
+                    household_id=household_id,
+                    created_by_member_id=created_by_member_id,
+                    expires_at=expires_at,
+                )
+                break
+            except OperationalError as e:
+                msg = (e.orig.args[0] if e.orig else str(e)).lower()
+                if "locked" not in msg and "busy" not in msg:
+                    raise
+                if attempt < len(_JOIN_TOKEN_CREATE_RETRY_DELAYS):
+                    time.sleep(_JOIN_TOKEN_CREATE_RETRY_DELAYS[attempt])
+                else:
+                    raise
 
         # Generate QR URL (will use actual hostname/IP in production)
         qr_url = f"http://neuroion.local/join?token={join_token.token}"

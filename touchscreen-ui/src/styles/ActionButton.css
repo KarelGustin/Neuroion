@@ -63,6 +63,13 @@
   border-color: #e63e35;
 }
 
+.action-button.disabled,
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .action-button.confirm {
   background: var(--warning);
   border-color: var(--warning);

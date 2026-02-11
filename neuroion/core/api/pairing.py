@@ -21,6 +21,7 @@ class PairStartRequest(BaseModel):
     device_id: str
     device_type: str  # ios, telegram, web
     name: str  # User/device name
+    member_id: Optional[int] = None  # If set, link device to this existing member (e.g. after join)
 
 
 class PairStartResponse(BaseModel):
@@ -63,22 +64,31 @@ def start_pairing(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Household not found",
         )
-    
-    # Check if device already paired
-    existing_user = UserRepository.get_by_device_id(db, request.device_id)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Device already paired",
-        )
-    
+
+    # When linking to an existing member (e.g. after join), skip device check; otherwise ensure device not already paired
+    if request.member_id is not None:
+        member = UserRepository.get_by_id(db, request.member_id)
+        if not member or member.household_id != request.household_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Member not found or not in this household",
+            )
+    else:
+        existing_user = UserRepository.get_by_device_id(db, request.device_id)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Device already paired",
+            )
+
     # Generate pairing code
     code = TokenManager.generate_pairing_code()
-    
-    # Store pairing code
+
+    # Store pairing code (optionally bound to member for join → Telegram link)
     PairingCodeStore.store(
         code=code,
         household_id=request.household_id,
+        member_id=request.member_id,
     )
     
     return PairStartResponse(
@@ -94,47 +104,61 @@ def confirm_pairing(
 ) -> PairConfirmResponse:
     """
     Confirm pairing with code.
-    
+
     Validates the pairing code and returns a long-lived auth token.
-    Creates a new user if device_id doesn't exist.
+    If the code was bound to a member (join → Telegram), updates that member's device_id.
+    Otherwise creates a new user if device_id doesn't exist.
     """
     # Verify pairing code
-    household_id = PairingCodeStore.verify(request.pairing_code)
-    if not household_id:
+    data = PairingCodeStore.verify(request.pairing_code)
+    if not data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired pairing code",
         )
-    
-    # Check if user already exists for this device
-    user = UserRepository.get_by_device_id(db, request.device_id)
-    is_new_user = False
-    
-    if not user:
-        is_new_user = True
-        # Determine device type from device_id
+    household_id = data["household_id"]
+    member_id = data.get("member_id")
+
+    if member_id is not None:
+        # Link Telegram (or other device) to existing member (e.g. after join)
+        user = UserRepository.get_by_id(db, member_id)
+        if not user or user.household_id != household_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Member not found or invalid",
+            )
+        # Another user might already have this device_id; reject if so (unless it's this same user)
+        existing_by_device = UserRepository.get_by_device_id(db, request.device_id)
+        if existing_by_device and existing_by_device.id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This device is already linked to another account",
+            )
         device_type = "telegram" if request.device_id.startswith("telegram_") else "unknown"
-        
-        # Set name based on device type
-        if device_type == "telegram":
-            user_name = "ion"
-        else:
-            user_name = f"Device {request.device_id[:8]}"  # Default name for other devices
-        
-        # Create new user
-        user = UserRepository.create(
-            db=db,
-            household_id=household_id,
-            name=user_name,
-            role="member",
-            device_id=request.device_id,
-            device_type=device_type,
+        UserRepository.update(
+            db, user.id, device_id=request.device_id, device_type=device_type
         )
+        db.commit()
+        db.refresh(user)
     else:
-        # Update device type if it's a Telegram user
-        if request.device_id.startswith("telegram_") and user.device_type != "telegram":
-            user.device_type = "telegram"
-            db.commit()
+        # Original behaviour: find or create user by device_id
+        user = UserRepository.get_by_device_id(db, request.device_id)
+
+        if not user:
+            device_type = "telegram" if request.device_id.startswith("telegram_") else "unknown"
+            user_name = "ion" if device_type == "telegram" else f"Device {request.device_id[:8]}"
+            user = UserRepository.create(
+                db=db,
+                household_id=household_id,
+                name=user_name,
+                role="member",
+                device_id=request.device_id,
+                device_type=device_type,
+            )
+        else:
+            if request.device_id.startswith("telegram_") and user.device_type != "telegram":
+                user.device_type = "telegram"
+                db.commit()
     
     # Get household name
     household = HouseholdRepository.get_by_id(db, household_id)
