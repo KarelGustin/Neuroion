@@ -57,7 +57,9 @@ When a user asks something:
 
 You have access to tools. Use them when they match what the user is asking for (or when the user confirms a suggestion); otherwise answer in text. Ask for clarification only when required information is missing.
 
-Be authentic and friend-like: conversational, warm, personal. Use what you know about them naturally when it fits; never as a formal list."""
+Be authentic and friend-like: conversational, warm, personal. Use what you know about them naturally when it fits; never as a formal list.
+
+When the user changes topic, follow the new topic. Respond to what they're saying now; don't keep anchoring on earlier messages."""
 
 
 def get_scheduling_prompt_addition() -> str:
@@ -97,7 +99,7 @@ def format_context_snapshots(snapshots: List[Dict[str, Any]]) -> str:
     if not snapshots:
         return ""
     lines = [
-        "Things you've picked up about this person (use naturally when relevant; don't list them back or let them dominate the conversation):"
+        "Memories (things you've stored about this person; use naturally when relevant, don't list them back or let them dominate):"
     ]
     for snap in snapshots[:6]:
         event_type = snap.get("event_type", "")
@@ -180,9 +182,9 @@ def build_chat_messages(
         "content": "\n".join(system_parts),
     })
     
-    # Conversation history
+    # Conversation history (agent already filtered; cap at 6 if longer)
     if conversation_history:
-        messages.extend(conversation_history[-10:])  # Last 10 messages
+        messages.extend(conversation_history[-6:])
     
     # Current user message
     messages.append({
@@ -210,7 +212,7 @@ def build_structured_tool_messages(
     system_content = _get_structured_tool_identity() + "\n\n" + get_structured_tool_prompt(tools)
     messages = [{"role": "system", "content": system_content}]
     if conversation_history:
-        messages.extend(conversation_history[-6:])
+        messages.extend(conversation_history[-6:])  # Agent already filtered; cap at 6
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -243,9 +245,39 @@ def build_tool_result_messages(
     )
     messages = [{"role": "system", "content": "\n".join(system_parts)}]
     if conversation_history:
-        messages.extend(conversation_history[-10:])
+        messages.extend(conversation_history[-6:])  # Agent already filtered; cap at 6
     messages.append({"role": "user", "content": user_message})
     return messages
+
+
+def build_history_relevance_messages(
+    current_message: str,
+    recent_messages: List[Dict[str, str]],
+) -> List[Dict[str, str]]:
+    """Build messages for one LLM call to decide how many recent messages are relevant to the new message."""
+    if not recent_messages:
+        return []
+    lines = []
+    for m in recent_messages:
+        role = m.get("role", "unknown")
+        content = (m.get("content") or "").strip() or "(empty)"
+        lines.append(f"{role}: {content}")
+    conversation_block = "\n".join(lines)
+    system = (
+        "You are given the NEW user message below, and a list of RECENT previous messages (oldest to newest). "
+        "Decide how many of the most recent messages (from the end) are relevant to answering the NEW message. "
+        "If the user changed topic, include 0. If the new message clearly continues the same thread, include more (up to all).\n\n"
+        "Respond with exactly one JSON object and no other text. Format: {\"include_count\": n} "
+        f"where n is an integer from 0 to {len(recent_messages)} (0 = none, {len(recent_messages)} = all {len(recent_messages)} messages)."
+    )
+    user_content = (
+        "Recent messages:\n" + conversation_block + "\n\n"
+        "New user message:\n" + (current_message or "").strip()
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def build_scheduling_intent_messages(message: str) -> List[Dict[str, str]]:
@@ -265,23 +297,20 @@ def build_context_extraction_messages(
     user_message: str,
     assistant_message: str,
 ) -> List[Dict[str, str]]:
-    """Build messages for context extraction (organic preference and fact capture)."""
+    """Build messages for context extraction (memory-worthy facts about user/household)."""
     system_prompt = (
-        "Extract durable user or household context from the conversation. "
-        "When the user states a preference or fact about themselves (name, how they want to be addressed, "
-        "what they like, routine, communication style, what they care about), store it as type=context with "
-        "event_type preference or note and a short factual summary (e.g. 'User prefers to be called Karel', "
-        "'User likes short answers', 'User mentioned they work from home'). "
-        "Only capture information that is likely to be useful later. Do not capture one-off small talk or greetings. "
-        "If nothing useful, return type=none.\n\n"
+        "Extract only what is memory-worthy: something you want to remember about this user or household for later "
+        "(name, how they want to be addressed, preferences, routines, what they care about, important facts). "
+        "Return type=context only when the exchange contains something memory-worthy; otherwise return type=none. "
+        "Do not capture one-off small talk or greetings.\n\n"
         "Respond with exactly one JSON object and no other text.\n"
         "Allowed forms:\n"
-        "1) {\"type\":\"context\",\"event_type\":\"preference\" or \"note\",\"summary\":\"...\",\"metadata\":{...},\"scope\":\"user\"}\n"
+        "1) {\"type\":\"context\",\"event_type\":\"memory\" or \"note\",\"summary\":\"...\",\"metadata\":{...},\"scope\":\"user\"}\n"
         "2) {\"type\":\"none\"}\n\n"
         "Guidelines:\n"
         "- summary: concise, factual, one sentence.\n"
         "- scope: \"user\" or \"household\" (default user).\n"
-        "- event_type: preference, note, schedule, home, health, location.\n"
+        "- event_type: memory, note, schedule, home, health, location.\n"
         "- metadata is optional and small.\n\n"
         "Conversation:\n"
         f"User: {user_message}\n"

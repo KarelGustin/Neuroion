@@ -476,6 +476,33 @@ class PreferenceRepository:
             return True
         return False
 
+    _ONBOARDING_KEYS = (
+        "first_name",
+        "communication_style",
+        "interests",
+        "daily_schedule",
+        "communication_preferences",
+        "assistance_preferences",
+        "household_context",
+        "home_context",
+        "notification_preferences",
+        "additional_info",
+        "onboarding_question_index",
+        "onboarding_completed",
+    )
+
+    @classmethod
+    def delete_onboarding_preferences(
+        cls,
+        db: Session,
+        household_id: int,
+        user_id: int,
+    ) -> None:
+        """Remove all onboarding-related preferences for this household+user."""
+        require_active_session(db)
+        for key in cls._ONBOARDING_KEYS:
+            cls.delete(db, household_id, key, user_id=user_id)
+
 
 class ContextSnapshotRepository:
     """Repository for context snapshot operations."""

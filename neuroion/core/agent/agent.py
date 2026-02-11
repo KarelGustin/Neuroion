@@ -29,12 +29,15 @@ from neuroion.core.agent.task_manager import (
 )
 from neuroion.core.agent.tool_protocol import parse_llm_output
 from neuroion.core.agent.task_prompts import build_task_messages
-from neuroion.core.agent.prompts import build_scheduling_intent_messages
+from neuroion.core.agent.prompts import (
+    build_history_relevance_messages,
+    build_scheduling_intent_messages,
+)
 from neuroion.core.agent.policies.guardrails import get_guardrails
 from neuroion.core.agent.policies.validator import get_validator
 from neuroion.core.observability.tracing import start_run, end_run
 from neuroion.core.observability.metrics import record_run_result
-from neuroion.core.memory.repository import ContextSnapshotRepository
+from neuroion.core.memory.repository import ContextSnapshotRepository, PreferenceRepository
 from neuroion.core.security.audit import AuditLogger
 
 
@@ -72,6 +75,9 @@ class Agent:
         Returns:
             Dict with 'message', 'reasoning', and 'actions' keys
         """
+        if user_id is not None:
+            PreferenceRepository.delete_onboarding_preferences(db, household_id, user_id)
+
         # Get context
         context_snapshots = ContextSnapshotRepository.get_recent(
             db, household_id, limit=10, user_id=user_id
@@ -88,11 +94,29 @@ class Agent:
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)
 
+        # Filter conversation history: only include recent messages relevant to the new message
+        recent_6 = (conversation_history or [])[-6:]
+        if recent_6:
+            relevance_messages = build_history_relevance_messages(message, recent_6)
+            include_count = 0
+            if relevance_messages and self.llm:
+                try:
+                    raw = self.llm.chat(relevance_messages, temperature=0.2)
+                    if raw:
+                        parsed = json.loads(raw.strip())
+                        n = int(parsed.get("include_count", 0))
+                        include_count = max(0, min(n, len(recent_6)))
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    include_count = 3
+            filtered_history = recent_6[-include_count:] if include_count else []
+        else:
+            filtered_history = []
+
         # Task path only when client explicitly requests it (X-Agent-Task-Mode: 1)
         user_id_str = str(user_id) if user_id is not None else "0"
         if force_task_mode and self._scheduling_intent(message):
             result = self._process_task_path(
-                db, household_id, user_id, user_id_str, message, conversation_history
+                db, household_id, user_id, user_id_str, message, filtered_history
             )
             if result is not None:
                 return result
@@ -102,7 +126,7 @@ class Agent:
             household_id=household_id,
             user_id=user_id,
             message=message,
-            conversation_history=conversation_history,
+            conversation_history=filtered_history,
             llm=self.llm,
             context_snapshots=context_dicts,
             user_preferences=None,
