@@ -4,7 +4,16 @@ Abstract LLM interface.
 Defines the standard interface for LLM clients to allow model swapping.
 """
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Iterator
+from dataclasses import dataclass
+from typing import List, Dict, Optional, Iterator, Tuple, Any
+
+
+@dataclass
+class ToolCall:
+    """A single tool call from the LLM."""
+    id: str
+    name: str
+    arguments: Dict[str, Any]
 
 
 class LLMClient(ABC):
@@ -29,6 +38,21 @@ class LLMClient(ABC):
             Generated text response
         """
         pass
+
+    def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        tool_choice: Optional[str] = None,
+    ) -> Tuple[str, List[ToolCall]]:
+        """
+        Send a chat completion request with tools. Default: return (content, []).
+        Override in clients that support tool_calls (e.g. OpenAI).
+        """
+        content = self.chat(messages, temperature=temperature, max_tokens=max_tokens)
+        return (content or "", [])
     
     @abstractmethod
     def complete(

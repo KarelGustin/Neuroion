@@ -13,7 +13,7 @@ import traceback
 
 from neuroion.core.config import settings
 from neuroion.core.memory.db import init_db, db_session
-from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences, join, members, context, agent
+from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences, join, members, context, agent, cron_tools
 from neuroion.core.services.telegram_service import start_telegram_bot, stop_telegram_bot
 from neuroion.core.config_store import (
     get_device_config as config_store_get_device_config,
@@ -86,9 +86,21 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Could not start Neuroion Agent: %s", e)
 
+    # Start cron scheduler (in-process)
+    try:
+        from neuroion.core.cron.scheduler import start_scheduler
+        await start_scheduler()
+    except Exception as e:
+        logger.warning("Could not start cron scheduler: %s", e)
+
     yield
 
     # Shutdown
+    try:
+        from neuroion.core.cron.scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception as e:
+        logger.warning("Cron scheduler stop: %s", e)
     neuroion_adapter.stop()
     if telegram_app:
         await stop_telegram_bot()
@@ -135,10 +147,13 @@ async def setup_csrf_check(request: Request, call_next):
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all HTTP requests."""
-    logger.info(f"{request.method} {request.url.path}")
+    """Log all HTTP requests. Status/health endpoints at DEBUG to reduce log spam."""
+    path = request.url.path
+    skip_info = path in ("/api/status", "/setup/dev-status", "/setup/status")
+    level = logger.debug if skip_info else logger.info
+    level(f"{request.method} {path}")
     response = await call_next(request)
-    logger.info(f"{request.method} {request.url.path} - {response.status_code}")
+    level(f"{request.method} {path} - {response.status_code}")
     return response
 
 
@@ -180,6 +195,7 @@ app.include_router(integrations.router)
 app.include_router(preferences.router)
 app.include_router(context.router)
 app.include_router(agent.router)
+app.include_router(cron_tools.router)
 
 
 if __name__ == "__main__":

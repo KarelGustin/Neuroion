@@ -90,6 +90,7 @@ function SetupWizard({ onComplete }) {
   }
 
   const handleStepComplete = (stepNumber, data) => {
+    const skip = data && typeof data === 'object' && data.skip === true
     if (stepNumber === 1) {
       setCoreConfig(data)
       try { localStorage.setItem(STORAGE_KEYS.core, JSON.stringify(data)) } catch (_) {}
@@ -97,14 +98,20 @@ function SetupWizard({ onComplete }) {
       setModelConfig(data)
       try { localStorage.setItem(STORAGE_KEYS.model, JSON.stringify(data)) } catch (_) {}
     } else if (stepNumber === 3) {
-      setGatewayConfig(data)
-      try { localStorage.setItem(STORAGE_KEYS.gateway, JSON.stringify(data)) } catch (_) {}
+      if (!skip) {
+        setGatewayConfig(data)
+        try { localStorage.setItem(STORAGE_KEYS.gateway, JSON.stringify(data)) } catch (_) {}
+      }
     } else if (stepNumber === 4) {
-      setWorkspaceConfig(data)
-      try { localStorage.setItem(STORAGE_KEYS.workspace, JSON.stringify(data)) } catch (_) {}
+      if (!skip) {
+        setWorkspaceConfig(data)
+        try { localStorage.setItem(STORAGE_KEYS.workspace, JSON.stringify(data)) } catch (_) {}
+      }
     } else if (stepNumber === 5) {
-      setChannelsConfig(data)
-      try { localStorage.setItem(STORAGE_KEYS.channels, JSON.stringify(data)) } catch (_) {}
+      if (!skip) {
+        setChannelsConfig(data)
+        try { localStorage.setItem(STORAGE_KEYS.channels, JSON.stringify(data)) } catch (_) {}
+      }
     } else if (stepNumber === 6) {
       setWifiConfig(data)
       try { localStorage.setItem(STORAGE_KEYS.wifi, JSON.stringify(data)) } catch (_) {}

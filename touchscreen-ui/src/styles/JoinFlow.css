@@ -1,0 +1,202 @@
+@import './variables.css';
+
+.join-flow {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.join-flow-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border-default);
+  border-radius: 16px;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.join-flow-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+}
+
+.join-flow-subtitle {
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  margin: 0 0 1.5rem 0;
+}
+
+.join-flow-message {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin: 0 0 1rem 0;
+  line-height: 1.4;
+}
+
+.join-flow-hint {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.join-flow-error {
+  font-size: 0.875rem;
+  color: var(--status-error);
+  margin: 0 0 1rem 0;
+}
+
+.join-flow-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.join-flow-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.join-flow-field label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.join-flow-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border-default);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.join-flow-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.join-flow-submit {
+  margin-top: 0.5rem;
+  padding: 0.875rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: white;
+  background: var(--accent-blue);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.join-flow-submit:hover:not(:disabled) {
+  background: var(--accent-blue-dark);
+}
+
+.join-flow-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.join-flow-telegram {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 0.5px solid var(--border-default);
+}
+
+.join-flow-telegram-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.75rem 0;
+}
+
+.join-flow-telegram-hint {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem 0;
+}
+
+.join-flow-bot-link {
+  color: var(--accent-blue);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.join-flow-bot-link:hover {
+  text-decoration: underline;
+}
+
+.join-flow-code-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.join-flow-code-block {
+  flex: 1;
+  padding: 1rem 1.25rem;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border-default);
+  border-radius: 10px;
+  margin: 0;
+}
+
+.join-flow-copy-btn {
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--accent-blue);
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border-default);
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.join-flow-copy-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--accent-blue);
+}
+
+.join-flow-copy-btn:disabled {
+  color: var(--success);
+  cursor: default;
+}
+
+.join-flow-code {
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  color: var(--accent-blue);
+  letter-spacing: 0.02em;
+}
+
+.join-flow-telegram-alt {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0 0 0;
+}
+
+.join-flow-page-hint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 1.5rem 0 0 0;
+}
+
+.join-flow-page-name {
+  font-family: ui-monospace, monospace;
+  color: var(--text-secondary);
+}

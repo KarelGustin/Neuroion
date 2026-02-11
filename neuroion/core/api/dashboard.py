@@ -125,9 +125,9 @@ class SetPasscodeResponse(BaseModel):
 
 
 class DashboardMemberDeleteRequest(BaseModel):
-    """Request to delete a member from kiosk (no auth). Confirmation = member's passcode."""
+    """Request to delete a member from kiosk (no auth)."""
     member_id: int
-    confirmation_code: str
+    confirmation_code: Optional[str] = None
 
 
 class DashboardMemberDeleteResponse(BaseModel):
@@ -195,21 +195,10 @@ def dashboard_member_delete(
 ) -> DashboardMemberDeleteResponse:
     """
     Delete a member and all their data from kiosk (no auth).
-    Confirmation code must be the member's passcode (so only someone who knows it can delete).
     """
-    if not is_valid_passcode_format(request.confirmation_code):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Confirmation code must be 4-6 digits",
-        )
     member = UserRepository.get_by_id(db, request.member_id)
     if not member:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
-    if not member.passcode_hash or not verify_passcode(request.confirmation_code, member.passcode_hash):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid confirmation code",
-        )
     try:
         UserRepository.delete_user_and_all_data(db, request.member_id)
         return DashboardMemberDeleteResponse(success=True, message="Member and all data deleted")

@@ -11,8 +11,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchStatus()
-    const interval = setInterval(fetchStatus, 10000) // Refresh every 10 seconds
-    return () => clearInterval(interval)
   }, [])
 
   const fetchStatus = async () => {

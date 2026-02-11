@@ -60,6 +60,32 @@ export async function createDashboardJoinToken() {
   return response.data
 }
 
+/** Verify join token (for add-member flow). */
+export async function verifyJoinToken(token) {
+  const response = await api.get('/api/join-token/verify', { params: { token } })
+  return response.data
+}
+
+/** Consume join token and create member. */
+export async function consumeJoinToken(token, memberData) {
+  const response = await api.post('/api/join-token/consume', {
+    token,
+    member: memberData,
+  })
+  return response.data
+}
+
+/** Get pairing code for Telegram (after join). */
+export async function getPairingCode(householdId, deviceId, deviceType, name) {
+  const response = await api.post('/pair/start', {
+    household_id: householdId,
+    device_id: deviceId,
+    device_type: deviceType,
+    name: name,
+  })
+  return response.data.pairing_code
+}
+
 /**
  * Factory reset. After success, clear setup-related localStorage and reload.
  */

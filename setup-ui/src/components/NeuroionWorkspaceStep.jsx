@@ -59,6 +59,14 @@ function NeuroionWorkspaceStep({ onComplete, onBack, initialData }) {
               Back
             </button>
           )}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => onComplete?.({ skip: true })}
+            disabled={loading || success}
+          >
+            Standaard gebruiken
+          </button>
           <button type="submit" className="btn-primary" disabled={loading || success}>
             {loading ? 'Opslaan…' : 'Doorgaan'}
           </button>

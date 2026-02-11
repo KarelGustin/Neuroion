@@ -3,7 +3,7 @@ Chat endpoint for agent interactions.
 
 Routes user messages through the agent system and returns structured responses.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
@@ -71,6 +71,7 @@ def get_agent() -> Agent:
 @router.post("", response_model=ChatResponse)
 def chat(
     request: ChatRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ) -> ChatResponse:
@@ -132,12 +133,17 @@ def chat(
         if reply is not None:
             response = {"message": reply, "reasoning": "", "actions": []}
     if response is None:
+        force_task_mode = (http_request.headers.get("X-Agent-Task-Mode") or "").strip() == "1"
+        client_channel = (http_request.headers.get("X-Client-Channel") or "").strip().lower()
+        skip_onboarding = client_channel == "telegram"
         response = agent.process_message(
             db=db,
             household_id=household_id,
             user_id=user_id,
             message=request.message,
             conversation_history=conversation_history,
+            force_task_mode=force_task_mode,
+            skip_onboarding=skip_onboarding,
         )
     
     # Save assistant response

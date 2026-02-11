@@ -386,25 +386,70 @@ def setup_neuroion_channels(
         return NeuroionSetupResponse(success=False, message=str(e))
 
 
+def _ensure_default_llm_config(db: Session) -> None:
+    """If no LLM config exists, write default (local Ollama llama3.2) so setup can complete without LLM step."""
+    llm_provider = SystemConfigRepository.get(db, "llm_provider")
+    if llm_provider is not None:
+        return
+    SystemConfigRepository.set(
+        db,
+        "llm_provider",
+        {"provider": "local"},
+        category="llm",
+    )
+    SystemConfigRepository.set(
+        db,
+        "llm_ollama",
+        {
+            "base_url": app_settings.ollama_url,
+            "model": app_settings.ollama_model,
+            "timeout": app_settings.ollama_timeout,
+        },
+        category="llm",
+    )
+    db.commit()
+
+
+def _ensure_default_gateway_config(db: Session) -> None:
+    """If no Neuroion gateway config exists, write default (port 3141, bind 0.0.0.0) so setup can complete without gateway step."""
+    core = config_store_get_neuroion_core_config(db)
+    if core and isinstance(core.get("gateway"), dict):
+        return
+    gateway_defaults = {
+        "gateway": {
+            "port": 3141,
+            "bind": "0.0.0.0",
+            "auth": {"mode": "token", "token": ""},
+        },
+    }
+    core = _deep_merge_dict(core or {}, gateway_defaults)
+    config_store_set_neuroion_core_config(db, core)
+    db.commit()
+
+
 @router.get("/status", response_model=SetupStatusResponse)
 def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
     """
     Check if system is fully configured.
     
     Returns status of WiFi, LLM, and household setup.
+    If no LLM config exists, default (local Ollama llama3.2) is written so setup can complete without the LLM step.
     """
     # Check WiFi config
     wifi_config = SystemConfigRepository.get(db, "wifi")
     wifi_configured = wifi_config is not None
-    
-    # Check LLM config
+
+    # Ensure default LLM config when missing (local Ollama llama3.2)
+    _ensure_default_llm_config(db)
+
+    # Check LLM config (now at least default exists)
     llm_provider = SystemConfigRepository.get(db, "llm_provider")
     llm_configured = llm_provider is not None
-    
+
     # Check household
     households = HouseholdRepository.get_all(db)
     household_configured = len(households) > 0
-    
+
     # WiFi is optional - system can work offline
     is_complete = llm_configured and household_configured
     
@@ -763,10 +808,14 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
     Mark setup as complete.
     
     Updates DeviceConfig to mark setup as completed.
+    Ensures default gateway config when missing so the wizard can skip the gateway step.
     """
     try:
         # Mark setup complete via config_store
         config_store_set_setup_completed(db, True)
+
+        # Ensure default gateway config when missing (so user did not have to set gateway)
+        _ensure_default_gateway_config(db)
 
         # If WiFi credentials were provided but not yet applied, apply now so the
         # device can switch to the touchscreen dashboard after onboarding.

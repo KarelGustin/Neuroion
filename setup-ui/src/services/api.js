@@ -51,6 +51,20 @@ export async function getPairingCode(householdId, deviceId, deviceType, name) {
   return response.data.pairing_code
 }
 
+// Join (add member) API
+export async function verifyJoinToken(token) {
+  const response = await api.get('/api/join-token/verify', { params: { token } })
+  return response.data
+}
+
+export async function consumeJoinToken(token, memberData) {
+  const response = await api.post('/api/join-token/consume', {
+    token,
+    member: memberData,
+  })
+  return response.data
+}
+
 // Setup API functions
 export async function getSetupStatus() {
   const response = await api.get('/setup/status')
@@ -194,10 +208,10 @@ export async function createDashboardJoinToken(expiresInMinutes = 10) {
   return response.data
 }
 
-export async function deleteMemberFromDashboard(memberId, confirmationCode) {
+export async function deleteMemberFromDashboard(memberId) {
   const response = await api.post('/dashboard/member-delete', {
-    member_id: memberId,
-    confirmation_code: confirmationCode,
+    member_id: Number(memberId),
+    confirmation_code: null,
   })
   return response.data
 }

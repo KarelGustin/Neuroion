@@ -2,7 +2,7 @@
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from neuroion.core.llm.base import LLMClient
+from neuroion.core.llm.base import LLMClient, ToolCall
 from neuroion.core.llm.ollama import OllamaClient
 from neuroion.core.llm.cloud import CloudLLMClient
 from neuroion.core.llm.openai import OpenAILLMClient

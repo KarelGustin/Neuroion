@@ -6,7 +6,7 @@ Defines the schema for households, users, preferences, context snapshots, and au
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, Boolean, 
+    Column, Integer, String, Text, Float, Boolean,
     DateTime, ForeignKey, JSON, Index
 )
 from sqlalchemy.orm import relationship, declarative_base
@@ -110,6 +110,34 @@ class ContextSnapshot(Base):
     __table_args__ = (
         Index("idx_context_household_timestamp", "household_id", "timestamp"),
         Index("idx_context_user_timestamp", "user_id", "timestamp"),
+    )
+
+
+class CronJobRecord(Base):
+    """Persisted cron jobs (SQLite-backed)."""
+    __tablename__ = "cron_jobs"
+
+    id = Column(String(64), primary_key=True, index=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, index=True)
+    job_json = Column(JSON, nullable=False)
+
+    __table_args__ = (
+        Index("idx_cron_user_created", "user_id", "created_at"),
+    )
+
+
+class CronRunRecord(Base):
+    """Run records for cron jobs."""
+    __tablename__ = "cron_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(String(64), ForeignKey("cron_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    run_json = Column(JSON, nullable=False)
+
+    __table_args__ = (
+        Index("idx_cron_run_job_ts", "job_id", "timestamp"),
     )
 
 

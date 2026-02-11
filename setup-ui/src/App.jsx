@@ -4,12 +4,19 @@ import Status from './components/Status'
 import Logo from './components/Logo'
 import SetupWizard from './components/SetupWizard'
 import SetupCompletionScreen from './components/SetupCompletionScreen'
-import Dashboard from './components/Dashboard'
+import DashboardLinkScreen from './components/DashboardLinkScreen'
 import ConfigQR from './components/ConfigQR'
+import JoinFlow from './components/JoinFlow'
 import { getPairingCode, checkHealth, getSetupStatus } from './services/api'
 import './styles/App.css'
 
 function App() {
+  const isJoinPage = useMemo(() => {
+    const pathname = window.location.pathname || ''
+    const params = new URLSearchParams(window.location.search)
+    return pathname === '/join' && params.get('token')
+  }, [])
+
   const isKiosk = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
     return params.get('kiosk') === '1' || params.get('mode') === 'kiosk'
@@ -43,14 +50,14 @@ function App() {
     return () => clearInterval(interval)
   }, [status, setupComplete])
 
-  // In kiosk mode, poll setup status so we switch from ConfigQR to Dashboard when config is done on another device
+  // In kiosk mode, poll setup status so we redirect to touchscreen (3001) when config is done on another device
   useEffect(() => {
     if (!isKiosk || status !== 'ready') return
     const poll = setInterval(() => {
       getSetupStatus()
         .then((s) => setSetupComplete(s.is_complete))
         .catch(() => {})
-    }, 3000)
+    }, 60000)
     return () => clearInterval(poll)
   }, [isKiosk, status])
 
@@ -102,6 +109,14 @@ function App() {
     await startPairing()
   }
 
+  if (isJoinPage) {
+    return (
+      <div className="app">
+        <JoinFlow />
+      </div>
+    )
+  }
+
   if (checkingSetup && !isKiosk) {
     return (
       <div className="app">
@@ -125,10 +140,12 @@ function App() {
   }
 
   if (isKiosk && setupComplete) {
+    const dashboardUrl = `${window.location.protocol}//${window.location.hostname}:3001`
+    window.location.href = dashboardUrl
     return (
-      <div className="app app-kiosk">
+      <div className="app">
         <div className="container">
-          <Dashboard isKiosk />
+          <p>Redirecting to dashboard…</p>
         </div>
       </div>
     )
@@ -144,15 +161,15 @@ function App() {
     )
   }
 
+  if (setupComplete) {
+    return <DashboardLinkScreen />
+  }
+
   return (
     <div className="app">
       <div className="container app-grid">
-        {!setupComplete && <Status status={status} error={error} />}
-        {!setupComplete ? (
-          <SetupWizard onComplete={handleSetupComplete} />
-        ) : (
-          <Dashboard />
-        )}
+        <Status status={status} error={error} />
+        <SetupWizard onComplete={handleSetupComplete} />
       </div>
     </div>
   )

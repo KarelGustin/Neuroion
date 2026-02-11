@@ -46,6 +46,31 @@
   line-height: 1.4;
 }
 
+.qr-open-on-device {
+  display: block;
+  width: 100%;
+  padding: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-3);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-btn);
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  min-height: 52px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.qr-open-on-device:hover {
+  background: var(--accent-hover);
+}
+
+.qr-open-on-device:active {
+  transform: scale(0.98);
+}
+
 .qr-close {
   padding: var(--space-4) var(--space-6);
   background: var(--bg-elevated);

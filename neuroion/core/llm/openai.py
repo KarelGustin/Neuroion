@@ -4,11 +4,11 @@ OpenAI-compatible LLM client implementation.
 Supports OpenAI, Anthropic, and other OpenAI-compatible APIs.
 """
 import requests
-from typing import List, Dict, Optional, Iterator
+from typing import List, Dict, Optional, Iterator, Tuple, Any
 import time
 import json
 
-from neuroion.core.llm.base import LLMClient
+from neuroion.core.llm.base import LLMClient, ToolCall
 
 
 class OpenAILLMClient(LLMClient):
@@ -122,7 +122,44 @@ class OpenAILLMClient(LLMClient):
             return data["choices"][0]["message"]["content"]
         
         return ""
-    
+
+    def chat_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        tool_choice: Optional[str] = None,
+    ) -> Tuple[str, List[ToolCall]]:
+        """Send chat with tools; return (content, tool_calls)."""
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "tools": tools,
+        }
+        if tool_choice is not None:
+            payload["tool_choice"] = "auto" if tool_choice == "auto" else tool_choice
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
+        response = self._make_request(payload)
+        data = response.json()
+        if "choices" not in data or len(data["choices"]) == 0:
+            return ("", [])
+        msg = data["choices"][0].get("message", {})
+        content = msg.get("content") or ""
+        tool_calls = []
+        for tc in msg.get("tool_calls") or []:
+            tc_id = tc.get("id") or ""
+            name = (tc.get("function") or {}).get("name") or ""
+            args_str = (tc.get("function") or {}).get("arguments") or "{}"
+            try:
+                args = json.loads(args_str)
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append(ToolCall(id=tc_id, name=name, arguments=args))
+        return (content, tool_calls)
+
     def complete(
         self,
         prompt: str,

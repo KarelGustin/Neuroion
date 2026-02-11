@@ -268,7 +268,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = await client.post(
                 get_homebase_url("/chat"),
                 json={"message": message_text},
-                headers={"Authorization": f"Bearer {token}"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "X-Client-Channel": "telegram",
+                },
             )
         response.raise_for_status()
         data = response.json()

@@ -10,3 +10,4 @@ python-multipart>=0.0.12
 requests>=2.32.0
 python-telegram-bot>=21.0
 qrcode[pil]>=7.4.2
+croniter>=2.0.0

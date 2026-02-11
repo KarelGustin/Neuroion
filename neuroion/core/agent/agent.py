@@ -2,6 +2,7 @@
 Main agent orchestrator.
 
 Interprets user intent, decides on actions, and coordinates tool execution.
+Supports LLM tool-calling for cron.* tools (scheduling/reminders).
 """
 import json
 import re
@@ -9,9 +10,30 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
 from neuroion.core.llm import get_llm_client_from_config
-from neuroion.core.agent.tools import get_tool_registry
+from neuroion.core.agent.tool_registry import get_tool_registry
 from neuroion.core.agent.planner import Planner
-from neuroion.core.agent.prompts import build_chat_messages, build_reasoning_prompt
+from neuroion.core.agent.gateway import run_agent_turn
+from neuroion.core.agent.types import RunContext, RunState
+from neuroion.core.agent.executor import get_executor
+from neuroion.core.agent.agent_loop import run_one_turn
+from neuroion.core.agent.task_manager import (
+    DONE,
+    FAILED,
+    get_or_create_task,
+    transition,
+    can_make_turn,
+    can_execute_tool,
+    is_terminal,
+    clear_active_task_id,
+    MAX_TURNS,
+)
+from neuroion.core.agent.tool_protocol import parse_llm_output
+from neuroion.core.agent.task_prompts import build_task_messages
+from neuroion.core.agent.prompts import build_scheduling_intent_messages
+from neuroion.core.agent.policies.guardrails import get_guardrails
+from neuroion.core.agent.policies.validator import get_validator
+from neuroion.core.observability.tracing import start_run, end_run
+from neuroion.core.observability.metrics import record_run_result
 from neuroion.core.memory.repository import (
     ContextSnapshotRepository,
     PreferenceRepository,
@@ -23,11 +45,13 @@ class Agent:
     """Main agent orchestrator."""
     
     def __init__(self):
-        """Initialize agent with LLM client and tool registry."""
-        # LLM client will be loaded dynamically from config when db is available
+        """Initialize agent with LLM client, tool registry, executor, validator, guardrails."""
         self.llm = None
         self.tool_registry = get_tool_registry()
         self.planner = Planner(self.tool_registry)
+        self.executor = get_executor()
+        self.validator = get_validator()
+        self.guardrails = get_guardrails()
     
     def process_message(
         self,
@@ -36,6 +60,8 @@ class Agent:
         user_id: Optional[int],
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        force_task_mode: bool = False,
+        skip_onboarding: bool = False,
     ) -> Dict[str, Any]:
         """
         Process a user message and return structured response.
@@ -76,23 +102,20 @@ class Agent:
         
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)
-        
-        # Build messages for LLM
-        messages = build_chat_messages(
-            user_message=message,
-            context_snapshots=context_dicts,
-            user_preferences=user_prefs_dict if user_prefs_dict else None,
-            household_preferences=household_prefs_dict if household_prefs_dict else None,
-            conversation_history=conversation_history,
-            db=db,
-            household_id=household_id,
-            user_id=user_id,
-        )
-        
+
+        # Task path only when client explicitly requests it (X-Agent-Task-Mode: 1)
+        user_id_str = str(user_id) if user_id is not None else "0"
+        if force_task_mode and self._scheduling_intent(message):
+            result = self._process_task_path(
+                db, household_id, user_id, user_id_str, message, conversation_history
+            )
+            if result is not None:
+                return result
+
         # Check if in onboarding mode
         in_onboarding = False
         current_question = None
-        if user_id:
+        if user_id and not skip_onboarding:
             from neuroion.core.agent.onboarding import (
                 get_current_onboarding_question,
                 save_onboarding_answer,
@@ -103,11 +126,19 @@ class Agent:
             current_question = get_current_onboarding_question(db, household_id, user_id)
             in_onboarding = current_question is not None
         
-        # Get LLM response
-        llm_response = self.llm.chat(messages, temperature=0.7)
-        
+        llm_response = run_agent_turn(
+            db=db,
+            household_id=household_id,
+            user_id=user_id,
+            message=message,
+            conversation_history=conversation_history,
+            llm=self.llm,
+            context_snapshots=context_dicts,
+            user_preferences=user_prefs_dict if user_prefs_dict else None,
+            household_preferences=household_prefs_dict if household_prefs_dict else None,
+        )
         # Post-process response: strip markdown bold syntax and trim
-        llm_response = re.sub(r'\*\*(.+?)\*\*', r'\1', llm_response)  # Remove **bold**
+        llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)
         llm_response = llm_response.strip()
         
         # Handle onboarding if in progress
@@ -138,111 +169,201 @@ class Agent:
                 "actions": [],
             }
         
-        # Determine if action is needed (only if not in onboarding)
-        action_decision = self._decide_action(message, llm_response)
-        
-        if action_decision["needs_action"]:
-            # Propose action
-            action = self._prepare_action(
-                db, household_id, user_id, action_decision, llm_response
+        if user_id and not in_onboarding:
+            self._store_context_snapshot(
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                user_message=message,
+                assistant_message=llm_response,
             )
-            
-            return {
-                "message": llm_response,
-                "reasoning": action_decision.get("reasoning", ""),
-                "actions": [action],
-            }
-        else:
-            # Direct answer
-            return {
-                "message": llm_response,
-                "reasoning": "",
-                "actions": [],
-            }
-    
-    def _decide_action(
-        self,
-        user_message: str,
-        llm_response: str,
-    ) -> Dict[str, Any]:
-        """
-        Decide if an action is needed based on user message and LLM response.
-        
-        Returns:
-            Dict with 'needs_action', 'tool_name', 'parameters', 'reasoning'
-        """
-        # Simple heuristic: check if response mentions tools or actions
-        # In production, use a more sophisticated approach with LLM reasoning
-        
-        available_tools = self.tool_registry.get_tools_for_llm()
-        tool_keywords = {
-            "menu": "generate_week_menu",
-            "grocery": "create_grocery_list",
-            "shopping": "create_grocery_list",
-            "preferences": "summarize_family_preferences",
-        }
-        
-        message_lower = user_message.lower()
-        response_lower = llm_response.lower()
-        
-        for keyword, tool_name in tool_keywords.items():
-            if keyword in message_lower or keyword in response_lower:
-                return {
-                    "needs_action": True,
-                    "tool_name": tool_name,
-                    "parameters": {},
-                    "reasoning": f"User message suggests {tool_name} might be useful",
-                }
         
         return {
-            "needs_action": False,
-            "reasoning": "No action needed, direct answer sufficient",
+            "message": llm_response,
+            "reasoning": "",
+            "actions": [],
         }
     
-    def _prepare_action(
+    def _scheduling_intent(self, message: str) -> bool:
+        """True if the LLM interprets the message as scheduling/reminders (task mode)."""
+        if not (message or "").strip():
+            return False
+        if not self.llm:
+            return False
+        messages = build_scheduling_intent_messages(message)
+        try:
+            raw = self.llm.chat(messages, temperature=0.0, max_tokens=64)
+            data = _parse_json_object(raw)
+            if isinstance(data, dict) and "scheduling_intent" in data:
+                return bool(data["scheduling_intent"])
+        except Exception:
+            pass
+        return False
+
+    def _process_task_path(
         self,
         db: Session,
         household_id: int,
         user_id: Optional[int],
-        action_decision: Dict[str, Any],
-        llm_response: str,
-    ) -> Dict[str, Any]:
-        """
-        Prepare an action proposal.
-        
-        Returns:
-            Action dict with 'id', 'name', 'description', 'parameters', 'reasoning'
-        """
-        tool_name = action_decision["tool_name"]
-        tool = self.tool_registry.get(tool_name)
-        
-        if not tool:
+        user_id_str: str,
+        message: str,
+        conversation_history: Optional[List[Dict[str, str]]],
+    ) -> Optional[Dict[str, Any]]:
+        """Run task-mode via Observe -> Plan -> Act -> Validate -> Commit. Returns None to fall back to chat path."""
+        start_run()
+        try:
+            task = get_or_create_task(user_id_str, message)
+            if not can_make_turn(task):
+                transition(task, FAILED)
+                clear_active_task_id(user_id_str)
+                end_run(False, "max_turns")
+                record_run_result(False)
+                return {
+                    "message": "Too many steps; please try again with a shorter request.",
+                    "reasoning": "",
+                    "actions": [],
+                }
+            previous = []
+            if conversation_history:
+                previous = conversation_history[-4:]
+            messages = build_task_messages(message, previous_exchanges=previous)
+            raw = self.llm.chat(messages, temperature=0.3)
+            kind, payload = parse_llm_output(
+                raw, task.get("last_assistant_output"),
+                allowed_tools=self.planner._tool_router.get_all_tool_names(),
+            )
+            transition(task, task.get("state"), increment_turn=True, last_assistant_output=raw)
+
+            # Observe: state with pending_decision from LLM
+            state = RunState(
+                message=message,
+                conversation_history=conversation_history,
+                task=task,
+                mode="task",
+                pending_decision=(kind, payload),
+            )
+            context = RunContext(
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                user_id_str=user_id_str,
+                allowed_tools=self.guardrails.allowed_tools_for_context(),
+            )
+            action, observation, validation = run_one_turn(
+                state, context, self.planner, self.executor, self.validator
+            )
+
+            if not validation.passed:
+                end_run(False, validation.error)
+                record_run_result(False)
+                return {
+                    "message": validation.error or "Blocked by policy.",
+                    "reasoning": "",
+                    "actions": [],
+                }
+
+            # Commit
+            if action.type == "tool_call":
+                if not can_execute_tool(task):
+                    clear_active_task_id(user_id_str)
+                    transition(task, FAILED)
+                    end_run(False, "max_tool_attempts")
+                    record_run_result(False)
+                    return {
+                        "message": "Maximum tool attempts reached for this task. Please start over.",
+                        "reasoning": "",
+                        "actions": [],
+                    }
+                transition(task, DONE, increment_tool_attempt=True)
+                clear_active_task_id(user_id_str)
+                end_run(True)
+                record_run_result(True)
+                if not observation.success:
+                    msg = observation.error or "Something went wrong."
+                else:
+                    msg = self._task_result_to_message(action.tool, observation.output or {})
+                return {"message": msg, "reasoning": "", "actions": []}
+
+            if action.type == "need_info":
+                transition(task, "NEEDS_INFO")
+                end_run(True)
+                record_run_result(True)
+                msg = observation.message or "Please provide the requested information."
+                return {"message": msg, "reasoning": "", "actions": []}
+
+            if action.type == "final":
+                transition(task, DONE)
+                clear_active_task_id(user_id_str)
+                end_run(True)
+                record_run_result(True)
+                return {"message": (action.message or "").strip() or "Done.", "reasoning": "", "actions": []}
+
+            transition(task, FAILED)
+            clear_active_task_id(user_id_str)
+            end_run(False, "invalid_output")
+            record_run_result(False)
             return {
-                "id": None,
-                "name": tool_name,
-                "description": f"Unknown tool: {tool_name}",
-                "parameters": {},
-                "reasoning": "Tool not found",
+                "message": "Please respond with only a JSON object (tool_call, need_info, or final). No other text.",
+                "reasoning": "",
+                "actions": [],
             }
-        
-        # Log suggestion
-        audit_id = AuditLogger.log_suggestion(
-            db=db,
-            household_id=household_id,
-            action_name=tool_name,
-            reasoning=action_decision.get("reasoning", llm_response),
-            input_data=action_decision.get("parameters", {}),
-            user_id=user_id,
-        )
-        
-        return {
-            "id": audit_id,
-            "name": tool_name,
-            "description": tool.description,
-            "parameters": action_decision.get("parameters", {}),
-            "reasoning": action_decision.get("reasoning", ""),
-        }
-    
+        except Exception as e:
+            end_run(False, str(e))
+            record_run_result(False)
+            raise
+
+    def _store_context_snapshot(
+        self,
+        db: Session,
+        household_id: int,
+        user_id: int,
+        user_message: str,
+        assistant_message: str,
+    ) -> None:
+        """Ask LLM to extract context and store if useful."""
+        from neuroion.core.agent.prompts import build_context_extraction_messages
+        messages = build_context_extraction_messages(user_message, assistant_message)
+        raw = self.llm.chat(messages, temperature=0.2)
+        data = _parse_json_object(raw)
+        if not isinstance(data, dict):
+            return
+        if (data.get("type") or "").strip().lower() != "context":
+            return
+        summary = str(data.get("summary") or "").strip()
+        if not summary:
+            return
+        event_type = str(data.get("event_type") or "note").strip() or "note"
+        metadata = data.get("metadata")
+        scope = (data.get("scope") or "user").strip().lower()
+        target_user_id = None if scope == "household" else user_id
+        try:
+            ContextSnapshotRepository.create(
+                db=db,
+                household_id=household_id,
+                user_id=target_user_id,
+                event_type=event_type[:50],
+                summary=summary,
+                context_metadata=metadata if isinstance(metadata, dict) else None,
+            )
+        except Exception:
+            return
+
+    def _task_result_to_message(self, tool: str, result: Dict[str, Any]) -> str:
+        """Turn tool result into a short user-facing message."""
+        if tool == "cron.add" and result.get("jobId"):
+            return f"Herinnering gepland. (job {result['jobId'][:8]}...)"
+        if tool == "cron.list" and "jobs" in result:
+            n = len(result["jobs"])
+            return f"Je hebt {n} geplande taak/taken." if n != 1 else "Je hebt 1 geplande taak."
+        if tool == "cron.remove" and result.get("success"):
+            return "Taak verwijderd."
+        if tool == "cron.run" and result.get("success"):
+            return "Taak uitgevoerd."
+        if tool == "cron.runs" and "runs" in result:
+            n = len(result["runs"])
+            return f"Laatste {n} run(s)."
+        return str(result.get("result", result))
+
     def execute_action(
         self,
         db: Session,
@@ -298,3 +419,36 @@ class Agent:
                 "success": False,
                 "error": str(e),
             }
+
+
+def _parse_json_object(raw: str) -> Optional[Dict[str, Any]]:
+    """Best-effort parse of a single JSON object from a string."""
+    if not raw:
+        return None
+    text = raw.strip()
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+    code = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
+    if code:
+        try:
+            return json.loads(code.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start : i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None

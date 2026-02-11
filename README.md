@@ -39,7 +39,7 @@ Neuroion is a privacy-first home intelligence system that runs entirely on your 
 
 - Python 3.11+
 - Node.js 18+ (for setup UI)
-- Ollama running on localhost:11434
+- Ollama running on localhost:11434. The default LLM is **Ollama with model `llama3.2`**; run `ollama run llama3.2` so the agent can use it out of the box.
 - Docker and Docker Compose (optional, for containerized deployment)
 
 ### Development Setup
@@ -114,7 +114,7 @@ This starts:
 
 Useful for **local testing** and **testing on a Raspberry Pi** on your network (open the URLs via the Pi’s IP, e.g. `http://192.168.1.x:3001` for the touchscreen).
 
-**Ollama** (for local LLM) is not started by this command. Run `ollama serve` in a separate terminal if you use the local model.
+**Ollama** (for local LLM) is not started by this command. Run `ollama serve` in a separate terminal, then `ollama run llama3.2` to pull and use the default model.
 
 ### Docker Deployment
 
@@ -151,6 +151,25 @@ Neuroion/
 ├── ios/                   # iOS SwiftUI app
 └── infra/                 # Docker & deployment
 ```
+
+## Adding Agent Skills
+
+Create a new Python module under `neuroion/core/agent/skills/` and register a tool:
+
+```python
+from sqlalchemy.orm import Session
+from neuroion.core.agent.tool_registry import register_tool
+
+@register_tool(
+    name="my_new_tool",
+    description="Short description of what it does",
+    parameters={"type": "object", "properties": {"foo": {"type": "string"}}, "required": ["foo"]},
+)
+def my_new_tool(db: Session, household_id: int, foo: str):
+    return {"result": f"foo={foo}"}
+```
+
+Tools are auto-imported from the `skills` package at startup.
 
 ## API Documentation
 

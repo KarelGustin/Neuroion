@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import PixelAnimation from './PixelAnimation'
+import ConfigQR from './ConfigQR'
 import {
   getDashboardStats,
   getHouseholdMembers,
@@ -21,14 +22,14 @@ function Dashboard({ isKiosk = false }) {
     days_since_boot: 0,
   })
   const [members, setMembers] = useState([])
-  const [setupComplete, setSetupComplete] = useState(true)
+  const [setupComplete, setSetupComplete] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [loginCode, setLoginCode] = useState(null)
   const [countdown, setCountdown] = useState(60)
 
   const [addMemberModal, setAddMemberModal] = useState({ show: false, joinUrl: null, addCountdown: 600 })
-  const [deleteMemberModal, setDeleteMemberModal] = useState({ show: false, member: null, code: '', error: null })
+  const [deleteMemberModal, setDeleteMemberModal] = useState({ show: false, member: null, error: null })
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -39,8 +40,6 @@ function Dashboard({ isKiosk = false }) {
       } catch (err) {
         console.error('Failed to fetch dashboard stats:', err)
         setError(err.message)
-      } finally {
-        setLoading(false)
       }
     }
 
@@ -62,17 +61,17 @@ function Dashboard({ isKiosk = false }) {
       }
     }
 
-    // Initial fetch
-    fetchStats()
-    fetchMembers()
-    fetchSetupComplete()
+    const loadAll = async () => {
+      await Promise.all([fetchStats(), fetchMembers(), fetchSetupComplete()])
+    }
 
-    // Poll every 5 seconds
+    loadAll().finally(() => setLoading(false))
+
     const interval = setInterval(() => {
       fetchStats()
       fetchMembers()
       fetchSetupComplete()
-    }, 5000)
+    }, 60000)
 
     return () => clearInterval(interval)
   }, [])
@@ -124,7 +123,9 @@ function Dashboard({ isKiosk = false }) {
       })
     } catch (err) {
       console.error('Failed to create join token:', err)
-      setError(err.message || 'Failed to create add-member link')
+      const detail = err.response?.data?.detail
+      const message = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((d) => d.msg || JSON.stringify(d)).join('. ') : err.message || 'Failed to create add-member link'
+      setError(message)
     }
   }
 
@@ -136,39 +137,45 @@ function Dashboard({ isKiosk = false }) {
           ? { ...prev, addCountdown: prev.addCountdown - 1 }
           : prev
       )
-    }, 1000)
+    }, 60000)
     return () => clearInterval(t)
   }, [addMemberModal.show, addMemberModal.addCountdown])
 
   const openDeleteMemberModal = (member) => (e) => {
     e.stopPropagation()
-    setDeleteMemberModal({ show: true, member, code: '', error: null })
+    setDeleteMemberModal({ show: true, member, error: null })
   }
 
   const confirmDeleteMember = async () => {
-    if (!deleteMemberModal.member || !deleteMemberModal.code.trim()) {
-      setDeleteMemberModal((prev) => ({ ...prev, error: 'Voer bevestigingscode in' }))
-      return
-    }
+    if (!deleteMemberModal.member) return
     try {
-      await deleteMemberFromDashboard(deleteMemberModal.member.id, deleteMemberModal.code.trim())
-      setDeleteMemberModal({ show: false, member: null, code: '', error: null })
+      await deleteMemberFromDashboard(deleteMemberModal.member.id)
+      setDeleteMemberModal({ show: false, member: null, error: null })
       const membersList = await getHouseholdMembers()
       setMembers(membersList)
     } catch (err) {
-      setDeleteMemberModal((prev) => ({
-        ...prev,
-        error: err.response?.data?.detail || 'Verwijderen mislukt. Controleer de code.',
-      }))
+      const detail = err.response?.data?.detail
+      const message = Array.isArray(detail)
+        ? detail.map((d) => d.msg || JSON.stringify(d)).join('. ')
+        : typeof detail === 'string'
+          ? detail
+          : 'Verwijderen mislukt.'
+      setDeleteMemberModal((prev) => ({ ...prev, error: message }))
     }
   }
 
   if (loading && !isKiosk) {
     return (
-      <div className="dashboard">
-        <div className="dashboard-loading">
-          <p>Loading dashboard...</p>
-        </div>
+      <div className="dashboard dashboard-loading">
+        <p>Loading dashboard...</p>
+      </div>
+    )
+  }
+
+  if (!loading && !setupComplete) {
+    return (
+      <div className="app">
+        <ConfigQR />
       </div>
     )
   }
@@ -208,14 +215,21 @@ function Dashboard({ isKiosk = false }) {
   }
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1 className="dashboard-title">Neuroion</h1>
-        <p className="dashboard-subtitle">Home Intelligence Platform</p>
-      </header>
-
-      <div className="dashboard-main">
-      <section className="dashboard-members" aria-label="Leden">
+    <div className="dashboard dashboard--fullscreen">
+      <div className="dashboard-status" aria-label="Connection">
+        <PixelAnimation status={stats.wifi_status} />
+        <div className="status-info">
+          <p className="status-label">Connection</p>
+          <p className={`status-value status-${stats.wifi_status_color}`}>
+            {stats.wifi_message}
+          </p>
+        </div>
+      </div>
+      <div className="dashboard-stat" aria-label="Neuroion Requests">
+        <p className="stat-label">Neuroion Requests</p>
+        <p className="stat-value">{stats.daily_requests}</p>
+      </div>
+      <div className="dashboard-members" aria-label="Leden">
         <div className="members-header-row">
           <h2 className="members-title">Members</h2>
           {setupComplete ? (
@@ -255,31 +269,6 @@ function Dashboard({ isKiosk = false }) {
         ) : (
           <p className="members-hint">Nog geen members. Klik op + Add member en scan de QR om iemand toe te voegen.</p>
         )}
-      </section>
-
-      <section className="dashboard-overview" aria-label="Status en statistieken">
-        <div className="dashboard-status">
-          <PixelAnimation status={stats.wifi_status} />
-          <div className="status-info">
-            <p className="status-label">Connection</p>
-            <p className={`status-value status-${stats.wifi_status_color}`}>
-              {stats.wifi_message}
-            </p>
-          </div>
-        </div>
-        <div className="stat-card stat-members">
-          <div className="stat-content">
-            <p className="stat-label">Members</p>
-            <p className="stat-value">{stats.member_count}</p>
-          </div>
-        </div>
-        <div className="stat-card stat-requests">
-          <div className="stat-content">
-            <p className="stat-label">Neuroion Requests</p>
-            <p className="stat-value">{stats.daily_requests}</p>
-          </div>
-        </div>
-      </section>
       </div>
 
       {loginCode && (
@@ -326,20 +315,8 @@ function Dashboard({ isKiosk = false }) {
             <h3>Member verwijderen</h3>
             <p className="delete-member-warning">
               Weet je het zeker? Alle data van <strong>{deleteMemberModal.member.name}</strong> wordt permanent
-              verwijderd. Voer de bevestigingscode (passcode van deze member) in.
+              verwijderd.
             </p>
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              placeholder="4-6 cijfers"
-              className="delete-member-input"
-              value={deleteMemberModal.code}
-              onChange={(e) =>
-                setDeleteMemberModal((prev) => ({ ...prev, code: e.target.value.replace(/\D/g, ''), error: null }))
-              }
-            />
             {deleteMemberModal.error && (
               <p className="delete-member-error">{deleteMemberModal.error}</p>
             )}
@@ -347,7 +324,7 @@ function Dashboard({ isKiosk = false }) {
               <button
                 type="button"
                 className="close-button"
-                onClick={() => setDeleteMemberModal({ show: false, member: null, code: '', error: null })}
+                onClick={() => setDeleteMemberModal({ show: false, member: null, error: null })}
               >
                 Annuleren
               </button>

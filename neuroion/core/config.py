@@ -65,7 +65,14 @@ class Settings(BaseSettings):
     
     # Dashboard UI
     dashboard_ui_port: int = int(os.getenv("DASHBOARD_UI_PORT", "3001"))
-    
+
+    # Cron: allow cron expressions that run every minute (comma-separated list or "true" for any)
+    cron_allow_every_minute: str = os.getenv("CRON_ALLOW_EVERY_MINUTE", "")
+    cron_jobs_per_user_per_day: int = int(os.getenv("CRON_JOBS_PER_USER_PER_DAY", "20"))
+
+    # Agent task mode: use structured JSON protocol for local LLM tool execution (1 = on)
+    agent_task_mode: bool = os.getenv("AGENT_TASK_MODE", "1").strip().lower() in ("1", "true", "yes")
+
     class Config:
         env_file = ".env"
         case_sensitive = False

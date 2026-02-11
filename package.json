@@ -15,6 +15,7 @@
     "cross-env": "^7.0.3"
   },
   "dependencies": {
-    "python": "^0.0.4"
+    "python": "^0.0.4",
+    "tree": "^0.1.3"
   }
 }

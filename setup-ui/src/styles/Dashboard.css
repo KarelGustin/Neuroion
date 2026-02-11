@@ -5,16 +5,61 @@
   max-width: 1600px;
   margin: 0 auto;
   padding: clamp(0.5rem, 2vw, 1.5rem) clamp(0.5rem, 2vw, 1.5rem);
-  min-height: 100vh;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.dashboard--fullscreen {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  max-width: none;
+  overflow: hidden;
+  padding: 0.35rem;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-auto-rows: minmax(0, auto);
+  gap: 0.5rem;
+}
+
+.dashboard--fullscreen > .dashboard-status {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
+}
+
+.dashboard--fullscreen > .dashboard-stat {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+}
+
+.dashboard--fullscreen > .dashboard-members {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+}
+
+.dashboard--fullscreen > .dashboard-error {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  margin-top: 0.5rem;
 }
 
 .dashboard-loading {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 50vh;
+  min-height: 100vh;
   color: var(--text-muted);
   font-size: 0.875rem;
   font-weight: 400;
@@ -45,7 +90,7 @@
 
 /* Kiosk mode: 4-tile grid (Members, WiFi, Requests, Dagen sinds geboot) */
 .dashboard--kiosk {
-  padding: 1rem;
+  padding: 0.5rem;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -56,7 +101,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto;
-  gap: 1rem;
+  gap: 0.5rem;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
@@ -139,17 +184,120 @@
   }
 }
 
-/* Wrapper for two-column layout */
-.dashboard-main {
-  display: block;
-  flex: 1;
+/* Full-screen grid: 3 direct children (status, stat, members) */
+.dashboard--fullscreen > * {
+  min-width: 0;
+  min-height: 0;
 }
 
-.dashboard-overview {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+.dashboard--fullscreen > .dashboard-status,
+.dashboard--fullscreen > .dashboard-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+}
+
+.dashboard--fullscreen .dashboard-status .pixel-animation {
+  padding: 0.25rem;
+}
+
+.dashboard--fullscreen .dashboard-status .logo-container {
+  width: 64px;
+  height: 72px;
+}
+
+.dashboard--fullscreen .dashboard-status .glow-effect {
+  width: 80px;
+  height: 88px;
+}
+
+.dashboard--fullscreen .dashboard-members .members-header-row {
+  flex-shrink: 0;
+}
+
+.dashboard--fullscreen .members-hint {
+  flex-shrink: 0;
+  font-size: clamp(0.875rem, 2.5vw, 1rem);
+}
+
+.dashboard--fullscreen .members-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dashboard--fullscreen .members-list::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard--fullscreen .status-info {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+  max-width: 100%;
+}
+
+.dashboard--fullscreen .dashboard-status {
+  flex-wrap: wrap;
+}
+
+.dashboard--fullscreen .stat-value {
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+}
+
+.dashboard--fullscreen .stat-label {
+  font-size: clamp(0.875rem, 2.5vw, 1rem);
+}
+
+/* Slightly smaller font for WiFi connection (status) */
+.dashboard--fullscreen .status-value {
+  font-size: clamp(0.8125rem, 2.5vw, 0.9375rem);
+}
+
+.dashboard--fullscreen .status-label {
+  font-size: clamp(0.625rem, 2vw, 0.75rem);
+}
+
+.dashboard--fullscreen .members-title {
+  font-size: clamp(1.125rem, 4vw, 1.5rem);
+}
+
+.dashboard--fullscreen .member-name {
+  font-size: clamp(1rem, 3vw, 1.125rem);
+}
+
+.dashboard--fullscreen .member-item,
+.dashboard--fullscreen .add-member-btn {
+  min-height: 44px;
+}
+
+@media (max-width: 479px) {
+  .dashboard--fullscreen {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, auto) minmax(0, auto) minmax(0, 1fr);
+  }
+
+  .dashboard--fullscreen > .dashboard-status {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .dashboard--fullscreen > .dashboard-stat {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .dashboard--fullscreen > .dashboard-members {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }
 
 .dashboard-status {
@@ -164,6 +312,7 @@
   border-radius: 12px;
   position: relative;
   overflow: hidden;
+  width: 100%;
 }
 
 /* Subtle background texture inspired by logo */
@@ -184,6 +333,7 @@
     );
   pointer-events: none;
   opacity: 0.2;
+  
 }
 
 .status-info {
@@ -218,10 +368,11 @@
   color: var(--status-error);
 }
 
-.stat-card {
+.dashboard-stat {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   padding: 1rem;
   background: var(--bg-secondary);
   border: 0.5px solid var(--border-default);
@@ -230,7 +381,7 @@
   min-height: 70px;
 }
 
-.stat-card:hover {
+.dashboard-stat:hover {
   border-color: var(--border-hover);
   background: var(--bg-tertiary);
 }
@@ -276,6 +427,8 @@
   border-radius: 12px;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  
 }
 
 .members-header-row {
@@ -504,24 +657,6 @@
   line-height: 1.4;
 }
 
-.delete-member-input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 1.25rem;
-  letter-spacing: 0.2em;
-  text-align: center;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  color: var(--text-primary);
-  margin-bottom: 0.75rem;
-}
-
-.delete-member-input:focus {
-  outline: none;
-  border-color: var(--accent-blue);
-}
-
 .delete-member-error {
   font-size: 0.8125rem;
   color: var(--status-error);
@@ -561,18 +696,6 @@
     font-size: 0.8125rem;
   }
 
-  /* Blijf één kolom; overview wordt één rij van 3 kaarten */
-  .dashboard-main {
-    display: block;
-  }
-
-  .dashboard-overview {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-
   .dashboard-status {
     flex-direction: row;
     padding: 1rem 1.25rem;
@@ -592,7 +715,7 @@
     font-size: 0.875rem;
   }
 
-  .stat-card {
+  .dashboard-stat {
     padding: 1rem 1.25rem;
     border-radius: 12px;
     min-height: 72px;
@@ -630,8 +753,8 @@
   }
 }
 
-/* 1024px+: twee kolommen – sidebar (stats) links, leden rechts */
-@media (min-width: 1024px) {
+/* 1024px+ of landscape op smallere breedte: twee kolommen – sidebar (stats) links, leden rechts */
+@media (min-width: 1024px), ((orientation: landscape) and (min-width: 640px)) {
   .dashboard {
     padding: 2rem 2.5rem;
     max-width: 1400px;
@@ -650,21 +773,6 @@
     font-size: 0.9375rem;
   }
 
-  .dashboard-main {
-    display: grid;
-    grid-template-columns: 300px 1fr;
-    gap: 2rem;
-    align-items: start;
-  }
-
-  .dashboard-overview {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    margin-bottom: 0;
-    position: sticky;
-    top: 1.25rem;
-  }
-
   .dashboard-status {
     padding: 1.5rem;
     border-radius: 16px;
@@ -674,7 +782,7 @@
     font-size: 1rem;
   }
 
-  .stat-card {
+  .dashboard-stat {
     padding: 1.5rem;
     min-height: 80px;
     border-radius: 16px;
@@ -715,8 +823,8 @@
   }
 }
 
-/* Grote schermen (monitor): extra ruimte en comfort */
-@media (min-width: 1280px) {
+/* Grote schermen (monitor): extra ruimte en comfort; ook in landscape bij voldoende breedte */
+@media (min-width: 1280px), ((orientation: landscape) and (min-width: 900px)) {
   .dashboard {
     padding: 2.5rem 4rem;
     max-width: 1600px;
@@ -735,22 +843,12 @@
     font-size: 1rem;
   }
 
-  .dashboard-main {
-    grid-template-columns: 360px 1fr;
-    gap: 2.5rem;
-  }
-
-  .dashboard-overview {
-    gap: 1.125rem;
-    top: 1.5rem;
-  }
-
   .dashboard-status {
     padding: 1.75rem;
     border-radius: 18px;
   }
 
-  .stat-card {
+  .dashboard-stat {
     padding: 1.75rem;
     min-height: 90px;
     border-radius: 18px;

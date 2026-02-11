@@ -1,15 +1,22 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import StatusCard from './components/StatusCard'
 import ActionButton from './components/ActionButton'
 import QRDisplay from './components/QRDisplay'
 import SettingsPanel from './components/SettingsPanel'
 import BootScreen from './components/BootScreen'
 import SetupRequiredScreen from './components/SetupRequiredScreen'
+import JoinFlow from './components/JoinFlow'
 import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
 import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset } from './services/api'
 import './styles/App.css'
 
 function App() {
+  const isJoinPage = useMemo(() => {
+    const pathname = window.location.pathname || ''
+    const token = new URLSearchParams(window.location.search).get('token')
+    return pathname === '/join' && !!token
+  }, [])
+
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
   const [qrData, setQrData] = useState(null)
@@ -52,7 +59,7 @@ function App() {
       }
     }
     poll()
-    const interval = setInterval(poll, 1000)
+    const interval = setInterval(poll, 3000)
     return () => {
       cancelled = true
       clearTimeout(fallback)
@@ -156,7 +163,7 @@ function App() {
 
   useEffect(() => {
     if (view !== 'dashboard' || !status || neuroionLaunched) return
-    const autoLaunch = import.meta.env.VITE_NEUROION_AUTOLAUNCH !== '0'
+    const autoLaunch = import.meta.env.VITE_NEUROION_AUTOLAUNCH === '1' || import.meta.env.VITE_NEUROION_AUTOLAUNCH === 'true'
     if (!autoLaunch) return
     const url = status?.neuroion_ui_url || 'http://127.0.0.1:3141/neuroion/'
     setOpenclawLaunched(true)
@@ -214,6 +221,14 @@ function App() {
       // This would call a restart API endpoint
       setError('Restart functionality requires API endpoint')
     }
+  }
+
+  if (isJoinPage) {
+    return (
+      <div className="app">
+        <JoinFlow />
+      </div>
+    )
   }
 
   if (view === 'boot') {
@@ -346,6 +361,7 @@ function App() {
           url={qrData.url}
           title={qrData.title}
           onClose={() => setQrData(null)}
+          openOnDeviceLabel={qrData.title && qrData.title.includes('Add Member') ? 'Open op dit scherm' : undefined}
         />
       )}
 

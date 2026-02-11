@@ -15,6 +15,8 @@ from neuroion.core.memory.models import (
     User,
     Preference,
     ContextSnapshot,
+    CronJobRecord,
+    CronRunRecord,
     AuditLog,
     ChatMessage,
     SystemConfig,
@@ -533,6 +535,102 @@ class ContextSnapshotRepository:
         db.commit()
         return True
 
+
+class CronJobRepository:
+    """Repository for cron job records."""
+
+    @staticmethod
+    def upsert(db: Session, job_id: str, user_id: str, created_at: datetime, job_json: Dict[str, Any]) -> CronJobRecord:
+        """Insert or update a cron job by id."""
+        require_active_session(db)
+        record = db.query(CronJobRecord).filter(CronJobRecord.id == job_id).first()
+        if record:
+            record.user_id = user_id
+            record.created_at = created_at
+            record.job_json = job_json
+        else:
+            record = CronJobRecord(
+                id=job_id,
+                user_id=user_id,
+                created_at=created_at,
+                job_json=job_json,
+            )
+            db.add(record)
+        db.commit()
+        safe_refresh(db, record)
+        return record
+
+    @staticmethod
+    def delete_missing(db: Session, keep_ids: List[str]) -> int:
+        """Delete jobs not in keep_ids. Returns number deleted."""
+        require_active_session(db)
+        keep_set = set(keep_ids)
+        q = db.query(CronJobRecord)
+        if keep_set:
+            q = q.filter(CronJobRecord.id.notin_(keep_set))
+        deleted = q.delete(synchronize_session=False)
+        db.commit()
+        return deleted or 0
+
+    @staticmethod
+    def list_all(db: Session) -> List[CronJobRecord]:
+        """Return all cron jobs."""
+        return db.query(CronJobRecord).all()
+
+    @staticmethod
+    def list_by_user(db: Session, user_id: str) -> List[CronJobRecord]:
+        """Return cron jobs for a user."""
+        return db.query(CronJobRecord).filter(CronJobRecord.user_id == user_id).all()
+
+    @staticmethod
+    def get_by_id(db: Session, job_id: str) -> Optional[CronJobRecord]:
+        """Return a cron job by id."""
+        return db.query(CronJobRecord).filter(CronJobRecord.id == job_id).first()
+
+    @staticmethod
+    def count_jobs_created_today_by_user(db: Session, user_id: str) -> int:
+        """Count jobs created today (UTC) for a user."""
+        require_active_session(db)
+        today = datetime.utcnow().date()
+        start = datetime.combine(today, datetime.min.time())
+        end = datetime.combine(today, datetime.max.time())
+        return (
+            db.query(func.count(CronJobRecord.id))
+            .filter(
+                CronJobRecord.user_id == user_id,
+                CronJobRecord.created_at >= start,
+                CronJobRecord.created_at <= end,
+            )
+            .scalar()
+            or 0
+        )
+
+
+class CronRunRepository:
+    """Repository for cron run records."""
+
+    @staticmethod
+    def append_run(db: Session, job_id: str, timestamp: datetime, run_json: Dict[str, Any]) -> CronRunRecord:
+        """Append a run record for a job."""
+        require_active_session(db)
+        record = CronRunRecord(
+            job_id=job_id,
+            timestamp=timestamp,
+            run_json=run_json,
+        )
+        db.add(record)
+        db.commit()
+        safe_refresh(db, record)
+        return record
+
+    @staticmethod
+    def list_runs(db: Session, job_id: str, limit: int = 100) -> List[CronRunRecord]:
+        """List run records for a job, oldest to newest."""
+        q = db.query(CronRunRecord).filter(CronRunRecord.job_id == job_id).order_by(CronRunRecord.timestamp.desc())
+        if limit:
+            q = q.limit(limit)
+        records = q.all()
+        return list(reversed(records))
 
 class AuditLogRepository:
     """Repository for audit log operations."""
