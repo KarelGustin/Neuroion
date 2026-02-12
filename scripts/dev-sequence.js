@@ -113,7 +113,7 @@ async function run() {
   }
 
   console.log('[dev-sequence] Starting setup-ui...')
-  spawnCommand('npm', ['run', 'dev', '--prefix', 'setup-ui'], {
+  spawnCommand('npm', ['run', 'dev', '--prefix', 'apps/setup-ui'], {
     NODE_OPTIONS: process.env.NODE_OPTIONS || '--max_old_space_size=512',
   })
   try {
@@ -124,7 +124,7 @@ async function run() {
   }
 
   console.log('[dev-sequence] Starting touchscreen-ui...')
-  spawnCommand('npm', ['run', 'dev', '--prefix', 'touchscreen-ui'], {
+  spawnCommand('npm', ['run', 'dev', '--prefix', 'apps/touchscreen-ui'], {
     NODE_OPTIONS: process.env.NODE_OPTIONS || '--max_old_space_size=512',
   })
   try {

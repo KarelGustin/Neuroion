@@ -24,6 +24,24 @@ def get_soul_prompt() -> str:
     return ""
 
 
+def get_web_search_rules() -> str:
+    """
+    Rules for which search/service to use by intent. Not hardcoded URLs;
+    the agent chooses the right tool and output format from these rules.
+    """
+    return (
+        "Web and search rules (choose the right tool and output style):\n"
+        "- Informational queries (uitleg, feiten, 'hoe werkt', 'wat is', algemene info): "
+        "Use web.search. Summarize the findings as a clear explanation that answers the question; "
+        "sources/links are optional.\n"
+        "- Product/shopping queries (producten, kopen, prijzen, winkels, bestellen, aanbiedingen): "
+        "Use web.shopping_search. Return about 5 options with names and links; always include sources so the user can click through.\n"
+        "- Repository/code queries (GitHub, repo, open source, code zoeken): "
+        "Use github.search. Return relevant repos with links.\n"
+        "Use web.fetch_url only when the user gives a specific URL to read."
+    )
+
+
 def get_system_prompt(agent_name: str = "ion") -> str:
     """Get the main system prompt for the agent. agent_name is used for identity (default ion)."""
     name = (agent_name or "ion").strip() or "ion"
@@ -66,7 +84,9 @@ Je hebt toegang tot tools. Gebruik ze als ze passen bij wat de gebruiker vraagt 
 
 Codebase-vragen: Je kunt de actuele codebase bekijken (standaard ~/Neuroion). Gebruik codebase.list_directory om mappen te verkennen, codebase.read_file om bestanden te lezen en codebase.search om te zoeken. Gebruik deze tools wanneer de gebruiker vragen stelt over de code, bugs, of hoe iets werkt. Alleen lezen; stel geen wijzigingen voor die het schrijven van bestanden vereisen.
 
-Bij web research, zoekopdrachten of productvragen (bijv. ‘zoek voor mij X’, prijzen, producten, winkels): gebruik alleen web.search (en eventueel web.fetch_url bij een URL). Gebruik geen codebase-tools (geen codebase.read_file, codebase.list_directory, codebase.search).
+Bij web research, zoekopdrachten of productvragen (bijv. ‘zoek voor mij X’, prijzen, producten, winkels): volg de web/search-regels hieronder; gebruik geen codebase-tools (geen codebase.read_file, codebase.list_directory, codebase.search).
+
+{get_web_search_rules()}
 
 Wees authentiek en vriend-achtig: praatgraag, warm, persoonlijk. Gebruik wat je van de gebruiker weet op een natuurlijke manier als het past; nooit als een formeel lijstje.
 
@@ -417,6 +437,7 @@ def get_agent_loop_system_prompt(agent_name: str, tools_list_text: str) -> str:
     return (
         f"You are {name} in agent mode. You must respond with exactly one JSON object. No other text.\n\n"
         "Language: Use the same language as the user's message. If the user wrote in Dutch, use Dutch for goal, plan, and all tool arguments (e.g. web.search \"query\" must be in Dutch). If they wrote in English, use English. Do not translate the user's language.\n\n"
+        f"{get_web_search_rules()}\n\n"
         "For small talk and greetings, always return tool_calls: null.\n\n"
         "Available tools (name(params): required params without ?, optional with ?; use these exact names in \"arguments\"):\n"
         f"{tools_list_text}\n\n"
@@ -425,26 +446,40 @@ def get_agent_loop_system_prompt(agent_name: str, tools_list_text: str) -> str:
 
 
 def get_agent_plan_action_instruction() -> str:
-    """Instruction for first step: output goal, plan, and optional tool_calls."""
+    """Instruction for first step: output goal, plan, next_action, tool_calls, optional response_outline and question_to_user."""
     return (
-        "Output one JSON object with: \"goal\" (one sentence), \"plan\" (array of short steps), "
-        "\"tool_calls\" (array of {\"name\": \"tool_name\", \"arguments\": {{...}}} or null if no tools needed). "
-        "In \"arguments\" use only the exact parameter names shown in the tool list (e.g. path not file_path for codebase.read_file). "
-        "For web.search: the \"query\" must be in the same language as the user's message—do not translate to English (e.g. if the user wrote in Dutch, keep the search query in Dutch for better local results). "
-        "Use tool_calls only when the user clearly asks for an action that requires a tool (e.g. look up code, set a reminder, get dashboard link). "
-        "For greetings, small talk, short or unclear messages always use tool_calls: null and a one-sentence goal; do not invent tasks (e.g. codebase or file actions)."
+        "Output exactly one JSON object. Required fields:\n"
+        "- \"goal\": one sentence describing what we want to achieve.\n"
+        "- \"plan\": array of short step strings (optional but recommended).\n"
+        "- \"next_action\": exactly one of \"tool\" | \"respond\" | \"ask_user\" | \"revise_plan\".\n"
+        "  Use \"tool\" only when you are requesting tool_calls in this same output. "
+        "Use \"respond\" when you have enough information to answer the user (with or without having called tools). "
+        "Use \"ask_user\" when you must ask the user a question before continuing (provide \"question_to_user\"). "
+        "Use \"revise_plan\" only when changing the plan without executing tools now.\n"
+        "- \"tool_calls\": array of {\"name\": \"tool_name\", \"arguments\": {...}} or null. "
+        "In \"arguments\" use only the exact parameter names from the tool list (e.g. path not file_path for codebase.read_file). "
+        "For web.search: \"query\" must be in the same language as the user's message (e.g. Dutch if they wrote in Dutch).\n"
+        "Optional: \"response_outline\" (array of strings for the final reply structure), \"question_to_user\" (string, required when next_action is ask_user).\n"
+        "Use tool_calls only when the user clearly asks for an action that requires a tool. "
+        "For greetings, small talk, or unclear messages use next_action: \"respond\" and tool_calls: null; do not invent tasks."
     )
 
 
 def get_agent_reflect_instruction(observation_json: str) -> str:
-    """Instruction for reflect step: observation log + JSON schema."""
+    """Instruction for reflect step: observation log + JSON with next_action."""
     return (
         "Observation (log of what was done):\n"
         f"{observation_json}\n\n"
-        "Reflect on the observation. Output one JSON object with: \"reflection\" (1-2 sentences), "
-        "\"tool_calls\" (array of {\"name\": \"...\", \"arguments\": {{...}}} for more actions, or null if done and ready for final answer). "
-        "Use only the exact parameter names from the tool list in \"arguments\". "
-        "If adding web.search: keep the \"query\" in the same language as the user's original message (do not translate to English)."
+        "Reflect. Output exactly one JSON object with:\n"
+        "- \"reflection\": 1-2 sentences on what was done and what is still needed.\n"
+        "- \"next_action\": exactly one of \"tool\" | \"respond\" | \"ask_user\" | \"revise_plan\". "
+        "Use \"tool\" only if you are requesting more tool_calls below. "
+        "Use \"respond\" when done and ready to give the final answer to the user. "
+        "Use \"ask_user\" if you need a clarification (set \"question_to_user\").\n"
+        "- \"tool_calls\": array of {\"name\": \"...\", \"arguments\": {...}} or null. "
+        "Use only exact parameter names from the tool list. "
+        "For web.search keep \"query\" in the user's language.\n"
+        "Optional: \"response_outline\" (array of strings), \"question_to_user\" (string when next_action is ask_user)."
     )
 
 
@@ -492,4 +527,57 @@ def build_agent_final_messages(
     if agent_input.conversation_history:
         messages.extend(agent_input.conversation_history[-6:])
     messages.append({"role": "user", "content": agent_input.user_message})
+    return messages
+
+
+def build_writer_messages(
+    agent_name: str,
+    soul: Optional[str],
+    goal: str,
+    facts: List[str],
+    response_outline: Optional[List[str]] = None,
+    user_message: str = "",
+    no_tools_used: bool = False,
+) -> List[Dict[str, str]]:
+    """
+    Writer (LLM-B): only goal + facts + outline. No full conversation, no tool dumps.
+    Use for the final user-facing reply so the model does not leak planning/tool noise.
+    """
+    name = (agent_name or "ion").strip() or "ion"
+    system_parts = [get_system_prompt(name)]
+    if soul:
+        system_parts.append(f"Your name is {name}.\n\n{soul}")
+    system_parts.append(get_scheduling_prompt_addition())
+
+    if no_tools_used:
+        system_parts.append(
+            "\n\nYou are the Writer. Reply directly to the user in one short, natural message. "
+            "Do not mention codebase, tools, or any action you did not perform. "
+            "Use the same language as the user's message. "
+            "Write with correct grammar and spelling; do not merge words or invent compound words (e.g. write 'hoeveel tegels' not 'hoeveeltegels')."
+        )
+        user_content = f"Goal: {goal or 'Answer the user.'}\n\nUser message:\n{user_message}"
+    else:
+        facts_block = "\n".join(f"- " + f for f in facts) if facts else "(no tool results)"
+        outline_block = ""
+        if response_outline:
+            outline_block = "\nSuggested structure for your reply:\n" + "\n".join(f"- {s}" for s in response_outline)
+        system_parts.append(
+            "\n\nYou are the Writer. You receive only the goal and the facts gathered. "
+            "Your reply MUST: (1) Be in the same language as the user's message (Dutch if they wrote Dutch, etc.). "
+            "(2) Use correct grammar and spelling; do not merge words or invent compounds (e.g. 'hoeveel tegels' not 'hoeveeltegels', 'bestelt' not 'besteldoeist'). "
+            "(3) If the facts are from product/shopping search (web.shopping_search): give about 5 options and always include links so the user can click through. "
+            "If the facts are from general web search (web.search) or info: summarize as a clear explanation that answers the question; links are optional. "
+            "(4) Be concrete and useful; no generic filler. Never say you 'used a tool' or 'will search'—the results are below; answer now. "
+            "One natural message. You may use JSON {\"message\": \"...\"} or plain text."
+        )
+        user_content = (
+            f"Goal: {goal or 'N/A'}\n\nFacts (tool results):\n{facts_block}{outline_block}\n\n"
+            f"User message:\n{user_message}"
+        )
+
+    messages = [
+        {"role": "system", "content": "\n".join(system_parts)},
+        {"role": "user", "content": user_content},
+    ]
     return messages

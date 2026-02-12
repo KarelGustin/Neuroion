@@ -132,13 +132,34 @@ not from using or avoiding `uvloop`. Disabling `uvloop` is only recommended as a
 - **Permission System**: Role-based access control (owner, admin, member)
 - **Audit Trail**: Complete log of all actions
 
-### Clients
+### Clients and frontend apps
 
-Clients are thin interfaces with no business logic:
+Frontend apps live under `apps/`:
 
-- **iOS App**: SwiftUI app for chat, location, and health data
-- **Telegram Bot**: Python bot that forwards messages to Homebase
-- **Setup UI**: React web app for initial pairing (kiosk mode)
+| App | Path | Purpose | Default port |
+|-----|------|---------|--------------|
+| Setup UI | `apps/setup-ui/` | Setup wizard, pairing, initial config (Vite/React) | 3000 |
+| Touchscreen UI | `apps/touchscreen-ui/` | Kiosk / touch UI (Vite/React) | 3001 |
+| Dashboard | `apps/dashboard/` | Web dashboard for users, join flow, context (Next.js) | 3002 |
+
+Other clients:
+
+- **iOS App**: SwiftUI app (see `ios/`) for chat, location, and health data
+- **Telegram Bot**: Lives in `neuroion/telegram/`. Forwards messages to Homebase. Started either **embedded** (when Homebase starts, if `TELEGRAM_BOT_TOKEN` is set) via `neuroion.core.services.telegram_service`, or **standalone** with `python -m neuroion.telegram.bot`.
+
+### Backend core modules
+
+All under `neuroion/core/`:
+
+- **api/**: FastAPI route modules (health, setup, chat, pairing, dashboard, integrations, etc.)
+- **agent/**: Agent orchestration, gateway, agentic loop, tools, policies, onboarding
+- **cron/**: Cron job models, scheduler, runner, storage, validation
+- **memory/**: Database (db, models, repository), agent memory
+- **security/**: Tokens, passcode, join tokens, permissions, audit, setup secret
+- **services/**: Telegram service, WiFi, network manager, neuroion adapter, setup UI service
+- **llm/**: LLM client abstraction (Ollama, Cloud, OpenAI)
+- **observability/**: Tracing and metrics for the agent
+- **integrations/**: OAuth, Gmail integration base
 
 ## Data Flow
 

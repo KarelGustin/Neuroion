@@ -2,11 +2,16 @@
 """
 Demo initialization script.
 Creates a default household for testing.
+
+Run from repository root: python scripts/seed_demo.py
 """
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure repo root is on path when run as scripts/seed_demo.py
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from neuroion.core.memory.db import init_db, db_session
 from neuroion.core.memory.repository import HouseholdRepository
@@ -29,6 +34,7 @@ def init_demo():
         print(f"✅ Created demo household with ID: {household.id}")
         print(f"   Use this ID for pairing: {household.id}")
         return household.id
+
 
 if __name__ == "__main__":
     household_id = init_demo()

@@ -116,7 +116,7 @@ For clients to connect, ensure:
    pip install -r neuroion/core/requirements.txt
    
    # Node.js (for setup UI)
-   cd setup-ui
+   cd apps/setup-ui
    npm install
    ```
 
@@ -133,7 +133,7 @@ For clients to connect, ensure:
 
 4. **Start Setup UI** (new terminal):
    ```bash
-   cd setup-ui
+   cd apps/setup-ui
    npm run dev
    ```
 
@@ -141,7 +141,7 @@ For clients to connect, ensure:
    ```bash
    export TELEGRAM_BOT_TOKEN=your_token
    export HOMEBASE_URL=http://localhost:8000
-   python -m telegram.bot
+   python -m neuroion.telegram.bot
    ```
 
 ## Docker Deployment

@@ -131,6 +131,80 @@ def web_search(
     }
 
 
+def _shopping_query_variations(query: str) -> List[str]:
+    """Product/shopping-oriented query variations (e.g. kopen, prijs, bestellen)."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    lower = q.lower()
+    if any(w in lower for w in ("kopen", "bestellen", "winkel", "prijs", "aanbieding", "nl")):
+        return [q, f"{q} kopen prijs", f"{q} bestellen"]
+    return [q, f"{q} buy price", f"{q} shop"]
+
+
+@register_tool(
+    name="web.shopping_search",
+    description=(
+        "Search for products and where to buy them. Use for product queries, prices, shops, "
+        "buying options (e.g. 'tegels 60x60', 'fiets kopen', 'prijzen'). Returns about 5 options "
+        "with titles and URLs so the user can compare and click through. Do not use for general "
+        "informational questions—use web.search for those."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Product/search query (e.g. product name, size, material)",
+            },
+        },
+        "required": ["query"],
+    },
+)
+def web_shopping_search(
+    db: Session,
+    household_id: int,
+    query: str,
+) -> Dict[str, Any]:
+    """Product-focused web search: ~5 options with titles and URLs for the user to choose from."""
+    if not (query or str(query).strip()):
+        return {"success": False, "error": "query is required"}
+    base_query = str(query).strip()
+    variations = _shopping_query_variations(base_query)
+    if not variations:
+        return {"success": False, "error": "query is required"}
+    seen_urls: set = set()
+    merged: List[Dict[str, Any]] = []
+    for v in variations[:NUM_SEARCH_ITERATIONS]:
+        chunk = _search_duckduckgo(v, TOP_PER_ITERATION)
+        for r in chunk:
+            url = (r.get("url") or "").strip()
+            if not url:
+                continue
+            norm = url.rstrip("/").lower()
+            if norm in seen_urls:
+                continue
+            seen_urls.add(norm)
+            merged.append(r)
+            if len(merged) >= 5:
+                break
+        if len(merged) >= 5:
+            break
+    results = merged[:5]
+    if not results:
+        return {
+            "success": True,
+            "query": base_query,
+            "results": [],
+            "message": "No results or search unavailable.",
+        }
+    return {
+        "success": True,
+        "query": base_query,
+        "results": results,
+    }
+
+
 def _is_safe_url(url: str) -> bool:
     """Allow only http/https URLs, no file or localhost."""
     if not url or not isinstance(url, str):

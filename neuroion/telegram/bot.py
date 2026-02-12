@@ -20,7 +20,7 @@ from telegram.ext import (
     filters,
 )
 
-from telegram.config import config
+from neuroion.telegram.config import config
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -39,7 +39,7 @@ def load_tokens() -> dict[str, str]:
     """Load tokens from persistent storage."""
     if TOKEN_STORAGE_FILE.exists():
         try:
-            with open(TOKEN_STORAGE_FILE, 'r') as f:
+            with open(TOKEN_STORAGE_FILE, "r") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Error loading tokens: {e}")
@@ -50,7 +50,7 @@ def save_tokens(tokens: dict[str, str]) -> None:
     """Save tokens to persistent storage."""
     TOKEN_STORAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(TOKEN_STORAGE_FILE, 'w') as f:
+        with open(TOKEN_STORAGE_FILE, "w") as f:
             json.dump(tokens, f)
     except Exception as e:
         logger.error(f"Error saving tokens: {e}")
@@ -69,14 +69,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command. Accepts pairing code as parameter."""
     user = update.effective_user
     device_id = f"telegram_{user.id}"
-    
+
     logger.info(
         "Received /start from user_id=%s username=%s args=%s",
         user.id,
         getattr(user, "username", None),
         context.args,
     )
-    
+
     # Check if already paired
     token = user_tokens.get(device_id)
     if token:
@@ -85,11 +85,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "You're already paired with Neuroion. Just send me a message to chat!"
         )
         return
-    
+
     # Check if pairing code is provided as parameter
     if context.args and len(context.args) > 0:
         pairing_code = context.args[0]
-        
+
         try:
             # Confirm pairing with Homebase (async HTTP)
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -103,23 +103,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             response.raise_for_status()
             data = response.json()
-            
+
             # Store token
             user_tokens[device_id] = data["token"]
             save_tokens(user_tokens)
-            
-            household_name = data.get('household_name') or f"Household {data['household_id']}"
+
+            household_name = data.get("household_name") or f"Household {data['household_id']}"
             reply_text = (
                 f"✅ Successfully paired with Neuroion!\n\n"
                 f"Household: {household_name}\n\n"
             )
-            
+
             # If onboarding message is provided, send it
             if data.get("onboarding_message"):
                 reply_text += f"{data['onboarding_message']}"
             else:
                 reply_text += "You can now chat with me. Just send me a message!"
-            
+
             await update.message.reply_text(reply_text)
             return
         except httpx.HTTPStatusError as e:
@@ -132,7 +132,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     error_detail = e.response.text or str(e)
             else:
                 error_detail = str(e)
-            
+
             logger.error(f"Pairing HTTP error: {error_detail}")
             await update.message.reply_text(
                 f"❌ Pairing failed: {error_detail}\n\n"
@@ -148,7 +148,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "You can also use /pair <code> to try again."
             )
             return
-    
+
     # No pairing code provided, show welcome message
     await update.message.reply_text(
         f"Welcome to Neuroion, {user.first_name}!\n\n"
@@ -166,18 +166,18 @@ async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Get the pairing code from your Neuroion setup UI."
         )
         return
-    
+
     pairing_code = context.args[0]
     user = update.effective_user
     device_id = f"telegram_{user.id}"
-    
+
     logger.info(
         "Received /pair from user_id=%s username=%s code=%s",
         user.id,
         getattr(user, "username", None),
         pairing_code,
     )
-    
+
     try:
         # Confirm pairing with Homebase (async HTTP)
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -191,23 +191,23 @@ async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         response.raise_for_status()
         data = response.json()
-        
+
         # Store token
         user_tokens[device_id] = data["token"]
         save_tokens(user_tokens)
-        
-        household_name = data.get('household_name') or f"Household {data['household_id']}"
+
+        household_name = data.get("household_name") or f"Household {data['household_id']}"
         reply_text = (
             f"✅ Successfully paired!\n\n"
             f"Household: {household_name}\n\n"
         )
-        
+
         # If onboarding message is provided, send it
         if data.get("onboarding_message"):
             reply_text += f"{data['onboarding_message']}"
         else:
             reply_text += "You can now chat with Neuroion."
-        
+
         await update.message.reply_text(reply_text)
     except httpx.HTTPStatusError as e:
         error_detail = ""
@@ -219,7 +219,7 @@ async def pair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_detail = e.response.text or str(e)
         else:
             error_detail = str(e)
-        
+
         logger.error(f"Pairing HTTP error: {error_detail}")
         await update.message.reply_text(
             f"❌ Pairing failed: {error_detail}\n\n"
@@ -237,7 +237,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular text messages."""
     user = update.effective_user
     device_id = f"telegram_{user.id}"
-    
+
     # Check if paired
     token = user_tokens.get(device_id)
     if not token:
@@ -245,9 +245,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ You need to pair first. Use /pair <code> to pair with your Homebase."
         )
         return
-    
+
     message_text = update.message.text
-    
+
     logger.info(
         "Received message from user_id=%s username=%s paired=%s text=%r",
         user.id,
@@ -255,14 +255,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bool(token),
         message_text,
     )
-    
+
     chat_id = update.effective_chat.id
 
     async def keep_typing(interval: float = 4.0) -> None:
         """Send typing action every interval seconds until cancelled."""
         while True:
             try:
-                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+                await context.bot.send_chat_action(
+                    chat_id=chat_id, action=ChatAction.TYPING
+                )
             except Exception:
                 break
             await asyncio.sleep(interval)
@@ -281,10 +283,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         response.raise_for_status()
         data = response.json()
-        
+
         # Send response back to user
         reply_text = data.get("message", "No response")
-        
+
         # If there are actions, mention them
         actions = data.get("actions", [])
         if actions:
@@ -293,16 +295,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_text += f"\n💡 Suggested action: {action.get('name')}\n"
                 reply_text += f"   {action.get('reasoning', '')}\n"
                 reply_text += f"   Use /execute {action.get('id')} to confirm\n"
-        
+
         # Split long messages (Telegram has 4096 character limit)
         if len(reply_text) > 4000:
             # Send in chunks
-            chunks = [reply_text[i:i+4000] for i in range(0, len(reply_text), 4000)]
+            chunks = [
+                reply_text[i : i + 4000] for i in range(0, len(reply_text), 4000)
+            ]
             for chunk in chunks:
                 await update.message.reply_text(chunk)
         else:
             await update.message.reply_text(reply_text)
-        
+
     except httpx.HTTPStatusError as e:
         error_detail = "Unknown error"
         if e.response is not None:
@@ -311,7 +315,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_detail = error_data.get("detail", str(e))
             except Exception:
                 error_detail = e.response.text or str(e)
-        
+
         logger.error(f"Chat HTTP error: {error_detail}", exc_info=True)
         if e.response is not None and e.response.status_code == 401:
             # Token expired or invalid (e.g. after factory reset or bot change); clear it and ask to re-pair
@@ -351,7 +355,7 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /dashboard command to get dashboard link and login code."""
     user = update.effective_user
     device_id = f"telegram_{user.id}"
-    
+
     # Check if paired
     token = user_tokens.get(device_id)
     if not token:
@@ -359,31 +363,32 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ You need to pair first. Use /pair <code> to pair with your Homebase."
         )
         return
-    
+
     logger.info(
         "Received /dashboard from user_id=%s username=%s",
         user.id,
         getattr(user, "username", None),
     )
-    
+
     try:
         # Decode token to get user_id
         from neuroion.core.security.tokens import TokenManager
+
         payload = TokenManager.verify_token(token)
-        
+
         if not payload:
             await update.message.reply_text(
                 "❌ Invalid token. Please try pairing again."
             )
             return
-        
+
         user_id = payload.get("user_id")
         if not user_id:
             await update.message.reply_text(
                 "❌ Could not determine your user ID. Please try pairing again."
             )
             return
-        
+
         # Generate login code and get dashboard link
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Generate login code
@@ -393,7 +398,7 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             code_response.raise_for_status()
             code_data = code_response.json()
-            
+
             # Get dashboard base URL
             link_response = await client.get(
                 get_homebase_url(f"/dashboard/user/{user_id}/link"),
@@ -401,7 +406,7 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             link_response.raise_for_status()
             link_data = link_response.json()
-            
+
             # Send response with link and code
             message = (
                 f"🔗 Your Personal Dashboard\n\n"
@@ -409,9 +414,9 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Login Code: {code_data['code']}\n"
                 f"⏱ Valid for 60 seconds"
             )
-            
+
             await update.message.reply_text(message)
-            
+
     except httpx.HTTPStatusError as e:
         error_detail = "Unknown error"
         if e.response is not None:
@@ -420,7 +425,7 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_detail = error_data.get("detail", str(e))
             except Exception:
                 error_detail = e.response.text or str(e)
-        
+
         logger.error(f"Dashboard HTTP error: {error_detail}")
         await update.message.reply_text(
             f"❌ Error getting dashboard: {error_detail}"
@@ -445,25 +450,25 @@ async def execute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Execute a suggested action by its ID."
         )
         return
-    
+
     action_id = int(context.args[0])
     user = update.effective_user
     device_id = f"telegram_{user.id}"
-    
+
     token = user_tokens.get(device_id)
     if not token:
         await update.message.reply_text(
             "⚠️ You need to pair first."
         )
         return
-    
+
     logger.info(
         "Received /execute from user_id=%s username=%s action_id=%s",
         user.id,
         getattr(user, "username", None),
         action_id,
     )
-    
+
     try:
         # Execute action via async HTTP
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -474,7 +479,7 @@ async def execute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         response.raise_for_status()
         data = response.json()
-        
+
         if data.get("success"):
             await update.message.reply_text(
                 f"✅ Action executed successfully!\n\n"
@@ -494,17 +499,19 @@ async def execute_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Start the Telegram bot."""
     config.validate()
-    
+
     # Create application
     application = Application.builder().token(config.bot_token).build()
-    
+
     # Register handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("pair", pair_command))
     application.add_handler(CommandHandler("dashboard", dashboard_command))
     application.add_handler(CommandHandler("execute", execute_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+    )
+
     # Start bot
     if config.polling:
         logger.info("Starting bot in polling mode...")

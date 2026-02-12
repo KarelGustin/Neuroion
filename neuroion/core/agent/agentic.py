@@ -85,6 +85,16 @@ class TurnTrace:
                 lines.append(f"- {e.tool}: error {e.error or 'unknown'}")
         return "\n".join(lines) if lines else "No tools used."
 
+    def to_facts_list(self) -> List[str]:
+        """Facts for Writer: one string per tool result (tool name + summary). No noise."""
+        facts = []
+        for e in self._events:
+            if e.success and (e.result_summary or e.tool):
+                facts.append(f"{e.tool}: {e.result_summary or 'ok'}")
+            elif not e.success:
+                facts.append(f"{e.tool}: error — {e.error or 'unknown'}")
+        return facts
+
 
 def extract_json_from_response(raw: str) -> Optional[Dict[str, Any]]:
     """Extract a single JSON object from LLM output. Handles markdown code blocks."""
@@ -113,33 +123,68 @@ def extract_json_from_response(raw: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+# next_action: planner/reflect output — exactly one per step
+NEXT_ACTION_TOOL = "tool"
+NEXT_ACTION_RESPOND = "respond"
+NEXT_ACTION_ASK_USER = "ask_user"
+NEXT_ACTION_REVISE_PLAN = "revise_plan"
+VALID_NEXT_ACTIONS = (NEXT_ACTION_TOOL, NEXT_ACTION_RESPOND, NEXT_ACTION_ASK_USER, NEXT_ACTION_REVISE_PLAN)
+
+
 def parse_plan_action_response(
     raw: str,
     allowed_tools: Optional[List[str]] = None,
-) -> Tuple[Optional[str], Optional[List[str]], Optional[List[Dict[str, Any]]]]:
+) -> Tuple[
+    Optional[str],
+    Optional[List[str]],
+    Optional[List[Dict[str, Any]]],
+    str,
+    List[str],
+    str,
+]:
     """
-    Parse first agent step JSON: goal, plan, tool_calls.
-    Returns (goal, plan_steps, tool_calls) or (None, None, None) on failure.
-    tool_calls is list of {"name": str, "arguments": dict}.
+    Parse first agent step JSON: goal, plan, next_action, tool_calls, response_outline, question_to_user.
+    Returns (goal, plan_steps, tool_calls, next_action, response_outline, question_to_user).
+    next_action is one of: tool | respond | ask_user | revise_plan.
     """
     obj = extract_json_from_response(raw)
     if not obj or not isinstance(obj, dict):
-        return None, None, None
+        return None, None, [], NEXT_ACTION_RESPOND, [], ""
+
     goal = obj.get("goal") or obj.get("goal_summary")
     if isinstance(goal, str):
         goal = goal.strip()
     else:
         goal = None
+
     plan = obj.get("plan")
     if isinstance(plan, list):
         plan = [str(p).strip() for p in plan if str(p).strip()]
     else:
         plan = None
+
+    next_action = (obj.get("next_action") or "").strip().lower()
+    if next_action not in VALID_NEXT_ACTIONS:
+        next_action = NEXT_ACTION_RESPOND
+
+    raw_outline = obj.get("response_outline")
+    if isinstance(raw_outline, list):
+        response_outline = [str(s).strip() for s in raw_outline if str(s).strip()]
+    else:
+        response_outline = []
+
+    question_to_user = obj.get("question_to_user") or obj.get("question") or ""
+    if isinstance(question_to_user, str):
+        question_to_user = question_to_user.strip()
+    else:
+        question_to_user = ""
+
     raw_calls = obj.get("tool_calls")
     if raw_calls is None:
-        return goal, plan, []
+        return goal, plan, [], next_action, response_outline, question_to_user
     if not isinstance(raw_calls, list):
-        return goal, plan, []
+        return goal, plan, [], next_action, response_outline, question_to_user
+
     tool_calls = []
     for item in raw_calls:
         if not isinstance(item, dict):
@@ -152,30 +197,58 @@ def parse_plan_action_response(
             logger.warning("Agent requested disallowed tool %s", name)
             continue
         tool_calls.append({"name": name.strip(), "arguments": args if isinstance(args, dict) else {}})
-    return goal, plan, tool_calls
+
+    if next_action == NEXT_ACTION_TOOL and not tool_calls:
+        next_action = NEXT_ACTION_RESPOND
+    return goal, plan, tool_calls, next_action, response_outline, question_to_user
 
 
 def parse_reflect_response(
     raw: str,
     allowed_tools: Optional[List[str]] = None,
-) -> Tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
+) -> Tuple[
+    Optional[str],
+    List[Dict[str, Any]],
+    str,
+    List[str],
+    str,
+]:
     """
-    Parse reflect step JSON: reflection, tool_calls (or null = done).
-    Returns (reflection_text, tool_calls). tool_calls empty or None means final.
+    Parse reflect step JSON: reflection, next_action, tool_calls, response_outline, question_to_user.
+    Returns (reflection_text, tool_calls, next_action, response_outline, question_to_user).
     """
     obj = extract_json_from_response(raw)
     if not obj or not isinstance(obj, dict):
-        return None, []
+        return None, [], NEXT_ACTION_RESPOND, [], ""
+
     reflection = obj.get("reflection") or obj.get("observation_summary")
     if isinstance(reflection, str):
         reflection = reflection.strip()
     else:
         reflection = None
+
+    next_action = (obj.get("next_action") or "").strip().lower()
+    if next_action not in VALID_NEXT_ACTIONS:
+        next_action = NEXT_ACTION_RESPOND
+
+    raw_outline = obj.get("response_outline")
+    if isinstance(raw_outline, list):
+        response_outline = [str(s).strip() for s in raw_outline if str(s).strip()]
+    else:
+        response_outline = []
+
+    question_to_user = obj.get("question_to_user") or obj.get("question") or ""
+    if isinstance(question_to_user, str):
+        question_to_user = question_to_user.strip()
+    else:
+        question_to_user = ""
+
     raw_calls = obj.get("tool_calls")
     if raw_calls is None:
-        return reflection, []
+        return reflection, [], next_action, response_outline, question_to_user
     if not isinstance(raw_calls, list):
-        return reflection, []
+        return reflection, [], next_action, response_outline, question_to_user
+
     tool_calls = []
     for item in raw_calls:
         if not isinstance(item, dict):
@@ -187,7 +260,10 @@ def parse_reflect_response(
         if allowed_tools and name not in allowed_tools:
             continue
         tool_calls.append({"name": name.strip(), "arguments": args if isinstance(args, dict) else {}})
-    return reflection, tool_calls
+
+    if next_action == NEXT_ACTION_TOOL and not tool_calls:
+        next_action = NEXT_ACTION_RESPOND
+    return reflection, tool_calls, next_action, response_outline, question_to_user
 
 
 def parse_final_response(raw: str) -> str:

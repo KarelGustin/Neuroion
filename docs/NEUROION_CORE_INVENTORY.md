@@ -2,6 +2,8 @@
 
 Doel: read-only inventaris van huidige codebase als basis voor Neuroion Core (engine-vendor traject).
 
+**Layout (na refactor):** Frontends in `apps/` (setup-ui, touchscreen-ui, dashboard). Telegram in `neuroion/telegram/`. Demo/seed script: `scripts/seed_demo.py`. Verwijderd: dashboard-ui (legacy Vite dashboard), `neuroion/core/services/captive_portal.py`, `network_manager_pi.py`, `network_manager_jetson.py`.
+
 ## 1) Entrypoints
 
 ### Python main / API server
@@ -14,8 +16,8 @@ Doel: read-only inventaris van huidige codebase als basis voor Neuroion Core (en
   - Lokale run entrypoint: `if __name__ == "__main__": uvicorn.run(...)`.
 
 ### Telegram handler
-- `telegram/bot.py`
-  - Bot entrypoint: `main()`.
+- `neuroion/telegram/bot.py`
+  - Bot entrypoint: `main()` (standalone: `python -m neuroion.telegram.bot`).
   - Runtime: `Application.builder().token(...).build()` + `run_polling(...)`.
   - Handlers:
     - `/start` → `start_command`
@@ -33,12 +35,12 @@ Doel: read-only inventaris van huidige codebase als basis voor Neuroion Core (en
 ## 2) Huidige Telegram flow (bestanden + functies)
 
 ### Bestanden
-- `telegram/bot.py`
-- `telegram/config.py`
+- `neuroion/telegram/bot.py`
+- `neuroion/telegram/config.py`
 - `neuroion/core/services/telegram_service.py` (embedded opstartpad vanuit Homebase)
 
 ### Flow
-1. Bot start via `telegram/bot.py:main()` of embedded via `start_telegram_bot()` in `neuroion/core/services/telegram_service.py`.
+1. Bot start via `python -m neuroion.telegram.bot` (standalone) of embedded via `start_telegram_bot()` in `neuroion/core/services/telegram_service.py`.
 2. Pairing:
    - `/start <code>` of `/pair <code>`
    - `POST /pair/confirm` naar Homebase API met `device_id=telegram_<user_id>`.
@@ -71,7 +73,7 @@ Doel: read-only inventaris van huidige codebase als basis voor Neuroion Core (en
   - Repositorylaag voor CRUD en querylogica.
 
 ### Extra lokale state buiten sqlite
-- `telegram/bot.py`
+- `neuroion/telegram/bot.py`
   - Telegram device tokens in JSON: `~/.neuroion/telegram_tokens.json`.
 
 ## 4) Infra boot (systemd, docker-compose)
@@ -99,33 +101,33 @@ Doel: read-only inventaris van huidige codebase als basis voor Neuroion Core (en
 
 ## 5) UI’s en rolverdeling
 
-### `setup-ui/`
+### `apps/setup-ui/`
 - Setup en onboarding frontend voor initiële configuratie.
 - Focus op pairing/QR, status, en setup wizard stappen.
 - Relevante bron:
-  - `setup-ui/README.md`
-  - `setup-ui/src/components/*`
+  - `apps/setup-ui/README.md`
+  - `apps/setup-ui/src/components/*`
 
-### `touchscreen-ui/`
+### `apps/touchscreen-ui/`
 - Dedicated touchscreen/kiosk UI (los van setup wizard).
 - Package naam wijst op kiosk/touch context: `neuroion-touchscreen-ui`.
 - Relevante bron:
-  - `touchscreen-ui/package.json`
+  - `apps/touchscreen-ui/package.json`
 
-### `dashboard-nextjs/`
+### `apps/dashboard/`
 - Web dashboard (Next.js) voor gebruikersflow en beheer/join trajecten.
 - Aanwezige pagina’s tonen o.a. join flow en completion screens.
 - Relevante bron:
-  - `dashboard-nextjs/app/layout.tsx`
-  - `dashboard-nextjs/app/join/page.tsx`
-  - `dashboard-nextjs/app/join/complete/page.tsx`
+  - `apps/dashboard/app/layout.tsx`
+  - `apps/dashboard/app/join/page.tsx`
+  - `apps/dashboard/app/join/complete/page.tsx`
 
 ## 6) Snelle pointerlijst voor volgende taken
 
 - Core API bootstrap: `neuroion/core/main.py`
 - Setup endpoints: `neuroion/core/api/setup.py`
 - Chat endpoint: `neuroion/core/api/chat.py`
-- Telegram runtime (standalone): `telegram/bot.py`
+- Telegram runtime (standalone): `python -m neuroion.telegram.bot` (`neuroion/telegram/bot.py`)
 - Telegram runtime (embedded): `neuroion/core/services/telegram_service.py`
 - DB config + path: `neuroion/core/config.py`
 - DB engine/session/init: `neuroion/core/memory/db.py`
