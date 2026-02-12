@@ -256,15 +256,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text,
     )
     
-    # Send typing indicator immediately
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id,
-        action=ChatAction.TYPING
-    )
-    
+    chat_id = update.effective_chat.id
+
+    async def keep_typing(interval: float = 4.0) -> None:
+        """Send typing action every interval seconds until cancelled."""
+        while True:
+            try:
+                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            except Exception:
+                break
+            await asyncio.sleep(interval)
+
+    typing_task = asyncio.create_task(keep_typing())
     try:
         # Send message to Homebase (history is auto-fetched by backend) via async HTTP
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(
                 get_homebase_url("/chat"),
                 json={"message": message_text},
@@ -307,10 +313,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 error_detail = e.response.text or str(e)
         
         logger.error(f"Chat HTTP error: {error_detail}", exc_info=True)
-        await update.message.reply_text(
-            f"❌ Error from Homebase: {error_detail}\n\n"
-            "Please try again or contact support if the problem persists."
-        )
+        if e.response is not None and e.response.status_code == 401:
+            # Token expired or invalid (e.g. after factory reset or bot change); clear it and ask to re-pair
+            if device_id in user_tokens:
+                del user_tokens[device_id]
+                save_tokens(user_tokens)
+            await update.message.reply_text(
+                "Je sessie is verlopen. Gebruik /pair <code> om opnieuw te koppelen. "
+                "Haal een nieuwe code uit de setup-ui van je Homebase."
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ Error from Homebase: {error_detail}\n\n"
+                "Please try again or contact support if the problem persists."
+            )
     except httpx.RequestError as e:
         logger.error(f"Chat request error: {e}", exc_info=True)
         await update.message.reply_text(
@@ -323,6 +339,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"❌ An unexpected error occurred: {str(e)}\n\n"
             "Please try again later."
         )
+    finally:
+        typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
 
 
 async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

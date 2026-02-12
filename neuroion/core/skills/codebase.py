@@ -1,9 +1,8 @@
 """
-Read-only codebase tools for the agent.
+Codebase skill: browse and search the project directory (~/Neuroion by default).
 
-Allows the AI to read files, list directories, and search the codebase.
-No write operations; path validation keeps access within the codebase root.
-Max file size ~70k tokens (~280k bytes) so context stays within local model limits.
+Lets the AI list folders/files, read file contents, and search the codebase
+so users can ask questions about the actual code. Read-only; no writes.
 """
 import fnmatch
 import logging
@@ -17,10 +16,11 @@ from neuroion.core.config_store import get_neuroion_core_config
 
 logger = logging.getLogger(__name__)
 
-# ~70k tokens at ~4 chars/token so memory/chat context still fits in local model
-MAX_FILE_BYTES = 280_000
+# Default codebase root when not configured (user's Neuroion project)
+DEFAULT_CODEBASE_ROOT = Path.home() / "Neuroion"
 
-# Limits for search and list to avoid token explosion
+# ~70k tokens at ~4 chars/token so context stays within local model limits
+MAX_FILE_BYTES = 280_000
 MAX_SEARCH_RESULTS = 100
 MAX_LIST_RECURSIVE_DEPTH = 5
 MAX_LIST_ITEMS = 500
@@ -28,8 +28,7 @@ MAX_LIST_ITEMS = 500
 
 def get_codebase_root(db: Optional[Session]) -> Path:
     """
-    Return the codebase root path.
-    Primary: workspace from neuroion_core config; fallback: repo root from this file.
+    Codebase root for browsing. Order: config workspace → ~/Neuroion → repo root.
     """
     if db is not None:
         core = get_neuroion_core_config(db)
@@ -37,16 +36,14 @@ def get_codebase_root(db: Optional[Session]) -> Path:
             p = Path(core["workspace"]).expanduser().resolve()
             if p.is_dir():
                 return p
-    # Fallback: repo root (this file is neuroion/core/agent/tools/codebase_tools.py)
-    this_file = Path(__file__).resolve()
-    return this_file.parent.parent.parent.parent
+    if DEFAULT_CODEBASE_ROOT.is_dir():
+        return DEFAULT_CODEBASE_ROOT
+    # Fallback: repo root (this file is neuroion/core/skills/codebase.py)
+    return Path(__file__).resolve().parent.parent.parent.parent
 
 
-def resolve_relative_path(relative_path: str, root: Path) -> Optional[Path]:
-    """
-    Resolve a relative path against root and ensure it stays under root.
-    Returns None if the path escapes the root (e.g. via ..).
-    """
+def _resolve_path(relative_path: str, root: Path) -> Optional[Path]:
+    """Resolve path under root; return None if it escapes root."""
     if not root.is_dir():
         return None
     clean = relative_path.strip().lstrip("/")
@@ -60,16 +57,16 @@ def resolve_relative_path(relative_path: str, root: Path) -> Optional[Path]:
         return None
 
 
-def _resolve_and_check_under_root(
+def _resolve_and_check(
     db: Session,
     household_id: int,
     relative_path: str,
     must_be_file: bool = False,
     must_be_dir: bool = False,
 ) -> Dict[str, Any]:
-    """Shared helper: get root, resolve path, return error dict or None if ok."""
+    """Resolve path under codebase root; return error dict or {root, resolved}."""
     root = get_codebase_root(db)
-    resolved = resolve_relative_path(relative_path, root)
+    resolved = _resolve_path(relative_path, root)
     if resolved is None:
         return {"success": False, "error": "Path is outside codebase root or invalid"}
     if must_be_file and not resolved.is_file():
@@ -82,10 +79,10 @@ def _resolve_and_check_under_root(
 @register_tool(
     name="codebase.read_file",
     description=(
-        "Read the contents of a single file in the codebase. "
-        "Use for analyzing code, finding bugs, or suggesting improvements. "
-        "Maximum ~70k tokens per file so model context and memory remain available. "
-        "Path is relative to the codebase root (e.g. 'neuroion/core/agent/agent.py')."
+        "Read the contents of a file in the codebase (default root ~/Neuroion). "
+        "Use to analyze code, find bugs, or answer questions about the codebase. "
+        "Path is relative to the codebase root (e.g. 'neuroion/core/agent/agent.py'). "
+        "Files are truncated to fit model context."
     ),
     parameters={
         "type": "object",
@@ -94,31 +91,36 @@ def _resolve_and_check_under_root(
                 "type": "string",
                 "description": "Relative path to the file from the codebase root",
             },
+            "file_path": {
+                "type": "string",
+                "description": "Alias for path (relative path from codebase root)",
+            },
             "max_lines": {
                 "type": "integer",
-                "description": "Optional maximum number of lines to return (within token limit)",
+                "description": "Optional maximum number of lines to return",
             },
             "offset": {
                 "type": "integer",
                 "description": "Optional line offset (0-based) to start reading from",
             },
         },
-        "required": ["path"],
+        "required": [],
     },
 )
 def codebase_read_file(
     db: Session,
     household_id: int,
-    path: str,
+    path: Optional[str] = None,
+    file_path: Optional[str] = None,
     max_lines: Optional[int] = None,
     offset: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """
-    Read file contents. Enforces MAX_FILE_BYTES (~70k tokens).
-    Returns truncated content and truncated=True if the file was cut.
-    """
-    out = _resolve_and_check_under_root(db, household_id, path, must_be_file=True)
-    if "success" in out and out["success"] is False:
+    """Read file contents; enforces size limit for model context."""
+    resolved_path = path or file_path
+    if not resolved_path:
+        return {"success": False, "error": "path or file_path is required"}
+    out = _resolve_and_check(db, household_id, resolved_path, must_be_file=True)
+    if "success" in out and out.get("success") is False:
         return out
     resolved = out["resolved"]
 
@@ -128,7 +130,7 @@ def codebase_read_file(
                 for _ in range(offset):
                     if f.readline() == "":
                         return {
-                            "path": path,
+                            "path": resolved_path,
                             "content": "",
                             "truncated": False,
                             "message": "Offset beyond file length",
@@ -147,25 +149,26 @@ def codebase_read_file(
                 lines.append(line)
                 total_bytes += len(line_bytes)
             content = "".join(lines)
-            truncated = total_bytes >= MAX_FILE_BYTES or (max_lines is not None and len(lines) >= max_lines)
+            truncated = total_bytes >= MAX_FILE_BYTES or (
+                max_lines is not None and len(lines) >= max_lines
+            )
             return {
-                "path": path,
+                "path": resolved_path,
                 "content": content,
                 "truncated": truncated,
                 "bytes_returned": total_bytes,
                 "message": "File truncated to fit context" if truncated else None,
             }
     except OSError as e:
-        logger.warning("codebase.read_file failed for %s: %s", path, e)
+        logger.warning("codebase.read_file failed for %s: %s", resolved_path, e)
         return {"success": False, "error": str(e)}
 
 
 @register_tool(
     name="codebase.list_directory",
     description=(
-        "List files and directories in a directory in the codebase. "
-        "Path is relative to the codebase root; use empty string for root. "
-        "Optional recursive listing with depth limit to avoid huge output."
+        "List files and folders in a directory in the codebase (default root ~/Neuroion). "
+        "Use empty path for the root. Use to explore the project structure before reading files."
     ),
     parameters={
         "type": "object",
@@ -196,8 +199,8 @@ def codebase_list_directory(
     max_depth: int = 2,
 ) -> Dict[str, Any]:
     """List directory contents; optionally recursive with depth and item limits."""
-    out = _resolve_and_check_under_root(db, household_id, path, must_be_dir=True)
-    if "success" in out and out["success"] is False:
+    out = _resolve_and_check(db, household_id, path, must_be_dir=True)
+    if "success" in out and out.get("success") is False:
         return out
     resolved = out["resolved"]
     root = out["root"]
@@ -218,12 +221,11 @@ def codebase_list_directory(
                     rel = p.relative_to(root)
                 except ValueError:
                     continue
-                entry: Dict[str, Any] = {
+                items.append({
                     "path": str(rel),
                     "name": p.name,
                     "is_dir": p.is_dir(),
-                }
-                items.append(entry)
+                })
                 count += 1
                 if recursive and p.is_dir() and depth < depth_limit:
                     walk(p, depth + 1)
@@ -249,6 +251,7 @@ def codebase_list_directory(
                 count += 1
         return {
             "path": path or ".",
+            "root": str(root),
             "entries": items,
             "truncated": count >= MAX_LIST_ITEMS,
         }
@@ -260,16 +263,15 @@ def codebase_list_directory(
 @register_tool(
     name="codebase.search",
     description=(
-        "Search for text in the codebase (content or filenames). "
-        "Use to find usages, definitions, or patterns. "
-        "Results are limited to avoid overflowing model context."
+        "Search for text in the codebase (default root ~/Neuroion). "
+        "Use to find usages, definitions, or patterns. Use when the user asks about where something is or how it works."
     ),
     parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Text to search for (plain string, case-sensitive by default)",
+                "description": "Text to search for in file contents",
             },
             "path": {
                 "type": "string",
@@ -303,7 +305,7 @@ def codebase_search(
     root = get_codebase_root(db)
     search_root = root
     if path.strip():
-        resolved = resolve_relative_path(path.strip(), root)
+        resolved = _resolve_path(path.strip(), root)
         if resolved is None or not resolved.is_dir():
             return {"success": False, "error": "path is outside codebase or not a directory"}
         search_root = resolved
@@ -339,6 +341,7 @@ def codebase_search(
         return {
             "query": query,
             "path": path or ".",
+            "root": str(root),
             "matches": results,
             "truncated": len(results) >= limit,
         }

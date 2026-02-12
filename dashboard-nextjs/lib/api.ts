@@ -4,8 +4,9 @@ import axios from 'axios'
  * Get API base URL based on current hostname.
  */
 function getApiBaseUrl(): string {
+  const apiPort = process.env.NEXT_PUBLIC_API_PORT || process.env.API_PORT || '8000'
   if (typeof window === 'undefined') {
-    return 'http://localhost:8000'
+    return `http://localhost:${apiPort}`
   }
 
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -14,7 +15,6 @@ function getApiBaseUrl(): string {
 
   const hostname = window.location.hostname
   const protocol = window.location.protocol
-  const apiPort = process.env.NEXT_PUBLIC_API_PORT || '8000'
 
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return `http://localhost:${apiPort}`

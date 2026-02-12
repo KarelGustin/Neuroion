@@ -40,7 +40,11 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
     logger.info("Database initialized")
-    logger.info(f"Neuroion Homebase starting on {settings.api_host}:{settings.api_port}")
+    logger.info(
+        "Neuroion Homebase binding on %s:%s (from config/.env: API_HOST, API_PORT)",
+        settings.api_host,
+        settings.api_port,
+    )
     
     # Prefer saved Wi-Fi on boot; fallback to hotspot if needed
     try:
@@ -128,6 +132,32 @@ app.add_middleware(
 # CSRF-style protection for setup: reject if Origin is from a different host (LAN-only; allow same host and localhost)
 @app.middleware("http")
 async def setup_csrf_check(request: Request, call_next):
+    # Handle factory-reset in middleware so we avoid blocking in the rest of the chain (logging, dispatch, etc.)
+    if request.method == "POST" and request.url.path == "/setup/factory-reset":
+        origin = request.headers.get("origin") or request.headers.get("referer") or ""
+        if origin:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(origin)
+                origin_host = (parsed.hostname or "").lower()
+                request_host = (request.url.hostname or "").lower()
+                if origin_host and request_host and origin_host != request_host:
+                    if origin_host not in ("localhost", "127.0.0.1") and request_host not in ("localhost", "127.0.0.1"):
+                        return JSONResponse(status_code=403, content={"detail": "Origin not allowed for setup"})
+            except Exception:
+                pass
+        try:
+            from starlette.concurrency import run_in_threadpool
+            from neuroion.core.api.setup import _run_factory_reset_sync
+            from fastapi import HTTPException
+            result = await run_in_threadpool(_run_factory_reset_sync)
+            return JSONResponse(status_code=200, content=result.model_dump())
+        except HTTPException as e:
+            return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+        except Exception as e:
+            logger.error("Factory reset failed: %s", e, exc_info=True)
+            return JSONResponse(status_code=500, content={"detail": str(e)})
+
     if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path.startswith("/setup"):
         origin = request.headers.get("origin") or request.headers.get("referer") or ""
         if origin:

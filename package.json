@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "python": "^0.0.4",
+    "sqlalchemy": "^10.1.1",
     "tree": "^0.1.3"
   }
 }

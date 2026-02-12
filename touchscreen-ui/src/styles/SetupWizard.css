@@ -1,0 +1,214 @@
+/* Setup wizard – 800×480 landscape, touch-friendly */
+.setup-wizard {
+  width: 100vw;
+  height: 100vh;
+  max-width: 800px;
+  max-height: 480px;
+  margin: 0 auto;
+  padding: var(--space-4);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.setup-wizard-progress {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.setup-wizard-error {
+  flex-shrink: 0;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.setup-wizard-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.setup-wizard-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+  margin: 0 0 var(--space-4);
+  flex-shrink: 0;
+}
+
+.setup-wizard-hint,
+.setup-wizard-wifi-ok {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-3);
+}
+
+.setup-wizard-wifi-ok {
+  color: var(--success);
+}
+
+.setup-wizard-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.setup-wizard-input {
+  font-size: var(--text-base);
+  padding: var(--space-3);
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-elevated);
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.setup-wizard-input::placeholder {
+  color: var(--text-muted);
+}
+
+.setup-wizard-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.25);
+}
+
+.setup-wizard-network-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.setup-wizard-network-list li {
+  margin-bottom: var(--space-2);
+}
+
+.setup-wizard-network-btn {
+  width: 100%;
+  text-align: left;
+  font-size: var(--text-base);
+  padding: var(--space-3);
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.setup-wizard-network-btn:hover,
+.setup-wizard-network-btn:focus {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.setup-wizard-network-btn.setup-wizard-network-btn--selected {
+  border-color: var(--accent);
+  background: rgba(0, 113, 227, 0.15);
+}
+
+.setup-wizard-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-4);
+  flex-shrink: 0;
+}
+
+.setup-wizard-btn {
+  flex: 1;
+  min-height: 52px;
+  font-size: var(--text-lg);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-btn);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.setup-wizard-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.setup-wizard-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.setup-wizard-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.setup-wizard-btn--secondary {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.setup-wizard-btn--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.setup-wizard-btn--large {
+  flex: 2;
+}
+
+/* Logo animation (step 4 complete) */
+.setup-wizard--logo {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.setup-wizard-logo {
+  width: 100px;
+  height: 120px;
+  color: var(--accent);
+  animation: setup-wizard-logo-fade 5s ease-out forwards;
+}
+
+.setup-wizard-logo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.setup-wizard-logo-text {
+  margin-top: var(--space-6);
+  font-size: var(--text-lg);
+  color: var(--text-muted);
+  animation: setup-wizard-logo-fade 5s ease-out forwards;
+}
+
+@keyframes setup-wizard-logo-fade {
+  0% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}

@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from neuroion.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 _setup_ui_process: Optional[subprocess.Popen] = None
@@ -48,7 +50,7 @@ def start_setup_ui() -> Optional[subprocess.Popen]:
             cwd=str(setup_ui_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env={**os.environ, "VITE_API_URL": "http://localhost:8000"},
+            env={**os.environ, "VITE_API_URL": f"http://localhost:{settings.api_port}"},
         )
         
         logger.info("✅ Setup UI started successfully")

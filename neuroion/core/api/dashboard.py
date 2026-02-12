@@ -28,7 +28,7 @@ from neuroion.core.services.request_counter import RequestCounter
 from neuroion.core.services.wifi_status import WiFiStatusService, WiFiStatus
 from neuroion.core.services.network import get_dashboard_base_url
 from neuroion.core.config import settings
-from neuroion.core.security.tokens import TokenManager
+from neuroion.core.security.tokens import TokenManager, PairingCodeStore
 from neuroion.core.security.passcode import hash_passcode, verify_passcode, is_valid_passcode_format
 from neuroion.core.security.join_tokens import JoinTokenManager
 from neuroion.core.security.permissions import get_current_user
@@ -136,6 +136,18 @@ class DashboardMemberDeleteResponse(BaseModel):
     message: str
 
 
+class AddMemberRequest(BaseModel):
+    """Request to add a member and get Telegram pairing QR."""
+    name: str
+
+
+class AddMemberResponse(BaseModel):
+    """Response after adding member: member_id, pairing code and QR value for Telegram."""
+    member_id: int
+    pairing_code: str
+    qr_value: str
+
+
 class DashboardJoinTokenRequest(BaseModel):
     """Request to create join token from kiosk (no auth)."""
     expires_in_minutes: Optional[int] = 10
@@ -147,6 +159,49 @@ class DashboardJoinTokenResponse(BaseModel):
     expires_at: str
     join_url: str
     qr_url: str
+
+
+@router.post("/add-member", response_model=AddMemberResponse)
+def add_member(
+    request: AddMemberRequest,
+    db: Session = Depends(get_db),
+) -> AddMemberResponse:
+    """
+    Add a household member and start Telegram pairing for this member (no auth).
+    Returns member_id, pairing_code and qr_value for displaying a QR (code or t.me link).
+    """
+    households = HouseholdRepository.get_all(db)
+    if not households:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No household configured",
+        )
+    household_id = households[0].id
+    name = (request.name or "").strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name is required",
+        )
+    member = UserRepository.create(
+        db=db,
+        household_id=household_id,
+        name=name,
+        role="member",
+    )
+    code = TokenManager.generate_pairing_code()
+    PairingCodeStore.store(
+        code=code,
+        household_id=household_id,
+        member_id=member.id,
+    )
+    bot_username = getattr(settings, "telegram_bot_username", None)
+    qr_value = f"https://t.me/{bot_username}?start={code}" if bot_username else code
+    return AddMemberResponse(
+        member_id=member.id,
+        pairing_code=code,
+        qr_value=qr_value,
+    )
 
 
 @router.post("/join-token", response_model=DashboardJoinTokenResponse)

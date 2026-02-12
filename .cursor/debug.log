@@ -1,0 +1,167 @@
+{"location": "main.py:setup_csrf_check", "message": "factory-reset request", "data": {"origin": "http://localhost:3001", "origin_host": "localhost", "request_host": "localhost", "path": "/setup/factory-reset"}, "timestamp": 1770851429403.292, "hypothesisId": "H2"}
+{"location":"App.jsx:handleFactoryReset","message":"handleFactoryReset called","data":{},"timestamp":1770851429389,"hypothesisId":"H4,H5"}
+{"location":"api.js:factoryReset","message":"factoryReset request starting","data":{"url":"http://localhost:8000/setup/factory-reset"},"timestamp":1770851429391,"hypothesisId":"H1"}
+{"location":"api.js:factoryReset","message":"factoryReset error","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851489395,"hypothesisId":"H1,H2,H3,H4"}
+{"location":"App.jsx:handleFactoryReset","message":"factoryReset catch branch","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851489396,"hypothesisId":"H4"}
+{"location":"App.jsx:handleFactoryReset","message":"handleFactoryReset called","data":{},"timestamp":1770851502914,"hypothesisId":"H4,H5"}
+{"location": "main.py:setup_csrf_check", "message": "factory-reset request", "data": {"origin": "http://localhost:3001", "origin_host": "localhost", "request_host": "localhost", "path": "/setup/factory-reset"}, "timestamp": 1770851502928.992, "hypothesisId": "H2"}
+{"location":"api.js:factoryReset","message":"factoryReset request starting","data":{"url":"http://localhost:8000/setup/factory-reset"},"timestamp":1770851502915,"hypothesisId":"H1"}
+{"location":"api.js:factoryReset","message":"factoryReset error","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851562920,"hypothesisId":"H1,H2,H3,H4"}
+{"location":"App.jsx:handleFactoryReset","message":"factoryReset catch branch","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851562922,"hypothesisId":"H4"}
+{"location":"App.jsx:handleFactoryReset","message":"handleFactoryReset called","data":{},"timestamp":1770851569985,"hypothesisId":"H4,H5"}
+{"location": "main.py:setup_csrf_check", "message": "factory-reset request", "data": {"origin": "http://localhost:3001", "origin_host": "localhost", "request_host": "localhost", "path": "/setup/factory-reset"}, "timestamp": 1770851570003.936, "hypothesisId": "H2"}
+{"location":"api.js:factoryReset","message":"factoryReset request starting","data":{"url":"http://localhost:8000/setup/factory-reset"},"timestamp":1770851569987,"hypothesisId":"H1"}
+{"location":"api.js:factoryReset","message":"factoryReset error","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851629992,"hypothesisId":"H1,H2,H3,H4"}
+{"location":"App.jsx:handleFactoryReset","message":"factoryReset catch branch","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851629993,"hypothesisId":"H4"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851697861.17, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851697861.532, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699545.6729, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699545.8738, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699560.114, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699567.103, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699571.315, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699571.533, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699585.1782, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699587.115, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699588.1091, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699588.177, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699588.259, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699588.32, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699599.9119, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699600.047, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699600.7559, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699601.612, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699607.779, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699607.929, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699607.9949, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699608.0588, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851699614.238, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851699614.37, "hypothesisId": "H3"}
+{"location": "main.py:setup_csrf_check", "message": "factory-reset request", "data": {"origin": "http://localhost:3001", "origin_host": "localhost", "request_host": "localhost", "path": "/setup/factory-reset"}, "timestamp": 1770851701484.754, "hypothesisId": "H2"}
+{"location":"App.jsx:handleFactoryReset","message":"handleFactoryReset called","data":{},"timestamp":1770851701470,"hypothesisId":"H4,H5"}
+{"location":"api.js:factoryReset","message":"factoryReset request starting","data":{"url":"http://localhost:8000/setup/factory-reset"},"timestamp":1770851701473,"hypothesisId":"H1"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851704596.222, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851704596.889, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851709592.844, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851709594.343, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851714589.4148, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851714589.7798, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851719589.7449, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851719590.018, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851724592.781, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851724593.1343, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851729592.4749, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851729592.906, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851734590.818, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851734591.282, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851739591.7969, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851739592.074, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851744592.495, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851744594.3308, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851749589.8699, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851749590.0513, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851753837.0571, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851753838.774, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851754589.8572, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851754590.013, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851759588.447, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851759588.637, "hypothesisId": "H3"}
+{"location":"api.js:factoryReset","message":"factoryReset error","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851761479,"hypothesisId":"H1,H2,H3,H4"}
+{"location":"App.jsx:handleFactoryReset","message":"factoryReset catch branch","data":{"message":"timeout of 60000ms exceeded"},"timestamp":1770851761480,"hypothesisId":"H4"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851764591.194, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851764591.418, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851769590.486, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851769590.6912, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851774594.097, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851774594.8447, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851779592.875, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851779593.14, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851784597.428, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851784599.599, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851789591.788, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851789592.181, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851794596.163, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851794596.929, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851799594.1812, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851799594.469, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851804593.12, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851804593.686, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851809596.058, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851809596.721, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851813811.939, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851813812.2307, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851814593.8298, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851814594.306, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851819590.08, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851819590.338, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851824592.4219, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851824592.648, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851829593.107, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851829593.5093, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851834591.445, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851834591.66, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851839596.131, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851839596.769, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851844591.5552, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851844591.722, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851849591.204, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851849591.369, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851854591.66, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851854591.821, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851859592.0278, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851859592.24, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851864590.852, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851864591.011, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851869593.047, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851869593.269, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851873818.2722, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851873818.879, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851874592.437, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851874592.635, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851879592.4631, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851879592.653, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851884592.963, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851884593.8618, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851889593.385, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851889593.55, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851894607.569, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851894609.1453, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851899595.9329, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851899596.204, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851904595.821, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851904596.823, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851909594.372, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851909594.761, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851914594.0781, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851914594.474, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851919595.4868, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851919595.7708, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851924593.461, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851924594.162, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851925080.784, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851925081.26, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851925081.897, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851925082.055, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851925082.15, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851925084.4731, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851930068.2139, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851930068.4229, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851932580.252, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851932580.498, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851932580.7559, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851932580.9229, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851932585.653, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851932591.807, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851933840.5308, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851933841.5771, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851937574.199, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851937574.389, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851942573.2522, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851942573.52, "hypothesisId": "H3"}
+{"location": "main.py:setup_csrf_check", "message": "factory-reset request", "data": {"origin": "http://localhost:3001", "origin_host": "localhost", "request_host": "localhost", "path": "/setup/factory-reset"}, "timestamp": 1770851943924.1118, "hypothesisId": "H2"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851947577.3801, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851947577.7422, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851952578.348, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851952579.914, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db entered", "data": {}, "timestamp": 1770851957576.6667, "hypothesisId": "H3"}
+{"location": "db.py:get_db", "message": "get_db session created", "data": {}, "timestamp": 1770851957577.14, "hypothesisId": "H3"}

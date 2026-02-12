@@ -2,6 +2,7 @@ import axios from 'axios'
 
 /**
  * Automatically detect API base URL based on current hostname.
+ * Set VITE_API_PORT in .env to match API_PORT when using a custom port (default: 8000).
  */
 function getApiBaseUrl() {
   if (import.meta.env.VITE_API_URL) {
@@ -89,15 +90,65 @@ export async function getPairingCode(householdId, deviceId, deviceType, name, me
 }
 
 /**
- * Factory reset. After success, clear setup-related localStorage and reload.
+ * Factory reset. Caller should clear localStorage and reload after success.
+ * Uses a longer timeout (60s) because wiping the DB can take a while.
  */
 export async function factoryReset() {
-  const response = await api.post('/setup/factory-reset')
-  const keys = Object.keys(localStorage).filter((k) =>
-    /^neuroion_setup_/i.test(k)
-  )
-  keys.forEach((k) => localStorage.removeItem(k))
-  window.location.reload()
+  const response = await api.post('/setup/factory-reset', null, { timeout: 60000 })
+  return response.data
+}
+
+// Setup wizard API (4 steps)
+export async function setupHousehold(householdName, ownerName) {
+  const response = await api.post('/setup/household', {
+    household_name: householdName,
+    owner_name: ownerName,
+  })
+  return response.data
+}
+
+export async function setupDevice(deviceName, timezone = 'Europe/Amsterdam') {
+  const response = await api.post('/setup/device', {
+    device_name: deviceName,
+    timezone,
+  })
+  return response.data
+}
+
+export async function setupAgentName(name) {
+  const response = await api.post('/setup/agent-name', { name: name || 'ion' })
+  return response.data
+}
+
+export async function scanWifiNetworks() {
+  const response = await api.get('/setup/wifi/scan')
+  return response.data?.networks ?? []
+}
+
+export async function configureWifi(ssid, password) {
+  const response = await api.post('/setup/wifi', { ssid, password })
+  return response.data
+}
+
+export async function applyWifi() {
+  const response = await api.post('/setup/wifi/apply')
+  return response.data
+}
+
+export async function markSetupComplete() {
+  const response = await api.post('/setup/complete')
+  return response.data
+}
+
+/** Get household members (for dashboard). */
+export async function getDashboardMembers() {
+  const response = await api.get('/dashboard/members')
+  return response.data?.members ?? []
+}
+
+/** Add member and get Telegram pairing QR (member_id, pairing_code, qr_value). */
+export async function addMember(name) {
+  const response = await api.post('/dashboard/add-member', { name: (name || '').trim() })
   return response.data
 }
 

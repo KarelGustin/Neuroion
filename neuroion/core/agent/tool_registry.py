@@ -110,15 +110,19 @@ def get_tool_registry() -> ToolRegistry:
 
 
 def _load_skill_modules() -> None:
-    """Auto-import skill modules so they can register tools."""
-    try:
-        from neuroion.core.agent import skills as skills_pkg
-    except Exception:
-        return
-    for module in pkgutil.iter_modules(skills_pkg.__path__):
-        if module.name.startswith("_"):
+    """Auto-import skill modules so they can register tools. Loads neuroion.core.skills first, then agent.skills."""
+    for pkg_name in ("neuroion.core.skills", "neuroion.core.agent.skills"):
+        try:
+            pkg = importlib.import_module(pkg_name)
+            path = getattr(pkg, "__path__", None)
+            if path is None:
+                continue
+            for module in pkgutil.iter_modules(path):
+                if module.name.startswith("_"):
+                    continue
+                importlib.import_module(f"{pkg.__name__}.{module.name}")
+        except Exception:
             continue
-        importlib.import_module(f"{skills_pkg.__name__}.{module.name}")
 
 
 # Tool implementations
@@ -328,6 +332,3 @@ def get_dashboard_link(
 
 
 _load_skill_modules()
-
-# Register read-only codebase tools (codebase.read_file, codebase.list_directory, codebase.search)
-import neuroion.core.agent.tools.codebase_tools  # noqa: F401

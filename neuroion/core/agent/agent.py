@@ -3,17 +3,23 @@ Main agent orchestrator.
 
 Interprets user intent, decides on actions, and coordinates tool execution.
 Supports LLM tool-calling for cron.* tools (scheduling/reminders).
+
+Context loading and history-relevance LLM run in parallel (thread pool) so
+the answering LLM is not delayed by surrounding preprocessing.
 """
 import json
 import re
-from typing import Dict, Any, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from neuroion.core.llm import get_llm_client_from_config
+from neuroion.core.llm.base import LLMClient
+from neuroion.core.memory.db import db_session
 from neuroion.core.agent.tool_registry import get_tool_registry
 from neuroion.core.agent.planner import Planner
 from neuroion.core.agent.gateway import run_agent_turn
-from neuroion.core.agent.types import RunContext, RunState
+from neuroion.core.agent.types import AgentInput, RunContext, RunState
 from neuroion.core.agent.executor import get_executor
 from neuroion.core.agent.agent_loop import run_one_turn
 from neuroion.core.agent.task_manager import (
@@ -31,14 +37,74 @@ from neuroion.core.agent.tool_protocol import parse_llm_output
 from neuroion.core.agent.task_prompts import build_task_messages
 from neuroion.core.agent.prompts import (
     build_history_relevance_messages,
+    build_meta_question_classifier_messages,
     build_scheduling_intent_messages,
+    get_soul_prompt,
 )
 from neuroion.core.agent.policies.guardrails import get_guardrails
 from neuroion.core.agent.policies.validator import get_validator
 from neuroion.core.observability.tracing import start_run, end_run
 from neuroion.core.observability.metrics import record_run_result
-from neuroion.core.memory.repository import ContextSnapshotRepository, PreferenceRepository
+from neuroion.core.memory.repository import ContextSnapshotRepository, PreferenceRepository, SystemConfigRepository
 from neuroion.core.security.audit import AuditLogger
+
+
+# Thread pool for parallel context load + relevance LLM (each task uses its own DB session)
+_agent_executor: Optional[ThreadPoolExecutor] = None
+
+
+def _get_agent_executor() -> ThreadPoolExecutor:
+    global _agent_executor
+    if _agent_executor is None:
+        _agent_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent_prep_")
+    return _agent_executor
+
+
+def _load_context_task(household_id: int, user_id: Optional[int]) -> Tuple[List[Dict[str, Any]], Optional[Dict], Optional[Dict], str]:
+    """Run in thread: load context snapshots, preferences, agent_name. Uses its own DB session."""
+    with db_session() as db:
+        context_snapshots = ContextSnapshotRepository.get_recent(db, household_id, limit=10, user_id=user_id)
+        context_dicts = [
+            {"timestamp": str(snap.timestamp), "event_type": snap.event_type, "summary": snap.summary}
+            for snap in context_snapshots
+        ]
+        user_preferences = PreferenceRepository.get_all(db, household_id, user_id=user_id)
+        household_preferences = PreferenceRepository.get_all(db, household_id, user_id=None)
+        agent_name = "ion"
+        cfg = SystemConfigRepository.get(db, "agent_name")
+        if cfg and getattr(cfg, "value", None):
+            try:
+                v = json.loads(cfg.value) if isinstance(cfg.value, str) else cfg.value
+                if isinstance(v, str) and v.strip():
+                    agent_name = v.strip()
+            except (TypeError, ValueError):
+                pass
+        return (context_dicts, user_preferences, household_preferences, agent_name)
+
+
+def _relevance_and_llm_task(
+    message: str,
+    recent_6: List[Dict[str, str]],
+    household_id: int,
+    user_id: Optional[int],
+) -> Tuple[List[Dict[str, str]], LLMClient]:
+    """Run in thread: get LLM, run history-relevance (if recent_6), return (filtered_history, llm). Uses its own DB session."""
+    with db_session() as db:
+        llm = get_llm_client_from_config(db)
+        if not recent_6:
+            return ([], llm)
+        relevance_messages = build_history_relevance_messages(message, recent_6)
+        include_count = 0
+        try:
+            raw = llm.chat(relevance_messages, temperature=0.2)
+            if raw:
+                parsed = json.loads(raw.strip())
+                n = int(parsed.get("include_count", 0))
+                include_count = max(0, min(n, len(recent_6)))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            include_count = 3
+        filtered_history = recent_6[-include_count:] if include_count else []
+        return (filtered_history, llm)
 
 
 class Agent:
@@ -78,41 +144,27 @@ class Agent:
         if user_id is not None:
             PreferenceRepository.delete_onboarding_preferences(db, household_id, user_id)
 
-        # Get context (memories + preferences)
-        context_snapshots = ContextSnapshotRepository.get_recent(
-            db, household_id, limit=10, user_id=user_id
-        )
-        context_dicts = [
-            {
-                "timestamp": str(snap.timestamp),
-                "event_type": snap.event_type,
-                "summary": snap.summary,
-            }
-            for snap in context_snapshots
-        ]
-        user_preferences = PreferenceRepository.get_all(db, household_id, user_id=user_id) if db else None
-        household_preferences = PreferenceRepository.get_all(db, household_id, user_id=None) if db else None
-
-        # Get LLM client from config (refresh on each call to ensure latest config)
-        self.llm = get_llm_client_from_config(db)
-
-        # Filter conversation history: only include recent messages relevant to the new message
         recent_6 = (conversation_history or [])[-6:]
-        if recent_6:
-            relevance_messages = build_history_relevance_messages(message, recent_6)
-            include_count = 0
-            if relevance_messages and self.llm:
-                try:
-                    raw = self.llm.chat(relevance_messages, temperature=0.2)
-                    if raw:
-                        parsed = json.loads(raw.strip())
-                        n = int(parsed.get("include_count", 0))
-                        include_count = max(0, min(n, len(recent_6)))
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    include_count = 3
-            filtered_history = recent_6[-include_count:] if include_count else []
-        else:
-            filtered_history = []
+        executor = _get_agent_executor()
+        future_context = executor.submit(_load_context_task, household_id, user_id)
+        future_relevance = executor.submit(_relevance_and_llm_task, message, recent_6, household_id, user_id)
+
+        context_dicts, user_preferences, household_preferences, agent_name = future_context.result()
+        filtered_history, self.llm = future_relevance.result()
+
+        # If relevance included no history, ask LLM whether user is asking about the conversation (meta-question)
+        if not filtered_history and recent_6 and self.llm:
+            try:
+                meta_messages = build_meta_question_classifier_messages(
+                    message, recent_6, memory=context_dicts
+                )
+                raw = self.llm.chat(meta_messages, temperature=0.0, max_tokens=32)
+                if raw:
+                    parsed = json.loads(raw.strip())
+                    if isinstance(parsed, dict) and parsed.get("meta_question") is True:
+                        filtered_history = list(recent_6)
+            except (json.JSONDecodeError, ValueError, TypeError, KeyError):
+                pass
 
         # Task path only when client explicitly requests it (X-Agent-Task-Mode: 1)
         user_id_str = str(user_id) if user_id is not None else "0"
@@ -123,16 +175,22 @@ class Agent:
             if result is not None:
                 return result
 
+        agent_input = AgentInput(
+            user_message=message,
+            agent_name=agent_name,
+            soul=get_soul_prompt(),
+            memory=context_dicts,
+            user_preferences=user_preferences,
+            household_preferences=household_preferences,
+            conversation_history=filtered_history,
+            system_instructions_extra=None,
+        )
         llm_response = run_agent_turn(
+            agent_input=agent_input,
             db=db,
             household_id=household_id,
             user_id=user_id,
-            message=message,
-            conversation_history=filtered_history,
             llm=self.llm,
-            context_snapshots=context_dicts,
-            user_preferences=user_preferences,
-            household_preferences=household_preferences,
         )
         # Post-process response: strip markdown bold syntax and trim
         llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)

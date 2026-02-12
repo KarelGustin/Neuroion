@@ -1,0 +1,82 @@
+/* On-screen keyboard – 800×480 touch targets */
+.touch-keyboard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 999;
+}
+
+.touch-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  padding: var(--space-2);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.touch-keyboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.touch-keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.touch-keyboard-row--bottom {
+  margin-top: var(--space-2);
+}
+
+.touch-keyboard-key {
+  min-width: 36px;
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.touch-keyboard-key:hover,
+.touch-keyboard-key:active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+}
+
+.touch-keyboard-key--backspace {
+  min-width: 56px;
+  font-size: var(--text-lg);
+}
+
+.touch-keyboard-key--space {
+  flex: 1;
+  max-width: 280px;
+}
+
+.touch-keyboard-key--close {
+  min-width: 100px;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.touch-keyboard-key--close:hover,
+.touch-keyboard-key--close:active {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
