@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     
     # Ollama LLM
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2:7b-instruct")
     ollama_timeout: int = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 
     # Neuroion Agent subscription (OpenAI via our token; €19/member)
@@ -74,7 +74,8 @@ class Settings(BaseSettings):
     agent_task_mode: bool = os.getenv("AGENT_TASK_MODE", "0").strip().lower() in ("1", "true", "yes")
 
     class Config:
-        env_file = ".env"
+        # Load .env from project root (neuroion/core/config.py -> parent.parent.parent)
+        env_file = str(Path(__file__).resolve().parent.parent.parent / ".env")
         case_sensitive = False
         extra = "ignore"  # Ignore extra fields in .env file
 

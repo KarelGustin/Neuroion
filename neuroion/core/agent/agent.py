@@ -13,7 +13,7 @@ from neuroion.core.llm import get_llm_client_from_config
 from neuroion.core.agent.tool_registry import get_tool_registry
 from neuroion.core.agent.planner import Planner
 from neuroion.core.agent.gateway import run_agent_turn
-from neuroion.core.agent.types import RunContext, RunState
+from neuroion.core.agent.types import AgentInput, RunContext, RunState
 from neuroion.core.agent.executor import get_executor
 from neuroion.core.agent.agent_loop import run_one_turn
 from neuroion.core.agent.task_manager import (
@@ -32,12 +32,13 @@ from neuroion.core.agent.task_prompts import build_task_messages
 from neuroion.core.agent.prompts import (
     build_history_relevance_messages,
     build_scheduling_intent_messages,
+    get_soul_prompt,
 )
 from neuroion.core.agent.policies.guardrails import get_guardrails
 from neuroion.core.agent.policies.validator import get_validator
 from neuroion.core.observability.tracing import start_run, end_run
 from neuroion.core.observability.metrics import record_run_result
-from neuroion.core.memory.repository import ContextSnapshotRepository, PreferenceRepository
+from neuroion.core.memory.repository import ContextSnapshotRepository, PreferenceRepository, SystemConfigRepository
 from neuroion.core.security.audit import AuditLogger
 
 
@@ -93,6 +94,17 @@ class Agent:
         user_preferences = PreferenceRepository.get_all(db, household_id, user_id=user_id) if db else None
         household_preferences = PreferenceRepository.get_all(db, household_id, user_id=None) if db else None
 
+        agent_name = "ion"
+        if db:
+            cfg = SystemConfigRepository.get(db, "agent_name")
+            if cfg and getattr(cfg, "value", None):
+                try:
+                    v = json.loads(cfg.value) if isinstance(cfg.value, str) else cfg.value
+                    if isinstance(v, str) and v.strip():
+                        agent_name = v.strip()
+                except (TypeError, ValueError):
+                    pass
+
         # Get LLM client from config (refresh on each call to ensure latest config)
         self.llm = get_llm_client_from_config(db)
 
@@ -123,16 +135,22 @@ class Agent:
             if result is not None:
                 return result
 
+        agent_input = AgentInput(
+            user_message=message,
+            agent_name=agent_name,
+            soul=get_soul_prompt(),
+            memory=context_dicts,
+            user_preferences=user_preferences,
+            household_preferences=household_preferences,
+            conversation_history=filtered_history,
+            system_instructions_extra=None,
+        )
         llm_response = run_agent_turn(
+            agent_input=agent_input,
             db=db,
             household_id=household_id,
             user_id=user_id,
-            message=message,
-            conversation_history=filtered_history,
             llm=self.llm,
-            context_snapshots=context_dicts,
-            user_preferences=user_preferences,
-            household_preferences=household_preferences,
         )
         # Post-process response: strip markdown bold syntax and trim
         llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)

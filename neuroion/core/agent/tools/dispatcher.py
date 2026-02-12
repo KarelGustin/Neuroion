@@ -75,6 +75,9 @@ def _build_tool_kwargs(
     """Filter/augment args for a tool function based on its signature."""
     sig = inspect.signature(func)
     kwargs = dict(args or {})
+    # Alias: LLM often sends file_path; map to path when function expects path
+    if "path" in sig.parameters and "path" not in kwargs and kwargs.get("file_path") is not None:
+        kwargs["path"] = kwargs["file_path"]
     if household_id is not None and "household_id" in sig.parameters and "household_id" not in kwargs:
         kwargs["household_id"] = household_id
     if user_id_int is not None and "user_id" in sig.parameters and "user_id" not in kwargs:

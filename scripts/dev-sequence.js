@@ -103,9 +103,10 @@ async function run() {
   writeStatus(5, 'starting')
 
   console.log('[dev-sequence] Starting API...')
-  spawnCommand('npm', ['run', 'dev:api'])
+  const apiPort = process.env.API_PORT || '8000'
+  spawnCommand('npm', ['run', 'dev:api'], { API_PORT: apiPort })
   try {
-    await waitForHttp('http://127.0.0.1:8000/setup/status')
+    await waitForHttp(`http://127.0.0.1:${apiPort}/setup/status`)
     writeStatus(30, 'api-ready')
   } catch (err) {
     console.warn('[dev-sequence] API did not respond:', err.message)

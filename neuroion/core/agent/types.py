@@ -1,8 +1,25 @@
 """
 Shared types for the agentic loop: RunContext, RunState, Action, ToolResult, Observation.
+Also AgentInput: structured JSON-like input for the agent (soul, memory, preferences, history).
 """
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+
+@dataclass
+class AgentInput:
+    """
+    Structured input for the agent. All context (soul, memory, preferences, history)
+    in one object so it can be built from DB/files or sent as JSON by clients.
+    """
+    user_message: str
+    agent_name: str = "ion"
+    soul: Optional[str] = None  # SOUL.md content; if None, prompts will load from file
+    memory: Optional[List[Dict[str, Any]]] = None  # Context snapshots
+    user_preferences: Optional[Dict[str, Any]] = None
+    household_preferences: Optional[Dict[str, Any]] = None
+    conversation_history: Optional[List[Dict[str, str]]] = None
+    system_instructions_extra: Optional[str] = None  # e.g. scheduling addition
 
 # Pending decision from LLM: (kind, payload) where kind in ("tool_call", "need_info", "final")
 PendingDecision = Tuple[str, Any]

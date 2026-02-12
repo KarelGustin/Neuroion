@@ -9,13 +9,15 @@ import os
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-from neuroion.core.memory.db import get_db
+from neuroion.core.memory.db import get_db, db_session
+from starlette.concurrency import run_in_threadpool
 from neuroion.core.memory.repository import (
     SystemConfigRepository,
     HouseholdRepository,
@@ -40,7 +42,21 @@ from neuroion.core.llm.openai import OpenAILLMClient
 from neuroion.core.services.wifi_service import WiFiService
 from neuroion.core.services.network_manager import NetworkManager
 from neuroion.core.security.setup_secret import get_or_create as get_setup_secret, clear as setup_secret_clear
-from neuroion.core.memory.models import JoinToken, LoginCode, DashboardLink
+from neuroion.core.memory.models import (
+    JoinToken,
+    LoginCode,
+    DashboardLink,
+    DailyRequestCount,
+    CronJobRecord,
+    CronRunRecord,
+    UserIntegration,
+    Preference,
+    ContextSnapshot,
+    AuditLog,
+    ChatMessage,
+    Household,
+    SystemConfig,
+)
 from neuroion.core.config import settings as app_settings
 from neuroion.core.services.network import get_dashboard_base_url
 
@@ -266,6 +282,17 @@ class DeviceSetupResponse(BaseModel):
     message: str
 
 
+class AgentNameRequest(BaseModel):
+    """Agent name for setup."""
+    name: str = "ion"
+
+
+class AgentNameResponse(BaseModel):
+    """Agent name setup response."""
+    success: bool
+    message: str
+
+
 class ValidateResponse(BaseModel):
     """Setup validation result."""
     network_ok: bool
@@ -387,7 +414,7 @@ def setup_neuroion_channels(
 
 
 def _ensure_default_llm_config(db: Session) -> None:
-    """If no LLM config exists, write default (local Ollama llama3.2) so setup can complete without LLM step."""
+    """If no LLM config exists, write default (local Ollama qwen2:7b-instruct) so setup can complete without LLM step."""
     llm_provider = SystemConfigRepository.get(db, "llm_provider")
     if llm_provider is not None:
         return
@@ -433,13 +460,13 @@ def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse:
     Check if system is fully configured.
     
     Returns status of WiFi, LLM, and household setup.
-    If no LLM config exists, default (local Ollama llama3.2) is written so setup can complete without the LLM step.
+    If no LLM config exists, default (local Ollama qwen2:7b-instruct) is written so setup can complete without the LLM step.
     """
     # Check WiFi config
     wifi_config = SystemConfigRepository.get(db, "wifi")
     wifi_configured = wifi_config is not None
 
-    # Ensure default LLM config when missing (local Ollama llama3.2)
+    # Ensure default LLM config when missing (local Ollama qwen2:7b-instruct)
     _ensure_default_llm_config(db)
 
     # Check LLM config (now at least default exists)
@@ -633,7 +660,7 @@ def configure_llm(
         if request.provider == "local":
             config = {
                 "base_url": request.config.get("base_url"),
-                "model": request.config.get("model", "llama3.2"),
+                "model": request.config.get("model", "qwen2:7b-instruct"),
                 "timeout": request.config.get("timeout", 120),
             }
             SystemConfigRepository.set(
@@ -891,39 +918,47 @@ def mark_setup_complete(db: Session = Depends(get_db)) -> SetupCompleteResponse:
         )
 
 
-@router.post("/factory-reset", response_model=FactoryResetResponse)
-def factory_reset(db: Session = Depends(get_db)) -> FactoryResetResponse:
-    """
-    Factory reset: wipe all persisted data and return device to onboarding.
-    Deletes join tokens, households (and cascade: users, preferences, chat, etc.),
-    system config keys (wifi, llm, etc.), resets device_config, clears setup secret.
-    """
+# All SQLite tables to wipe in one transaction (order irrelevant with foreign_keys=OFF)
+_FACTORY_RESET_TABLES = (
+    "join_tokens",
+    "login_codes",
+    "dashboard_links",
+    "user_integrations",
+    "daily_request_counts",
+    "cron_runs",
+    "cron_jobs",
+    "preferences",
+    "context_snapshots",
+    "audit_logs",
+    "chat_messages",
+    "users",
+    "households",
+    "system_config",
+    "device_config",
+)
+
+
+def _do_factory_reset(db: Session) -> FactoryResetResponse:
+    """Run factory reset in a single DB session (call from thread; session is thread-local)."""
     try:
-        # 1. Delete join tokens and user-linked rows (FK to users; must go before households)
-        db.query(JoinToken).delete(synchronize_session=False)
-        db.query(LoginCode).delete(synchronize_session=False)
-        db.query(DashboardLink).delete(synchronize_session=False)
+        # 1. Single transaction: raw SQL DELETE FROM each table (fast in SQLite)
+        db.execute(text("PRAGMA foreign_keys = OFF"))
+        for table in _FACTORY_RESET_TABLES:
+            db.execute(text(f"DELETE FROM {table}"))
+        db.execute(text("PRAGMA foreign_keys = ON"))
         db.commit()
-        # 2. Delete all households (cascade removes users, preferences, context_snapshots, audit_logs, chat_messages)
-        households = HouseholdRepository.get_all(db)
-        for h in households:
-            HouseholdRepository.delete(db, h.id)
-        # 3. Delete system config keys so wizard is required again
-        for key in (
-            "wifi", "timezone", "llm_provider", "llm_ollama", "llm_cloud", "llm_openai", "llm_custom",
-            "llm_neuroion_agent", "neuroion_core", "privacy",
-        ):
-            SystemConfigRepository.delete(db, key)
-        # 4. Reset device config
+        db.expire_all()  # clear session cache so repos see empty DB
+
+        # 2. Re-create default device_config and reset marker so setup wizard runs
+        DeviceConfigRepository.get_or_create(db)
         DeviceConfigRepository.update(
             db, setup_completed=False, wifi_configured=False, hostname="Neuroion Core"
         )
-        # 5. Store reset marker for onboarding UI (clears prefilled inputs)
         SystemConfigRepository.set(
             db, "setup_reset_at", datetime.utcnow().isoformat(), category="setup"
         )
-        db.commit()
-        # 6. Clear setup secret so new one is generated
+
+        # 3. Clear setup secret so a new one is generated
         setup_secret_clear()
         return FactoryResetResponse(success=True, message="Factory reset complete")
     except Exception as e:
@@ -936,6 +971,22 @@ def factory_reset(db: Session = Depends(get_db)) -> FactoryResetResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Factory reset failed: {str(e)}",
         )
+
+
+def _run_factory_reset_sync() -> FactoryResetResponse:
+    """Obtain a DB session in this thread and run factory reset (for run_in_threadpool)."""
+    with db_session() as db:
+        return _do_factory_reset(db)
+
+
+@router.post("/factory-reset", response_model=FactoryResetResponse)
+async def factory_reset() -> FactoryResetResponse:
+    """
+    Factory reset: empty all SQLite tables in one fast transaction, then re-create
+    device_config and setup_reset_at so onboarding can start again.
+    (Also handled in middleware for reliability; this route is a fallback.)
+    """
+    return await run_in_threadpool(_run_factory_reset_sync)
 
 
 @router.get("/complete", response_model=SetupCompleteResponse)
@@ -996,6 +1047,21 @@ def setup_device(
     except Exception as e:
         logger.error(f"Error saving device settings: {e}", exc_info=True)
         return DeviceSetupResponse(success=False, message=str(e))
+
+
+@router.post("/agent-name", response_model=AgentNameResponse)
+def setup_agent_name(
+    request: AgentNameRequest,
+    db: Session = Depends(get_db),
+) -> AgentNameResponse:
+    """Store the Neuroion agent display name (used in prompts and SOUL context)."""
+    try:
+        name = (request.name or "ion").strip() or "ion"
+        SystemConfigRepository.set(db, "agent_name", name, category="setup")
+        return AgentNameResponse(success=True, message="Agent name saved")
+    except Exception as e:
+        logger.error(f"Error saving agent name: {e}", exc_info=True)
+        return AgentNameResponse(success=False, message=str(e))
 
 
 @router.post("/validate", response_model=ValidateResponse)
@@ -1155,7 +1221,7 @@ def setup_model_preset(
             )
 
         if request.choice == "local":
-            model_name = request.model_name or "llama3.2:3b"
+            model_name = request.model_name or "qwen2:7b-instruct"
             SystemConfigRepository.set(
                 db=db,
                 key="llm_provider",
@@ -1316,11 +1382,11 @@ def get_setup_summary(db: Session = Depends(get_db)) -> SetupSummaryResponse:
     llm_openai_config = SystemConfigRepository.get(db, "llm_openai")
     llm_custom_config = SystemConfigRepository.get(db, "llm_custom")
     llm_preset = "local"
-    llm_model = "llama3.2:3b"
+    llm_model = "qwen2:7b-instruct"
     if llm_provider_config and isinstance(llm_provider_config.value, dict):
         llm_preset = llm_provider_config.value.get("provider", "local")
         if llm_preset == "local" and llm_ollama_config and isinstance(llm_ollama_config.value, dict):
-            llm_model = llm_ollama_config.value.get("model", "llama3.2:3b")
+            llm_model = llm_ollama_config.value.get("model", "qwen2:7b-instruct")
         elif llm_preset == "neuroion_agent" and llm_neuroion_config and isinstance(llm_neuroion_config.value, dict):
             llm_model = llm_neuroion_config.value.get("model", "gpt-4o")
         elif llm_preset == "openai" and llm_openai_config and isinstance(llm_openai_config.value, dict):
@@ -1375,7 +1441,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         llm_custom_config = SystemConfigRepository.get(db, "llm_custom")
         
         model_choice = "local"
-        model_name = "llama3.2:3b"
+        model_name = "qwen2:7b-instruct"
         model_status = "idle"
         model_health = "unknown"
         
@@ -1383,7 +1449,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             provider = llm_provider_config.value.get("provider", "local")
             model_choice = provider
             if provider == "local" and llm_ollama_config and isinstance(llm_ollama_config.value, dict):
-                model_name = llm_ollama_config.value.get("model", "llama3.2:3b")
+                model_name = llm_ollama_config.value.get("model", "qwen2:7b-instruct")
             elif provider == "neuroion_agent" and llm_neuroion_config and isinstance(llm_neuroion_config.value, dict):
                 model_name = llm_neuroion_config.value.get("model", "gpt-4o")
             elif provider == "openai" and llm_openai_config and isinstance(llm_openai_config.value, dict):

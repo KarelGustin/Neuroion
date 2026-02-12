@@ -120,12 +120,12 @@ def write_config(device_config: Dict[str, Any], state_dir: Path) -> None:
     ollama = device_config.get("llm_ollama") or {}
     openai = device_config.get("llm_openai") or {}
     custom = device_config.get("llm_custom") or {}
-    model_name = "llama3.2:3b"
+    model_name = "qwen2:7b-instruct"
     defaults_provider = "ollama"
     provider_base_url = None
 
     if provider == "local":
-        model_name = ollama.get("model", "llama3.2:3b") if isinstance(ollama, dict) else "llama3.2:3b"
+        model_name = ollama.get("model", "qwen2:7b-instruct") if isinstance(ollama, dict) else "qwen2:7b-instruct"
         defaults_provider = "ollama"
     elif provider == "openai":
         model_name = openai.get("model", "gpt-4o-mini") if isinstance(openai, dict) else "gpt-4o-mini"

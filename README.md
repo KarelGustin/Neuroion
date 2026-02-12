@@ -107,10 +107,12 @@ This starts:
 
 | Service        | URL                    |
 |----------------|------------------------|
-| Homebase API   | http://localhost:8000  |
+| Homebase API   | http://localhost:8000  (or port from `API_PORT`, e.g. 8001) |
 | Setup UI       | http://localhost:3000  |
 | Touchscreen UI | http://localhost:3001  |
 | Dashboard      | http://localhost:3002  |
+
+If you set **`API_PORT`** in `.env` (e.g. `API_PORT=8001`), also set **`VITE_API_PORT=8001`** in the same `.env` so the touchscreen-ui, setup-ui and dashboard-ui use that API port. For the dashboard-nextjs app, set **`NEXT_PUBLIC_API_PORT=8001`**. The backend, Telegram default URL, and dev scripts already read `API_PORT`.
 
 Useful for **local testing** and **testing on a Raspberry Pi** on your network (open the URLs via the Pi’s IP, e.g. `http://192.168.1.x:3001` for the touchscreen).
 

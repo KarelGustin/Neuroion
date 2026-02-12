@@ -104,6 +104,85 @@
   flex-shrink: 0;
 }
 
+/* Add Member modal (extends qr-container) */
+.add-member-modal .add-member-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.add-member-modal .add-member-input {
+  font-size: var(--text-base);
+  padding: var(--space-3);
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.add-member-modal .add-member-error {
+  color: var(--error);
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-3);
+}
+
+.add-member-modal .add-member-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.add-member-modal .add-member-actions .qr-close {
+  flex: 1;
+}
+
+.add-member-modal .add-member-actions .qr-open-on-device {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.add-member-modal .add-member-hint {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-4);
+}
+
+/* Members list on dashboard */
+.members-list {
+  flex-shrink: 0;
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+}
+
+.members-list h4 {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.members-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.members-list li {
+  font-size: var(--text-base);
+  color: var(--text);
+}
+
 @media (min-width: 768px) {
   .status-grid {
     grid-template-columns: repeat(3, 1fr);

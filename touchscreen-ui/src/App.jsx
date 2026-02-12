@@ -5,9 +5,11 @@ import QRDisplay from './components/QRDisplay'
 import SettingsPanel from './components/SettingsPanel'
 import BootScreen from './components/BootScreen'
 import SetupRequiredScreen from './components/SetupRequiredScreen'
+import SetupWizard from './components/SetupWizard'
 import JoinFlow from './components/JoinFlow'
 import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
-import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset } from './services/api'
+import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset, getDashboardMembers, addMember } from './services/api'
+import { QRCodeSVG } from 'qrcode.react'
 import './styles/App.css'
 
 function App() {
@@ -30,6 +32,10 @@ function App() {
   const [neuroionLaunched, setOpenclawLaunched] = useState(false)
   const [addMemberLoading, setAddMemberLoading] = useState(false)
   const [addMemberError, setAddMemberError] = useState(null)
+  const [addMemberModalOpen, setAddMemberModalOpen] = useState(false)
+  const [addMemberName, setAddMemberName] = useState('')
+  const [addMemberQr, setAddMemberQr] = useState(null)
+  const [members, setMembers] = useState([])
 
   const isDev = import.meta.env.DEV
 
@@ -163,6 +169,21 @@ function App() {
     return () => clearInterval(interval)
   }, [view])
 
+  const fetchMembers = async () => {
+    try {
+      const list = await getDashboardMembers()
+      setMembers(Array.isArray(list) ? list : [])
+    } catch (_) {
+      setMembers([])
+    }
+  }
+
+  useEffect(() => {
+    if (view !== 'dashboard') return
+    fetchMembers()
+  }, [view])
+
+
   useEffect(() => {
     if (view !== 'dashboard' || !status || neuroionLaunched) return
     const autoLaunch = import.meta.env.VITE_NEUROION_AUTOLAUNCH === '1' || import.meta.env.VITE_NEUROION_AUTOLAUNCH === 'true'
@@ -193,28 +214,43 @@ function App() {
     setQrData({ url, title: 'Open Dashboard' })
   }
 
-  const handleAddMember = async () => {
+  const handleAddMemberOpen = () => {
+    setAddMemberQr(null)
+    setAddMemberName('')
+    setAddMemberError(null)
+    setAddMemberModalOpen(true)
+  }
+
+  const handleAddMemberClose = () => {
+    setAddMemberModalOpen(false)
+    setAddMemberQr(null)
+    setAddMemberName('')
+    setAddMemberError(null)
+    fetchMembers()
+  }
+
+  const handleAddMemberConnect = async () => {
+    const name = (addMemberName || '').trim()
+    if (!name) {
+      setAddMemberError('Vul een naam in.')
+      return
+    }
     setAddMemberLoading(true)
-    setError(null)
     setAddMemberError(null)
     try {
-      const tokenData = await createDashboardJoinToken()
-      const url = tokenData?.join_url || tokenData?.qr_url
-      if (url) {
-        setQrData({ url, title: 'Add Member - Scan to Join' })
-      } else {
-        const detail = 'Geen join-URL ontvangen.'
-        setError(detail)
-        setAddMemberError(detail)
-      }
+      const data = await addMember(name)
+      setAddMemberQr({
+        member_id: data.member_id,
+        pairing_code: data.pairing_code,
+        qr_value: data.qr_value,
+      })
     } catch (err) {
       const detail = err.response?.data?.detail
       const message = typeof detail === 'string'
         ? detail
         : Array.isArray(detail)
           ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
-          : err.message || 'Kon geen koppelcode aanmaken.'
-      setError(message)
+          : err.message || 'Kon geen lid toevoegen.'
       setAddMemberError(message)
     } finally {
       setAddMemberLoading(false)
@@ -224,10 +260,20 @@ function App() {
   const handleSettingsOpen = () => setSettingsOpen(true)
   const handleSettingsClose = () => setSettingsOpen(false)
   const handleFactoryReset = () => {
-    factoryReset().catch((err) => {
-      setError(`Factory reset failed: ${err.message}`)
-      setSettingsOpen(false)
-    })
+    factoryReset()
+      .then(() => {
+        const keys = Object.keys(localStorage).filter((k) =>
+          /^neuroion_setup_/i.test(k)
+        )
+        keys.forEach((k) => localStorage.removeItem(k))
+        setSetupComplete(false)
+        setView('setup')
+        window.location.reload()
+      })
+      .catch((err) => {
+        setError(`Factory reset failed: ${err.message}`)
+        setSettingsOpen(false)
+      })
   }
 
   const handleOpenNeuroion = () => {
@@ -257,7 +303,13 @@ function App() {
   }
 
   if (view === 'setup') {
-    return <SetupRequiredScreen setupUrl={setupUrl} />
+    return (
+      <SetupWizard
+        onComplete={() => {
+          setSetupComplete(true)
+        }}
+      />
+    )
   }
 
   if (statusLoading) {
@@ -317,7 +369,20 @@ function App() {
             icon={<Home size={36} />}
           />
         )}
-        {/* {status?.storage && (
+      </div>
+
+      {members.length > 0 && (
+        <div className="members-list">
+          <h4>Leden</h4>
+          <ul>
+            {members.map((m) => (
+              <li key={m.id}>{m.name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* {status?.storage && (
           <StatusCard
             title="Storage"
             status="ok"
@@ -336,7 +401,6 @@ function App() {
             icon={<Sparkles size={36} />}
           />
         )} */}
-      </div>
       {status?.degraded_message && (
         <div className="degraded-banner">{status.degraded_message}</div>
       )}
@@ -357,9 +421,8 @@ function App() {
         <ActionButton
           label="Add Member"
           icon={<UserPlus size={36} />}
-          onClick={handleAddMember}
+          onClick={handleAddMemberOpen}
           variant="primary"
-          disabled={addMemberLoading}
         />
         <ActionButton
           label="Instellingen"
@@ -385,14 +448,49 @@ function App() {
         />
       )}
 
-      {addMemberError && (
-        <div className="qr-overlay" onClick={() => setAddMemberError(null)}>
-          <div className="qr-container" onClick={(e) => e.stopPropagation()}>
-            <h3>Kon geen koppelcode aanmaken</h3>
-            <p className="qr-url" style={{ marginBottom: 'var(--space-6)' }}>{addMemberError}</p>
-            <button type="button" className="qr-close" onClick={() => setAddMemberError(null)}>
-              Sluiten
-            </button>
+      {addMemberModalOpen && (
+        <div className="qr-overlay" onClick={handleAddMemberClose}>
+          <div className="qr-container add-member-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Lid toevoegen</h3>
+            {!addMemberQr ? (
+              <>
+                <label className="add-member-label">
+                  Naam
+                  <input
+                    type="text"
+                    className="add-member-input"
+                    value={addMemberName}
+                    onChange={(e) => setAddMemberName(e.target.value)}
+                    placeholder="Naam van het lid"
+                  />
+                </label>
+                {addMemberError && <p className="add-member-error">{addMemberError}</p>}
+                <div className="add-member-actions">
+                  <button type="button" className="qr-close" onClick={handleAddMemberClose}>
+                    Annuleren
+                  </button>
+                  <button
+                    type="button"
+                    className="qr-open-on-device"
+                    onClick={handleAddMemberConnect}
+                    disabled={addMemberLoading}
+                  >
+                    {addMemberLoading ? 'Bezig…' : 'Connect to Telegram'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="add-member-hint">Scan met Telegram om te koppelen</p>
+                <div className="qr-code">
+                  <QRCodeSVG value={addMemberQr.qr_value} size={220} level="H" includeMargin={true} />
+                </div>
+                <p className="qr-url">Code: {addMemberQr.pairing_code}</p>
+                <button type="button" className="qr-close" onClick={handleAddMemberClose}>
+                  Sluiten
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
