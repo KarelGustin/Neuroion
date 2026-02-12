@@ -304,6 +304,41 @@ def build_history_relevance_messages(
     ]
 
 
+def build_meta_question_classifier_messages(
+    current_message: str,
+    recent_messages: List[Dict[str, str]],
+    memory: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Build messages for LLM to classify if the user is asking about the conversation itself
+    (e.g. previous message(s), what was said). Sends conversation + optional memory so the
+    LLM can keep track of the conversation. No hardcoded phrases.
+    """
+    parts = []
+    if recent_messages:
+        lines = []
+        for m in recent_messages:
+            role = m.get("role", "unknown")
+            content = (m.get("content") or "").strip() or "(empty)"
+            lines.append(f"{role}: {content}")
+        parts.append("Recent conversation (oldest to newest):\n" + "\n".join(lines))
+    if memory:
+        parts.append("\nMemory / stored context:\n" + format_context_snapshots(memory))
+    parts.append("\nCurrent user message:\n" + (current_message or "").strip())
+    user_content = "\n".join(parts) if parts else (current_message or "").strip()
+
+    system = (
+        "You are a classifier. You are given the current user message and the recent conversation (and optionally memory). "
+        "Decide: does the user ask to recall, summarize, or refer to previous message(s) in this conversation? "
+        "E.g. asking what they said, what was said, previous/last message, conversation history, or similar. "
+        "Answer with exactly one JSON object and no other text. Format: {\"meta_question\": true} or {\"meta_question\": false}."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def build_scheduling_intent_messages(message: str) -> List[Dict[str, str]]:
     """Build messages for LLM to classify whether the user message is about scheduling/reminders."""
     system = (
