@@ -1,10 +1,9 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { getApiBaseUrl, getPairingCode } from '../services/api'
+import { getApiBaseUrl } from '../services/api'
 import '../styles/DashboardLinkScreen.css'
 
 const DASHBOARD_PORT = 3001
-const HOUSEHOLD_ID = 1
 
 /**
  * Builds the URL that the iOS app scans to connect in one step (base URL + pairing code).
@@ -14,10 +13,6 @@ function buildAppPairingQRValue(apiBase, pairingCode) {
 }
 
 function DashboardLinkScreen({ pairingCode = null }) {
-  const [inviteCode, setInviteCode] = useState(null)
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteError, setInviteError] = useState(null)
-
   const dashboardUrl =
     typeof window !== 'undefined'
       ? `${window.location.protocol}//${window.location.hostname}:${DASHBOARD_PORT}`
@@ -76,42 +71,6 @@ function DashboardLinkScreen({ pairingCode = null }) {
             <p className="dashboard-link-app-qr-code-label">Code: {pairingCode}</p>
           </div>
         )}
-
-        <div className="dashboard-link-card dashboard-link-invite">
-          <h3 className="dashboard-link-app-qr-title">Nieuwe member koppelen</h3>
-          <p className="dashboard-link-app-qr-text">
-            Laat een ander gezinslid de app installeren en scan een nieuwe QR-code om hen aan het huishouden toe te voegen.
-          </p>
-          {!inviteQRValue ? (
-            <>
-              <button
-                type="button"
-                className="dashboard-link-button"
-                onClick={handleInviteMember}
-                disabled={inviteLoading}
-              >
-                {inviteLoading ? 'Bezig…' : 'Toon QR voor nieuwe member'}
-              </button>
-              {inviteError && (
-                <p className="dashboard-link-invite-error">{inviteError}</p>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="dashboard-link-app-qr-code">
-                <QRCodeSVG value={inviteQRValue} size={200} level="H" includeMargin />
-              </div>
-              <p className="dashboard-link-app-qr-code-label">Code: {inviteCode}</p>
-              <button
-                type="button"
-                className="dashboard-link-button dashboard-link-button-secondary"
-                onClick={() => setInviteCode(null)}
-              >
-                Nieuwe code
-              </button>
-            </>
-          )}
-        </div>
       </div>
     </div>
   )

@@ -13,7 +13,7 @@ import traceback
 
 from neuroion.core.config import settings
 from neuroion.core.memory.db import init_db, db_session
-from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences, join, members, context, agent, cron_tools
+from neuroion.core.api import health, pairing, chat, events, admin, setup, dashboard, integrations, preferences, join, members, context, agent, cron_tools, agenda
 from neuroion.core.services.telegram_service import start_telegram_bot, stop_telegram_bot
 from neuroion.core.config_store import (
     get_device_config as config_store_get_device_config,
@@ -227,6 +227,7 @@ app.include_router(dashboard.router)
 app.include_router(integrations.router)
 app.include_router(preferences.router)
 app.include_router(context.router)
+app.include_router(agenda.router)
 app.include_router(agent.router)
 app.include_router(cron_tools.router)
 

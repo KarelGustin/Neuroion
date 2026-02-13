@@ -58,7 +58,7 @@ function SetupWizard({ onComplete }) {
     const h = (householdName || '').trim()
     const d = (deviceName || 'Neuroion Core').trim()
     if (!h) {
-      setError('Vul een householdnaam in.')
+      setError('Vul je naam in.')
       return
     }
     setError(null)
@@ -164,9 +164,9 @@ function SetupWizard({ onComplete }) {
 
       {step === 1 && (
         <div className="setup-wizard-step">
-          <h2 className="setup-wizard-title">Device &amp; Household</h2>
+          <h2 className="setup-wizard-title">Device &amp; jouw naam</h2>
           <label className="setup-wizard-label">
-            Householdnaam
+            Je naam
             <input
               type="text"
               className="setup-wizard-input"
@@ -174,8 +174,8 @@ function SetupWizard({ onComplete }) {
               onChange={(e) => setHouseholdName(e.target.value)}
               onFocus={() => setFocusedInput('householdName')}
               readOnly={focusedInput === 'householdName'}
-              placeholder="Bijv. Thuis"
-              autoComplete="organization"
+              placeholder="Bijv. Jan"
+              autoComplete="name"
             />
           </label>
           <label className="setup-wizard-label">

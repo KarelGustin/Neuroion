@@ -8,9 +8,8 @@ import SetupRequiredScreen from './components/SetupRequiredScreen'
 import SetupWizard from './components/SetupWizard'
 import ConnectWiFiScreen from './components/ConnectWiFiScreen'
 import JoinFlow from './components/JoinFlow'
-import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
-import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset, getDashboardMembers, addMember, deleteMember, getPairingCode, getApiBaseUrl } from './services/api'
-import { QRCodeSVG } from 'qrcode.react'
+import { Connectivity, Sparkles, Home, Smartphone, Wrench, RotateCw } from './components/icons'
+import { getStatus, getSetupStatus, getDevStatus, factoryReset } from './services/api'
 import './styles/App.css'
 
 function App() {
@@ -31,15 +30,6 @@ function App() {
   const [setupUrl, setSetupUrl] = useState('')
   const [devProgress, setDevProgress] = useState({ progress: 0, stage: 'starting' })
   const [neuroionLaunched, setOpenclawLaunched] = useState(false)
-  const [addMemberLoading, setAddMemberLoading] = useState(false)
-  const [addMemberError, setAddMemberError] = useState(null)
-  const [addMemberModalOpen, setAddMemberModalOpen] = useState(false)
-  const [addMemberName, setAddMemberName] = useState('')
-  const [addMemberQr, setAddMemberQr] = useState(null)
-  const [members, setMembers] = useState([])
-  const [deleteConfirmMember, setDeleteConfirmMember] = useState(null)
-  const [deleteError, setDeleteError] = useState(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const isDev = import.meta.env.DEV
 
@@ -190,21 +180,6 @@ function App() {
     return () => clearInterval(interval)
   }, [view])
 
-  const fetchMembers = async () => {
-    try {
-      const list = await getDashboardMembers()
-      setMembers(Array.isArray(list) ? list : [])
-    } catch (_) {
-      setMembers([])
-    }
-  }
-
-  useEffect(() => {
-    if (view !== 'dashboard') return
-    fetchMembers()
-  }, [view])
-
-
   useEffect(() => {
     if (view !== 'dashboard' || !status || neuroionLaunched) return
     const autoLaunch = import.meta.env.VITE_NEUROION_AUTOLAUNCH === '1' || import.meta.env.VITE_NEUROION_AUTOLAUNCH === 'true'
@@ -233,113 +208,6 @@ function App() {
       ? `${status.dashboard_url.replace(/\/$/, '')}`
       : `http://${status?.network?.hostname || 'neuroion.local'}:${dashboardPort}`
     setQrData({ url, title: 'Open Dashboard' })
-  }
-
-  const handleAddMemberOpen = () => {
-    setAddMemberQr(null)
-    setAddMemberName('')
-    setAddMemberError(null)
-    setAddMemberModalOpen(true)
-  }
-
-  const handleAddMemberClose = () => {
-    setAddMemberModalOpen(false)
-    setAddMemberQr(null)
-    setAddMemberName('')
-    setAddMemberError(null)
-    fetchMembers()
-  }
-
-  const HOUSEHOLD_ID = 1
-
-  const handleAddMemberTelegram = async () => {
-    const name = (addMemberName || '').trim()
-    if (!name) {
-      setAddMemberError('Vul een naam in.')
-      return
-    }
-    setAddMemberLoading(true)
-    setAddMemberError(null)
-    try {
-      const data = await addMember(name)
-      setAddMemberQr({
-        type: 'telegram',
-        qr_value: data.qr_value,
-        pairing_code: data.pairing_code,
-      })
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      const message = typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
-          : err.message || 'Kon geen lid toevoegen.'
-      setAddMemberError(message)
-    } finally {
-      setAddMemberLoading(false)
-    }
-  }
-
-  const handleAddMemberApp = async () => {
-    const name = (addMemberName || '').trim()
-    if (!name) {
-      setAddMemberError('Vul een naam in.')
-      return
-    }
-    setAddMemberLoading(true)
-    setAddMemberError(null)
-    try {
-      const code = await getPairingCode(HOUSEHOLD_ID, `ios-${Date.now()}`, 'ios', name)
-      const apiBase = getApiBaseUrl()
-      const qrValue = `neuroion://pair?base=${encodeURIComponent(apiBase)}&code=${encodeURIComponent(code)}`
-      setAddMemberQr({
-        type: 'app',
-        qr_value: qrValue,
-        pairing_code: code,
-      })
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      const message = typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
-          : err.message || 'Kon geen code ophalen.'
-      setAddMemberError(message)
-    } finally {
-      setAddMemberLoading(false)
-    }
-  }
-
-  const handleDeleteMemberOpen = (m) => (e) => {
-    e.stopPropagation()
-    setDeleteConfirmMember(m)
-    setDeleteError(null)
-  }
-
-  const handleDeleteMemberClose = () => {
-    setDeleteConfirmMember(null)
-    setDeleteError(null)
-  }
-
-  const handleDeleteMemberConfirm = async () => {
-    if (!deleteConfirmMember) return
-    setDeleteLoading(true)
-    setDeleteError(null)
-    try {
-      await deleteMember(deleteConfirmMember.id)
-      setDeleteConfirmMember(null)
-      fetchMembers()
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      const message = typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
-          : err.message || 'Verwijderen mislukt.'
-      setDeleteError(message)
-    } finally {
-      setDeleteLoading(false)
-    }
   }
 
   const handleSettingsOpen = () => setSettingsOpen(true)
@@ -451,40 +319,17 @@ function App() {
           />
         )}
 
-        {status?.household && (
+        {status?.user?.name && (
           <StatusCard
-            title="Household"
+            title="User"
             status="active"
             details={{
-              Name: status.household.name,
-              Members: status.household.member_count,
+              Name: status.user.name,
             }}
             icon={<Home size={36} />}
           />
         )}
       </div>
-
-      {members.length > 0 && (
-        <div className="members-list">
-          <h4>Leden</h4>
-          <ul>
-            {members.map((m) => (
-              <li key={m.id} className="member-row">
-                <span className="member-name">{m.name}</span>
-                <button
-                  type="button"
-                  className="member-remove-btn"
-                  onClick={handleDeleteMemberOpen(m)}
-                  title="Lid verwijderen"
-                  aria-label={`Verwijder ${m.name}`}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {/* {status?.storage && (
           <StatusCard
@@ -516,18 +361,6 @@ function App() {
           onClick={handleOpenDashboard}
           variant="primary"
         />
-        {/* <ActionButton
-          label="Neuroion UI"
-          icon={<Sparkles size={36} />}
-          onClick={handleOpenNeuroion}
-          variant="primary"
-        /> */}
-        <ActionButton
-          label="Add Member"
-          icon={<UserPlus size={36} />}
-          onClick={handleAddMemberOpen}
-          variant="primary"
-        />
         <ActionButton
           label="Instellingen"
           icon={<Wrench size={36} />}
@@ -548,93 +381,7 @@ function App() {
           url={qrData.url}
           title={qrData.title}
           onClose={() => setQrData(null)}
-          openOnDeviceLabel={qrData.title && qrData.title.includes('Add Member') ? 'Open op dit scherm' : undefined}
         />
-      )}
-
-      {deleteConfirmMember && (
-        <div className="qr-overlay" onClick={handleDeleteMemberClose}>
-          <div className="qr-container delete-member-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Lid verwijderen</h3>
-            <p className="delete-member-warning">
-              Weet je het zeker? Alle data van <strong>{deleteConfirmMember.name}</strong> wordt permanent
-              verwijderd.
-            </p>
-            {deleteError && <p className="delete-member-error">{deleteError}</p>}
-            <div className="delete-member-actions">
-              <button type="button" className="qr-close" onClick={handleDeleteMemberClose}>
-                Annuleren
-              </button>
-              <button
-                type="button"
-                className="delete-member-confirm-btn"
-                onClick={handleDeleteMemberConfirm}
-                disabled={deleteLoading}
-              >
-                {deleteLoading ? 'Bezig…' : 'Verwijderen'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {addMemberModalOpen && (
-        <div className="qr-overlay" onClick={handleAddMemberClose}>
-          <div className="qr-container add-member-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Lid toevoegen</h3>
-            {!addMemberQr ? (
-              <>
-                <label className="add-member-label">
-                  Naam
-                  <input
-                    type="text"
-                    className="add-member-input"
-                    value={addMemberName}
-                    onChange={(e) => setAddMemberName(e.target.value)}
-                    placeholder="Naam van het lid"
-                  />
-                </label>
-                {addMemberError && <p className="add-member-error">{addMemberError}</p>}
-                <div className="add-member-actions add-member-actions--two">
-                  <button type="button" className="qr-close" onClick={handleAddMemberClose}>
-                    Annuleren
-                  </button>
-                  <button
-                    type="button"
-                    className="add-member-btn add-member-btn-telegram"
-                    onClick={handleAddMemberTelegram}
-                    disabled={addMemberLoading}
-                  >
-                    {addMemberLoading ? 'Bezig…' : 'Telegram'}
-                  </button>
-                  <button
-                    type="button"
-                    className="add-member-btn add-member-btn-app"
-                    onClick={handleAddMemberApp}
-                    disabled={addMemberLoading}
-                  >
-                    {addMemberLoading ? 'Bezig…' : 'App'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="add-member-hint">
-                  {addMemberQr.type === 'telegram'
-                    ? 'Scan met Telegram om te koppelen'
-                    : 'Scan met de Neuroion-app om te koppelen'}
-                </p>
-                <div className="qr-code">
-                  <QRCodeSVG value={addMemberQr.qr_value} size={220} level="H" includeMargin={true} />
-                </div>
-                <p className="qr-url">Code: {addMemberQr.pairing_code}</p>
-                <button type="button" className="qr-close" onClick={handleAddMemberClose}>
-                  Sluiten
-                </button>
-              </>
-            )}
-          </div>
-        </div>
       )}
 
       {settingsOpen && (

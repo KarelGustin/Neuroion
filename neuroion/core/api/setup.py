@@ -220,11 +220,11 @@ class DeviceConfigResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """System status response."""
+    """System status response (single-user: user name only, no household/member count)."""
     network: Dict[str, Any]
     model: Dict[str, Any]
     uptime: int
-    household: Dict[str, Any]
+    user: Optional[Dict[str, Any]] = None  # e.g. {"name": "..."} for single user
     degraded_message: Optional[str] = None  # e.g. "Low memory; responses may be slow."
     storage: Optional[Dict[str, Any]] = None  # free_gb, total_gb
     agent: Optional[Dict[str, Any]] = None  # name "Neuroion Agent", status running/stopped
@@ -1509,21 +1509,13 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
         # Calculate uptime
         uptime_seconds = int(time.time() - _startup_time)
         
-        # Get household info
+        # Get single user info (single-user mode: no household/member count)
+        user_info = None
         households = HouseholdRepository.get_all(db)
-        household_name = "Not configured"
-        member_count = 0
-        
         if households:
-            household = households[0]
-            household_name = household.name
-            members = UserRepository.get_by_household(db, household.id)
-            member_count = len(members)
-        
-        household_info = {
-            "name": household_name,
-            "member_count": member_count,
-        }
+            members = UserRepository.get_by_household(db, households[0].id)
+            if members:
+                user_info = {"name": (members[0].name or "—")}
         
         dashboard_url = get_dashboard_base_url(app_settings.dashboard_ui_port)
         setup_ui_url = NetworkManager.get_setup_ui_base_url(
@@ -1538,7 +1530,7 @@ def get_status(db: Session = Depends(get_db)) -> StatusResponse:
             network=network_info,
             model=model_info,
             uptime=uptime_seconds,
-            household=household_info,
+            user=user_info,
             degraded_message=degraded_message,
             storage=storage_info,
             agent=agent_info,

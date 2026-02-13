@@ -30,6 +30,7 @@ class Household(Base):
     context_snapshots = relationship("ContextSnapshot", back_populates="household", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="household", cascade="all, delete-orphan")
     chat_messages = relationship("ChatMessage", back_populates="household", cascade="all, delete-orphan")
+    agenda_events = relationship("AgendaEvent", back_populates="household", cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -61,6 +62,7 @@ class User(Base):
     # Relationships
     household = relationship("Household", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")
+    agenda_events = relationship("AgendaEvent", back_populates="user", cascade="all, delete-orphan")
 
 
 class Preference(Base):
@@ -177,26 +179,53 @@ class AuditLog(Base):
 class ChatMessage(Base):
     """Stores chat messages for conversation history."""
     __tablename__ = "chat_messages"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    
+
     # Message content
     role = Column(String(20), nullable=False, index=True)  # user, assistant
     content = Column(Text, nullable=False)
     message_metadata = Column(JSON, nullable=True)  # For actions, tool calls, etc.
-    
+
     # Timestamps
     created_at = Column(DateTime, default=func.now(), nullable=False, index=True)
-    
+
     # Relationships
     household = relationship("Household", back_populates="chat_messages")
     user = relationship("User")
-    
+
     __table_args__ = (
         Index("idx_chat_user_created", "user_id", "created_at"),
         Index("idx_chat_household_created", "household_id", "created_at"),
+    )
+
+
+class AgendaEvent(Base):
+    """Stores agenda/calendar events per user (in-app agenda)."""
+    __tablename__ = "agenda_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    title = Column(String(500), nullable=False)
+    start_at = Column(DateTime, nullable=False, index=True)  # UTC
+    end_at = Column(DateTime, nullable=False, index=True)  # UTC
+    all_day = Column(Boolean, default=False, nullable=False)
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    household = relationship("Household", back_populates="agenda_events")
+    user = relationship("User", back_populates="agenda_events")
+
+    __table_args__ = (
+        Index("idx_agenda_user_start", "user_id", "start_at"),
+        Index("idx_agenda_household_start", "household_id", "start_at"),
     )
 
 

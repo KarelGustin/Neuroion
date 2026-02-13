@@ -145,57 +145,12 @@ def create_member(
     user: dict = Depends(get_current_user),
 ) -> MemberCreateResponse:
     """
-    Create a new member in the household.
-    
-    Note: In production, members should be added via join tokens (owner-only).
-    This endpoint is for direct creation (admin/owner only in production).
+    Single-user mode: creating members is disabled. Returns 410 Gone.
     """
-    try:
-        # Verify household exists
-        household = HouseholdRepository.get_by_id(db, user["household_id"])
-        if not household:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Household not found",
-            )
-        
-        # Create member
-        member = UserRepository.create(
-            db=db,
-            household_id=user["household_id"],
-            name=request.name,
-            role="member",
-            device_type="web",
-        )
-        
-        # Update member profile fields
-        if request.language:
-            member.language = request.language
-        if request.timezone:
-            member.timezone = request.timezone
-        if request.style_prefs:
-            member.style_prefs_json = request.style_prefs
-        if request.preferences:
-            member.preferences_json = request.preferences
-        if request.consent:
-            member.consent_json = request.consent
-        
-        db.commit()
-        db.refresh(member)
-        
-        return MemberCreateResponse(
-            success=True,
-            member_id=member.id,
-            message="Member created successfully",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating member: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create member: {str(e)}",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Single-user mode: creating members is disabled",
+    )
 
 
 @router.post("/members/{member_id}/delete", response_model=MemberDeleteResponse)
@@ -206,11 +161,13 @@ def delete_member(
     user: dict = Depends(get_current_user),
 ) -> MemberDeleteResponse:
     """
-    Delete a member and all their data. Allowed only for:
-    - The member themselves (self), or
-    - The household owner (deleting any member).
-    Requires confirmation with passcode: member's passcode when self; owner's passcode when owner deletes another.
+    Single-user mode: only self-delete is allowed. Deleting other members returns 410 Gone.
     """
+    if user["user_id"] != member_id:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Single-user mode: only self-delete is allowed",
+        )
     if not is_valid_passcode_format(request.confirmation_code):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -219,34 +176,11 @@ def delete_member(
     target = UserRepository.get_by_id(db, member_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
-    if target.household_id != user["household_id"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not in same household")
-
-    is_self = user["user_id"] == member_id
-    is_owner = user["role"] == "owner"
-    if not (is_self or is_owner):
+    if not target.passcode_hash or not verify_passcode(request.confirmation_code, target.passcode_hash):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the member or the owner can delete this member",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid confirmation code",
         )
-
-    # Verify passcode: when self, use target's passcode; when owner, use owner's passcode
-    if is_self:
-        if not target.passcode_hash or not verify_passcode(request.confirmation_code, target.passcode_hash):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid confirmation code",
-            )
-    else:
-        owner_user = UserRepository.get_by_id(db, user["user_id"])
-        if not owner_user or not owner_user.passcode_hash or not verify_passcode(
-            request.confirmation_code, owner_user.passcode_hash
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid confirmation code",
-            )
-
     try:
         UserRepository.delete_user_and_all_data(db, member_id)
         return MemberDeleteResponse(success=True, message="Member and all data deleted")

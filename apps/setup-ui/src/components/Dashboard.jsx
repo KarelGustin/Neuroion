@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
 import PixelAnimation from './PixelAnimation'
 import ConfigQR from './ConfigQR'
 import {
@@ -7,8 +6,6 @@ import {
   getHouseholdMembers,
   getSetupStatus,
   generateLoginCode,
-  createDashboardJoinToken,
-  deleteMemberFromDashboard,
 } from '../services/api'
 import '../styles/Dashboard.css'
 
@@ -27,9 +24,6 @@ function Dashboard({ isKiosk = false }) {
   const [error, setError] = useState(null)
   const [loginCode, setLoginCode] = useState(null)
   const [countdown, setCountdown] = useState(60)
-
-  const [addMemberModal, setAddMemberModal] = useState({ show: false, joinUrl: null, addCountdown: 600 })
-  const [deleteMemberModal, setDeleteMemberModal] = useState({ show: false, member: null, error: null })
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -113,57 +107,6 @@ function Dashboard({ isKiosk = false }) {
     }
   }
 
-  const openAddMemberModal = async () => {
-    try {
-      const data = await createDashboardJoinToken(10)
-      setAddMemberModal({
-        show: true,
-        joinUrl: data.join_url,
-        addCountdown: 10 * 60,
-      })
-    } catch (err) {
-      console.error('Failed to create join token:', err)
-      const detail = err.response?.data?.detail
-      const message = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((d) => d.msg || JSON.stringify(d)).join('. ') : err.message || 'Failed to create add-member link'
-      setError(message)
-    }
-  }
-
-  useEffect(() => {
-    if (!addMemberModal.show || addMemberModal.addCountdown <= 0) return
-    const t = setInterval(() => {
-      setAddMemberModal((prev) =>
-        prev.show && prev.addCountdown > 0
-          ? { ...prev, addCountdown: prev.addCountdown - 1 }
-          : prev
-      )
-    }, 60000)
-    return () => clearInterval(t)
-  }, [addMemberModal.show, addMemberModal.addCountdown])
-
-  const openDeleteMemberModal = (member) => (e) => {
-    e.stopPropagation()
-    setDeleteMemberModal({ show: true, member, error: null })
-  }
-
-  const confirmDeleteMember = async () => {
-    if (!deleteMemberModal.member) return
-    try {
-      await deleteMemberFromDashboard(deleteMemberModal.member.id)
-      setDeleteMemberModal({ show: false, member: null, error: null })
-      const membersList = await getHouseholdMembers()
-      setMembers(membersList)
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      const message = Array.isArray(detail)
-        ? detail.map((d) => d.msg || JSON.stringify(d)).join('. ')
-        : typeof detail === 'string'
-          ? detail
-          : 'Verwijderen mislukt.'
-      setDeleteMemberModal((prev) => ({ ...prev, error: message }))
-    }
-  }
-
   if (loading && !isKiosk) {
     return (
       <div className="dashboard dashboard-loading">
@@ -186,7 +129,7 @@ function Dashboard({ isKiosk = false }) {
       <div className="dashboard dashboard--kiosk">
         <div className="dashboard-kiosk-grid">
           <div className="dashboard-kiosk-tile kiosk-tile-members">
-            <p className="dashboard-kiosk-label">Members</p>
+            <p className="dashboard-kiosk-label">User</p>
             <p className="dashboard-kiosk-value">{stats.member_count}</p>
           </div>
           <div className="dashboard-kiosk-tile kiosk-tile-wifi">
@@ -229,20 +172,13 @@ function Dashboard({ isKiosk = false }) {
         <p className="stat-label">Neuroion Requests</p>
         <p className="stat-value">{stats.daily_requests}</p>
       </div>
-      <div className="dashboard-members" aria-label="Leden">
+      <div className="dashboard-members" aria-label="User">
         <div className="members-header-row">
-          <h2 className="members-title">Members</h2>
-          {setupComplete ? (
-            <button type="button" className="add-member-btn" onClick={openAddMemberModal}>
-              + Add member
-            </button>
-          ) : (
-            <span className="members-setup-hint">Complete setup first</span>
-          )}
+          <h2 className="members-title">User</h2>
         </div>
         {members.length > 0 ? (
           <>
-            <p className="members-hint">Klik op een naam voor login code</p>
+            <p className="members-hint">Klik op je naam voor login code</p>
             <div className="members-list">
               {members.map((member) => (
                 <div key={member.id} className="member-row">
@@ -254,20 +190,12 @@ function Dashboard({ isKiosk = false }) {
                     <span className="member-name">{member.name}</span>
                     <span className="member-role">{member.role}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="member-remove-btn"
-                    onClick={openDeleteMemberModal(member)}
-                    title="Remove member"
-                  >
-                    Remove
-                  </button>
                 </div>
               ))}
             </div>
           </>
         ) : (
-          <p className="members-hint">Nog geen members. Klik op + Add member en scan de QR om iemand toe te voegen.</p>
+          <p className="members-hint">Nog geen user. Voltooi eerst de setup.</p>
         )}
       </div>
 
@@ -285,53 +213,6 @@ function Dashboard({ isKiosk = false }) {
             <button type="button" className="close-button" onClick={() => setLoginCode(null)}>
               Close
             </button>
-          </div>
-        </div>
-      )}
-
-      {addMemberModal.show && addMemberModal.joinUrl && (
-        <div className="login-code-modal add-member-modal">
-          <div className="login-code-content add-member-content">
-            <h3>Add member to Neuroion</h3>
-            <p className="add-member-hint">Scan de QR of open de link op je telefoon om iemand toe te voegen aan je Neuroion Core.</p>
-            <div className="add-member-qr">
-              <QRCodeSVG value={addMemberModal.joinUrl} size={220} level="H" includeMargin />
-            </div>
-            <p className="login-code-timer">Geldig nog {Math.floor(addMemberModal.addCountdown / 60)} min</p>
-            <button
-              type="button"
-              className="close-button"
-              onClick={() => setAddMemberModal({ show: false, joinUrl: null, addCountdown: 0 })}
-            >
-              Sluiten
-            </button>
-          </div>
-        </div>
-      )}
-
-      {deleteMemberModal.show && deleteMemberModal.member && (
-        <div className="login-code-modal">
-          <div className="login-code-content">
-            <h3>Member verwijderen</h3>
-            <p className="delete-member-warning">
-              Weet je het zeker? Alle data van <strong>{deleteMemberModal.member.name}</strong> wordt permanent
-              verwijderd.
-            </p>
-            {deleteMemberModal.error && (
-              <p className="delete-member-error">{deleteMemberModal.error}</p>
-            )}
-            <div className="delete-member-actions">
-              <button
-                type="button"
-                className="close-button"
-                onClick={() => setDeleteMemberModal({ show: false, member: null, error: null })}
-              >
-                Annuleren
-              </button>
-              <button type="button" className="copy-button" onClick={confirmDeleteMember}>
-                Verwijderen
-              </button>
-            </div>
           </div>
         </div>
       )}

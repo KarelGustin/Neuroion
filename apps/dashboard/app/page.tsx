@@ -64,13 +64,12 @@ export default function DashboardPage() {
           />
         )}
 
-        {status?.household && (
+        {status?.user?.name && (
           <StatusCard
-            title="Household"
+            title="User"
             status="Active"
             details={{
-              Name: status.household.name,
-              Members: status.household.member_count,
+              Name: status.user.name,
             }}
           />
         )}
@@ -90,9 +89,9 @@ export default function DashboardPage() {
           href="/household"
           className="p-6 bg-[#111] border border-border rounded-xl hover:border-[#555] transition-colors"
         >
-          <div className="text-2xl mb-2">🏠</div>
-          <div className="font-medium">Household</div>
-          <div className="text-sm text-muted mt-1">Manage members</div>
+          <div className="text-2xl mb-2">👤</div>
+          <div className="font-medium">Profile</div>
+          <div className="text-sm text-muted mt-1">Single-user account</div>
         </Link>
 
         <Link

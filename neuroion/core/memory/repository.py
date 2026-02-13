@@ -15,6 +15,7 @@ from neuroion.core.memory.models import (
     User,
     Preference,
     ContextSnapshot,
+    AgendaEvent,
     SessionSummary,
     DailySummary,
     UserMemory,
@@ -568,6 +569,96 @@ class ContextSnapshotRepository:
         if not snapshot or snapshot.user_id != user_id:
             return False
         db.delete(snapshot)
+        db.commit()
+        return True
+
+
+class AgendaEventRepository:
+    """Repository for agenda/calendar events (in-app agenda)."""
+
+    @staticmethod
+    def create(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        title: str,
+        start_at: datetime,
+        end_at: datetime,
+        all_day: bool = False,
+        notes: Optional[str] = None,
+    ) -> AgendaEvent:
+        """Create a new agenda event."""
+        require_active_session(db)
+        event = AgendaEvent(
+            household_id=household_id,
+            user_id=user_id,
+            title=title.strip() or "Untitled",
+            start_at=start_at,
+            end_at=end_at,
+            all_day=all_day,
+            notes=notes,
+        )
+        db.add(event)
+        db.commit()
+        safe_refresh(db, event)
+        return event
+
+    @staticmethod
+    def get_by_id(db: Session, event_id: int, user_id: int) -> Optional[AgendaEvent]:
+        """Get an agenda event by id if it belongs to the user."""
+        event = db.query(AgendaEvent).filter(
+            AgendaEvent.id == event_id,
+            AgendaEvent.user_id == user_id,
+        ).first()
+        return event
+
+    @staticmethod
+    def list_for_user(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> List[AgendaEvent]:
+        """List agenda events for the user that overlap [start_dt, end_dt], ordered by start_at."""
+        return (
+            db.query(AgendaEvent)
+            .filter(
+                AgendaEvent.household_id == household_id,
+                AgendaEvent.user_id == user_id,
+                AgendaEvent.start_at < end_dt,
+                AgendaEvent.end_at > start_dt,
+            )
+            .order_by(AgendaEvent.start_at.asc())
+            .all()
+        )
+
+    @staticmethod
+    def update(
+        db: Session,
+        event_id: int,
+        user_id: int,
+        **kwargs: Any,
+    ) -> Optional[AgendaEvent]:
+        """Update an agenda event. Only allowed fields: title, start_at, end_at, all_day, notes."""
+        event = AgendaEventRepository.get_by_id(db, event_id, user_id)
+        if not event:
+            return None
+        allowed = {"title", "start_at", "end_at", "all_day", "notes"}
+        for key, value in kwargs.items():
+            if key in allowed and hasattr(event, key):
+                setattr(event, key, value)
+        db.commit()
+        safe_refresh(db, event)
+        return event
+
+    @staticmethod
+    def delete(db: Session, event_id: int, user_id: int) -> bool:
+        """Delete an agenda event if it belongs to the user. Returns True if deleted."""
+        event = AgendaEventRepository.get_by_id(db, event_id, user_id)
+        if not event:
+            return False
+        db.delete(event)
         db.commit()
         return True
 

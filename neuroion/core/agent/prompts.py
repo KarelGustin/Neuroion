@@ -94,11 +94,14 @@ Als de gebruiker van onderwerp wisselt, ga dan mee in het nieuwe onderwerp. Reag
 
 
 def get_scheduling_prompt_addition() -> str:
-    """Addition to system prompt: when user explicitly asks for scheduling/reminders, use cron.* tools. Default timezone Europe/Amsterdam."""
+    """Addition to system prompt: agenda.* for calendar events, cron.* for reminders. Default timezone Europe/Amsterdam."""
     return (
-        "\n\nScheduling: Use the cron.* tools when the user explicitly asks for a reminder, scheduled action or recurring task. "
-        "Tool descriptions define when each tool applies. Use Europe/Amsterdam as default timezone when not specified. "
-        "When creating a scheduled job: always describe in plain language what you will create (when, what message) and ask for confirmation (e.g. 'Zal ik dit inplannen?') before calling cron.add; only create the job after the user agrees."
+        "\n\nAgenda and scheduling: "
+        "Use agenda.* for everything that belongs in the user's calendar/agenda: viewing events, adding appointments, changing or deleting them (agenda.list_events, agenda.add_event, agenda.update_event, agenda.delete_event). "
+        "Use cron.* for reminders and notifications at a specific time (one-off or recurring; e.g. 'remind me at 20:00', 'every Monday at 9'). "
+        "Default timezone Europe/Amsterdam when not specified. "
+        "When adding to the agenda: briefly summarize what you will add and ask for confirmation if unclear (e.g. 'Zal ik dit in je agenda zetten?') before calling agenda.add_event. "
+        "When creating a cron reminder: describe in plain language what you will create and ask for confirmation (e.g. 'Zal ik dit inplannen?') before calling cron.add."
     )
 
 

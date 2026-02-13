@@ -32,7 +32,7 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
     setSuccess(false)
 
     try {
-      const result = await setupHousehold(householdName, ownerName || 'Owner')
+      const result = await setupHousehold(householdName, ownerName || householdName || 'Owner')
       if (result.success) {
         setSuccess(true)
         const householdData = {
@@ -63,20 +63,20 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
   return (
     <div className="household-setup">
       <div className="config-header">
-        <h3>Household</h3>
-        <p>Create the household and the first owner account.</p>
+        <h3>Your name</h3>
+        <p>Create your account (single-user).</p>
       </div>
 
       <form onSubmit={handleSubmit} className="household-form">
         <div className="form-group">
-          <label htmlFor="household-name">Household Name</label>
+          <label htmlFor="household-name">Your name</label>
           <input
             type="text"
             id="household-name"
             value={householdName}
             onChange={(e) => setHouseholdName(e.target.value)}
             required
-            placeholder="e.g., Smith Family"
+            placeholder="e.g., Jan"
             disabled={loading || success}
           />
         </div>
@@ -97,7 +97,7 @@ function HouseholdSetup({ onComplete, onBack, initialData }) {
         {error && <div className="error-message">{error}</div>}
         {success && (
           <div className="success-message">
-            Household created successfully! Setup complete.
+            Account created successfully! Setup complete.
           </div>
         )}
 

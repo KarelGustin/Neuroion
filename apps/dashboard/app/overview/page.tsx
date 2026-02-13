@@ -154,15 +154,14 @@ export default function OverviewPage() {
           </dl>
         </section>
 
-        {/* Huishouden */}
+        {/* User (single-user) */}
         <section className="bg-[#111] border border-border rounded-xl p-4 md:p-6">
-          <h2 className="text-lg font-semibold mb-3">Huishouden</h2>
+          <h2 className="text-lg font-semibold mb-3">User</h2>
           <dl className="space-y-2 text-sm mb-3">
-            <div><dt className="text-muted">Naam</dt><dd className="font-medium">{summary?.household_name ?? '—'}</dd></div>
+            <div><dt className="text-muted">Name</dt><dd className="font-medium">{summary?.household_name ?? (summary?.members?.[0]?.name ?? '—')}</dd></div>
           </dl>
           {summary?.members && summary.members.length > 0 && (
             <div className="mt-2">
-              <dt className="text-muted text-sm mb-1">Leden</dt>
               <ul className="space-y-1">
                 {summary.members.map((m, i) => (
                   <li key={i} className="font-medium">{m.name} <span className="text-muted">({m.role})</span></li>
@@ -171,7 +170,7 @@ export default function OverviewPage() {
             </div>
           )}
           <Link href="/household" className="inline-block mt-3 px-4 py-2 bg-[#333] hover:bg-[#444] rounded-lg text-sm font-medium">
-            Leden beheren
+            Profile
           </Link>
         </section>
 

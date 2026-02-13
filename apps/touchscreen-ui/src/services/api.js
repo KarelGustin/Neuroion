@@ -45,29 +45,13 @@ export async function getDevStatus() {
   return response.data
 }
 
-/** Create join token (requires owner auth). Prefer createDashboardJoinToken for kiosk. */
-export async function createJoinToken() {
-  const response = await api.post('/api/join-token/create', {
-    expires_in_minutes: 10,
-  })
-  return response.data
-}
-
-/** Create join token from kiosk (no auth). Returns join_url for add-member QR. */
-export async function createDashboardJoinToken() {
-  const response = await api.post('/dashboard/join-token', {
-    expires_in_minutes: 10,
-  })
-  return response.data
-}
-
-/** Verify join token (for add-member flow). */
+/** Verify join token (for join page; consume is disabled in single-user mode). */
 export async function verifyJoinToken(token) {
   const response = await api.get('/api/join-token/verify', { params: { token } })
   return response.data
 }
 
-/** Consume join token and create member. */
+/** Consume join token (single-user mode: returns 410; kept for join page error handling). */
 export async function consumeJoinToken(token, memberData) {
   const response = await api.post('/api/join-token/consume', {
     token,
@@ -76,7 +60,7 @@ export async function consumeJoinToken(token, memberData) {
   return response.data
 }
 
-/** Get pairing code for Telegram (after join). Pass memberId to link Telegram to the newly created member. */
+/** Get pairing code for pairing a device to the user. */
 export async function getPairingCode(householdId, deviceId, deviceType, name, memberId = null) {
   const body = {
     household_id: householdId,
@@ -137,26 +121,6 @@ export async function applyWifi() {
 
 export async function markSetupComplete() {
   const response = await api.post('/setup/complete')
-  return response.data
-}
-
-/** Get household members (for dashboard). */
-export async function getDashboardMembers() {
-  const response = await api.get('/dashboard/members')
-  return response.data?.members ?? []
-}
-
-/** Add member and get Telegram pairing QR (member_id, pairing_code, qr_value). */
-export async function addMember(name) {
-  const response = await api.post('/dashboard/add-member', { name: (name || '').trim() })
-  return response.data
-}
-
-/** Delete a household member (kiosk, no auth). */
-export async function deleteMember(memberId) {
-  const response = await api.post('/dashboard/member-delete', {
-    member_id: Number(memberId),
-  })
   return response.data
 }
 

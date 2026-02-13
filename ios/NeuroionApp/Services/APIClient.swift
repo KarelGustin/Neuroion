@@ -88,6 +88,35 @@ class APIClient {
         
         return try decoder.decode(T.self, from: data)
     }
+    
+    /// Request that expects 204 No Content (e.g. DELETE). Does not decode body.
+    func requestNoContent(
+        endpoint: String,
+        method: String = "DELETE",
+        body: Encodable? = nil,
+        token: String? = nil
+    ) async throws {
+        let path = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        guard let url = URL(string: "\(baseURL)\(path)") else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let body = body {
+            request.httpBody = try encoder.encode(body)
+        }
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(httpResponse.statusCode)
+        }
+    }
 
     /// Stream Server-Sent Events from an endpoint; yields parsed JSON objects from each "data:" line.
     func streamEvents(

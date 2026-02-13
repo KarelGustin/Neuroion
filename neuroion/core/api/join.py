@@ -64,25 +64,12 @@ def create_join_token(
     user: dict = Depends(require_role(["owner"])),
 ) -> JoinTokenCreateResponse:
     """
-    Create a new join token (owner-only).
-    
-    Returns token with QR URL for member onboarding.
+    Single-user mode: join tokens for adding members are disabled. Returns 410 Gone.
     """
-    try:
-        token_data = JoinTokenManager.create_token(
-            db=db,
-            household_id=user["household_id"],
-            created_by_member_id=user["user_id"],
-            expires_in_minutes=request.expires_in_minutes,
-        )
-        
-        return JoinTokenCreateResponse(**token_data)
-    except Exception as e:
-        logger.error(f"Error creating join token: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create join token: {str(e)}",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Single-user mode: join token creation is disabled",
+    )
 
 
 @router.post("/join-token/consume", response_model=JoinTokenConsumeResponse)
@@ -91,90 +78,12 @@ def consume_join_token(
     db: Session = Depends(get_db),
 ) -> JoinTokenConsumeResponse:
     """
-    Consume a join token and create a new member.
-    
-    Public endpoint (no auth required, token provides security).
+    Single-user mode: consuming join tokens to add members is disabled. Returns 410 Gone.
     """
-    try:
-        # Verify and consume token
-        token_data = JoinTokenManager.consume_token(db, request.token)
-        
-        if not token_data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired token",
-            )
-        
-        household_id = token_data["household_id"]
-        
-        # Verify household exists
-        household = HouseholdRepository.get_by_id(db, household_id)
-        if not household:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Household not found",
-            )
-        
-        # Extract member data
-        member_data = request.member
-        name = member_data.get("name", "")
-        if not name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Member name is required",
-            )
-
-        # Generate unique page_name (slug) for personal dashboard
-        base_slug = slugify(name)
-        if not base_slug:
-            base_slug = "user"
-        page_name = UserRepository.ensure_unique_page_name(db, base_slug, exclude_user_id=None)
-
-        # Create member with page_name
-        member = UserRepository.create(
-            db=db,
-            household_id=household_id,
-            name=name,
-            role="member",
-            device_type="web",
-            page_name=page_name,
-        )
-
-        # Update member profile fields
-        if "language" in member_data:
-            member.language = member_data["language"]
-        if "timezone" in member_data:
-            member.timezone = member_data["timezone"]
-        if "style_prefs" in member_data:
-            member.style_prefs_json = member_data["style_prefs"]
-        if "preferences" in member_data:
-            member.preferences_json = member_data["preferences"]
-        if "consent" in member_data:
-            member.consent_json = member_data["consent"]
-
-        db.commit()
-        db.refresh(member)
-
-        # One-time setup_token so frontend can call set-passcode (no auth yet)
-        setup_token = secrets.token_urlsafe(32)
-        UserRepository.set_setup_token(db, member.id, setup_token, expires_in_minutes=10)
-
-        return JoinTokenConsumeResponse(
-            success=True,
-            member_id=member.id,
-            household_id=household_id,
-            message="Member created successfully",
-            page_name=page_name,
-            setup_token=setup_token,
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error consuming join token: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to consume join token: {str(e)}",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Single-user mode: join token consume is disabled",
+    )
 
 
 @router.get("/join-token/verify")

@@ -17,6 +17,8 @@ struct NeuroionApp: App {
                 TabView {
                     ChatView()
                         .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+                    AgendaView()
+                        .tabItem { Label("Agenda", systemImage: "calendar") }
                     SettingsView()
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                 }

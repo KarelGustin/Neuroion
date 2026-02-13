@@ -167,40 +167,11 @@ def add_member(
     db: Session = Depends(get_db),
 ) -> AddMemberResponse:
     """
-    Add a household member and start Telegram pairing for this member (no auth).
-    Returns member_id, pairing_code and qr_value for displaying a QR (code or t.me link).
+    Single-user mode: adding members is disabled. Returns 410 Gone.
     """
-    households = HouseholdRepository.get_all(db)
-    if not households:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No household configured",
-        )
-    household_id = households[0].id
-    name = (request.name or "").strip()
-    if not name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Name is required",
-        )
-    member = UserRepository.create(
-        db=db,
-        household_id=household_id,
-        name=name,
-        role="member",
-    )
-    code = TokenManager.generate_pairing_code()
-    PairingCodeStore.store(
-        code=code,
-        household_id=household_id,
-        member_id=member.id,
-    )
-    bot_username = getattr(settings, "telegram_bot_username", None)
-    qr_value = f"https://t.me/{bot_username}?start={code}" if bot_username else code
-    return AddMemberResponse(
-        member_id=member.id,
-        pairing_code=code,
-        qr_value=qr_value,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Single-user mode: adding members is disabled",
     )
 
 
@@ -210,36 +181,11 @@ def create_dashboard_join_token(
     db: Session = Depends(get_db),
 ) -> DashboardJoinTokenResponse:
     """
-    Create a join token for add-member flow (no auth).
-    For use by core unit 7" dashboard. Uses first household and first owner.
+    Single-user mode: join tokens for adding members are disabled. Returns 410 Gone.
     """
-    households = HouseholdRepository.get_all(db)
-    if not households:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No household configured",
-        )
-    household_id = households[0].id
-    members = UserRepository.get_by_household(db, household_id)
-    owner = next((m for m in members if m.role == "owner"), None)
-    if not owner:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No owner in household",
-        )
-    data = JoinTokenManager.create_token(
-        db=db,
-        household_id=household_id,
-        created_by_member_id=owner.id,
-        expires_in_minutes=request.expires_in_minutes,
-    )
-    base_url = get_dashboard_base_url(settings.dashboard_ui_port, prefer_localhost=False).rstrip("/")
-    join_url = f"{base_url}/join?token={data['token']}"
-    return DashboardJoinTokenResponse(
-        token=data["token"],
-        expires_at=data["expires_at"],
-        join_url=join_url,
-        qr_url=join_url,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Single-user mode: join token is disabled",
     )
 
 
@@ -249,21 +195,12 @@ def dashboard_member_delete(
     db: Session = Depends(get_db),
 ) -> DashboardMemberDeleteResponse:
     """
-    Delete a member and all their data from kiosk (no auth).
+    Single-user mode: deleting members is disabled. Returns 410 Gone.
     """
-    member = UserRepository.get_by_id(db, request.member_id)
-    if not member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
-    try:
-        UserRepository.delete_user_and_all_data(db, request.member_id)
-        return DashboardMemberDeleteResponse(success=True, message="Member and all data deleted")
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error("Error deleting member: %s", e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete member",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Single-user mode: deleting members is disabled",
+    )
 
 
 @router.get("/stats", response_model=DashboardStatsResponse)
@@ -292,14 +229,13 @@ def get_dashboard_stats(
         )
     
     household_id = households[0].id
-    
-    # Get member count
-    members = UserRepository.get_by_household(db, household_id)
-    member_count = len(members)
-    
+
+    # Single-user mode: member_count is always 1 when configured
+    member_count = 1
+
     # Get daily request count
     daily_requests = RequestCounter.get_today_count(db, household_id)
-    
+
     # Get WiFi status
     wifi_status, wifi_message = WiFiStatusService.get_status()
 
