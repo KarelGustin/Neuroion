@@ -25,7 +25,7 @@ Chat-frontend voor Neuroion (zoals ChatGPT/Ollama): praat met je Homebase-agent,
    - Verwijder in het project de standaard `ContentView.swift` die Xcode heeft aangemaakt (rechtermuisklik → Delete → Move to Trash). Als het template ook een `NeuroionApp.swift` (of *App.swift) heeft, verwijder die ook of vervang de inhoud door de versie uit deze repo—er mag maar één `@main` entry point zijn.
    - In de Project Navigator: rechtermuisklik op de **NeuroionApp**-groep (het gele icoon) → **Add Files to "NeuroionApp"...**
    - Navigeer naar de map **NeuroionApp** in deze `ios`-folder.
-   - Selecteer de **gehele NeuroionApp-map** (met daarin o.a. `NeuroionApp.swift`, `Models/`, `Services/`, `Views/`).
+   - Selecteer de **gehele NeuroionApp-map** (met daarin o.a. `NeuroionApp.swift`, `Assets.xcassets`, `Models/`, `Services/`, `Views/`).
    - Zet **Copy items if needed** uit (we gebruiken de bestanden op de huidige locatie).
    - Zorg dat **Add to targets: NeuroionApp** is aangevinkt.
    - Klik **Add**.
@@ -37,7 +37,12 @@ Chat-frontend voor Neuroion (zoals ChatGPT/Ollama): praat met je Homebase-agent,
    - Bij **Info.plist File** vul je in: `NeuroionApp/Info.plist` (of het relatieve pad naar de Info.plist binnen je target, afhankelijk van hoe de map heet in Xcode).
    - De meegeleverde **Info.plist** staat HTTP toe voor je Homebase (lokaal netwerk en development).
 
-4. **Op je iPhone deployen**
+4. **App-icoon (optioneel)**
+   - Plaats je app-icoon in: **NeuroionApp/Assets.xcassets/AppIcon.appiconset/**.
+   - Gebruik één PNG van **1024×1024 px** (geen transparantie) en noem het bestand **Icon-App-1024x1024.png**. Xcode maakt daaruit automatisch alle andere formaten voor het home-scherm.
+   - Of: open in Xcode **Assets.xcassets → AppIcon** en sleep daar je 1024×1024-afbeelding naar het vak "App Store iOS".
+
+5. **Op je iPhone deployen**
    - Sluit je iPhone aan en kies hem als run destination (bovenin Xcode).
    - Bij het eerst bouwen: **Signing & Capabilities** → kies je **Team** (je Apple ID). Xcode regelt een gratis development certificate.
    - Op de iPhone: **Instellingen → Algemeen → VPN & apparaatbeheer** → vertrouw je development certificate als dat gevraagd wordt.

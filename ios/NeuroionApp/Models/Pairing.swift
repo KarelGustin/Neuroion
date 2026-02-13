@@ -134,59 +134,61 @@ class ChatService {
         )
     }
 
-    /// Stream progress and return final response. Use for research/long tasks so the request completes.
-    func sendMessageStreaming(
-        message: String,
-        token: String,
-        onStatus: @escaping (String) -> Void
-    ) async throws -> ChatResponse {
+    /// Event yielded while streaming chat (status updates and final response).
+    enum ChatStreamEvent {
+        case status(String)
+        case done(ChatResponse)
+    }
+
+    /// Stream chat: yields status updates then .done(response). Consume in a single Task to avoid Reporter disconnected.
+    func sendMessageStreaming(message: String, token: String) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         let request = ChatRequest(message: message, conversationHistory: nil)
-        let stream = try await apiClient.streamEvents(
-            endpoint: "/chat/stream",
-            method: "POST",
-            body: request,
-            token: token
-        )
-
-        var lastMessage = ""
-        var lastActions: [ActionResponse] = []
-
-        for try await ev in stream {
-            guard let type = ev["type"] as? String else { continue }
-            switch type {
-            case "status":
-                if let text = ev["text"] as? String {
-                    onStatus(text)
-                }
-            case "tool_start":
-                if let tool = ev["tool"] as? String {
-                    onStatus("Bezig met \(tool)…")
-                }
-            case "tool_done":
-                if let tool = ev["tool"] as? String {
-                    onStatus("\(tool) klaar. Volgende stap…")
-                }
-            case "done":
-                if let err = ev["error"] as? String, !err.isEmpty {
-                    lastMessage = NSLocalizedString("Er ging iets mis. Probeer het opnieuw.", comment: "Stream error")
-                } else {
-                    lastMessage = ev["message"] as? String ?? ""
-                }
-                if let rawActions = ev["actions"] as? [[String: Any]] {
-                    lastActions = rawActions.compactMap { dict in
-                        try? ActionResponse(from: dict)
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let stream = try await apiClient.streamEvents(
+                        endpoint: "/chat/stream",
+                        method: "POST",
+                        body: request,
+                        token: token
+                    )
+                    var lastMessage = ""
+                    var lastActions: [ActionResponse] = []
+                    for try await ev in stream {
+                        guard let type = ev["type"] as? String else { continue }
+                        switch type {
+                        case "status":
+                            if let text = ev["text"] as? String {
+                                continuation.yield(.status(text))
+                            }
+                        case "tool_start":
+                            if let tool = ev["tool"] as? String {
+                                continuation.yield(.status("Bezig met \(tool)…"))
+                            }
+                        case "tool_done":
+                            if let tool = ev["tool"] as? String {
+                                continuation.yield(.status("\(tool) klaar. Volgende stap…"))
+                            }
+                        case "done":
+                            if let err = ev["error"] as? String, !err.isEmpty {
+                                lastMessage = NSLocalizedString("Er ging iets mis. Probeer het opnieuw.", comment: "Stream error")
+                            } else {
+                                lastMessage = ev["message"] as? String ?? ""
+                            }
+                            if let rawActions = ev["actions"] as? [[String: Any]] {
+                                lastActions = rawActions.compactMap { dict in try? ActionResponse(from: dict) }
+                            }
+                            continuation.yield(.done(ChatResponse(message: lastMessage, reasoning: "", actions: lastActions)))
+                        default:
+                            break
+                        }
                     }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
                 }
-            default:
-                break
             }
         }
-
-        return ChatResponse(
-            message: lastMessage,
-            reasoning: "",
-            actions: lastActions
-        )
     }
 
     func executeAction(actionId: Int, token: String) async throws -> ActionExecuteResponse {

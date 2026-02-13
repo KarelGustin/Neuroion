@@ -11,6 +11,7 @@ private let typingIndicatorId = UUID()
 
 struct ChatView: View {
     @EnvironmentObject var authManager: AuthManager
+    @FocusState private var isInputFocused: Bool
     @State private var messageText = ""
     @State private var messages: [Message] = []
     @State private var isSending = false
@@ -33,7 +34,12 @@ struct ChatView: View {
                             }
                         }
                         .padding()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            isInputFocused = false
+                        }
                     }
+                    .scrollDismissesKeyboard(.interactively)
                     .onChange(of: messages.count) { _ in
                         scrollToBottom(proxy: proxy)
                     }
@@ -43,6 +49,7 @@ struct ChatView: View {
                 }
                 .onDisappear {
                     sendTask?.cancel()
+                    sendTask = nil
                 }
                 
                 Divider()
@@ -54,6 +61,7 @@ struct ChatView: View {
                         .background(Color(.systemGray6))
                         .cornerRadius(20)
                         .lineLimit(1...6)
+                        .focused($isInputFocused)
                         .onSubmit { sendMessage() }
                     
                     Button(action: sendMessage) {
@@ -98,50 +106,86 @@ struct ChatView: View {
         messageText = ""
         isSending = true
 
-        sendTask = Task {
-            await MainActor.run { statusText = "Neuroion denkt na…" }
+        let token = authManager.token ?? ""
+        sendTask = Task { @MainActor in
+            statusText = "Neuroion denkt na…"
             do {
-                let response = try await ChatService.shared.sendMessageStreaming(
-                    message: messageToSend,
-                    token: authManager.token ?? ""
-                ) { status in
-                    Task { @MainActor in
-                        statusText = status
+                let stream = ChatService.shared.sendMessageStreaming(message: messageToSend, token: token)
+                for try await event in stream {
+                    if Task.isCancelled {
+                        sendTask = nil
+                        return
+                    }
+                    switch event {
+                    case .status(let text):
+                        statusText = text
+                    case .done(let response):
+                        let actions: [Action] = response.actions.map { ar in
+                            Action(
+                                id: ar.id ?? 0,
+                                name: ar.name,
+                                description: ar.description,
+                                parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
+                                reasoning: ar.reasoning
+                            )
+                        }
+                        let botMessage = Message(
+                            id: UUID(),
+                            text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
+                            isUser: false,
+                            timestamp: Date(),
+                            actions: actions.isEmpty ? nil : actions
+                        )
+                        messages.append(botMessage)
+                        isSending = false
+                        sendTask = nil
+                        return
                     }
                 }
-                if Task.isCancelled { return }
-                let actions: [Action] = response.actions.map { ar in
-                    Action(
-                        id: ar.id ?? 0,
-                        name: ar.name,
-                        description: ar.description,
-                        parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
-                        reasoning: ar.reasoning
-                    )
-                }
-                await MainActor.run {
-                    let botMessage = Message(
-                        id: UUID(),
-                        text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
-                        isUser: false,
-                        timestamp: Date(),
-                        actions: actions.isEmpty ? nil : actions
-                    )
-                    messages.append(botMessage)
-                    isSending = false
-                }
+                isSending = false
+                sendTask = nil
             } catch {
-                if Task.isCancelled { return }
-                await MainActor.run {
-                    let errorMessage = Message(
-                        id: UUID(),
-                        text: userFacingErrorMessage(for: error),
-                        isUser: false,
-                        timestamp: Date()
-                    )
-                    messages.append(errorMessage)
-                    isSending = false
+                if Task.isCancelled {
+                    sendTask = nil
+                    return
                 }
+                // Fallback: if server returns 404 for /chat/stream, use non-streaming POST /chat
+                if let apiError = error as? APIError, case .httpError(404) = apiError {
+                    do {
+                        let response = try await ChatService.shared.sendMessage(message: messageToSend, token: token)
+                        let actions: [Action] = response.actions.map { ar in
+                            Action(
+                                id: ar.id ?? 0,
+                                name: ar.name,
+                                description: ar.description,
+                                parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
+                                reasoning: ar.reasoning
+                            )
+                        }
+                        let botMessage = Message(
+                            id: UUID(),
+                            text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
+                            isUser: false,
+                            timestamp: Date(),
+                            actions: actions.isEmpty ? nil : actions
+                        )
+                        messages.append(botMessage)
+                        isSending = false
+                        sendTask = nil
+                        return
+                    } catch {
+                        // fall through to show error
+                    }
+                }
+                let errorMessage = Message(
+                    id: UUID(),
+                    text: userFacingErrorMessage(for: error),
+                    isUser: false,
+                    timestamp: Date()
+                )
+                messages.append(errorMessage)
+                isSending = false
+                sendTask = nil
             }
         }
     }

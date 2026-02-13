@@ -210,6 +210,9 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
+# Explicitly register POST /chat/stream so it is always available (avoids 404 if router load order differs)
+app.add_api_route("/chat/stream", chat.chat_stream, methods=["POST"])
+
 # Include routers
 app.include_router(health.router)
 app.include_router(setup.router)
@@ -226,6 +229,12 @@ app.include_router(preferences.router)
 app.include_router(context.router)
 app.include_router(agent.router)
 app.include_router(cron_tools.router)
+
+# Log chat routes at startup so we can verify POST /chat/stream is registered
+for route in app.routes:
+    if hasattr(route, "path") and "/chat" in getattr(route, "path", ""):
+        methods = getattr(route, "methods", set()) or set()
+        logger.info("Route: %s %s", methods, route.path)
 
 
 if __name__ == "__main__":
