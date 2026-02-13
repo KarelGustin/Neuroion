@@ -10,7 +10,7 @@ the answering LLM is not delayed by surrounding preprocessing.
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable
 from sqlalchemy.orm import Session
 
 from neuroion.core.llm import get_llm_client_from_config
@@ -39,18 +39,17 @@ from neuroion.core.agent.task_prompts import build_task_messages
 from neuroion.core.agent.prompts import (
     build_history_relevance_messages,
     build_meta_question_classifier_messages,
-    build_mode_router_messages,
     build_scheduling_intent_messages,
     build_session_summary_messages,
     get_soul_prompt,
     MODE_CHAT,
     MODE_CODING,
-    MODE_REFLECTION,
     MODE_RESEARCH,
     MODE_SCHEDULING,
     MODE_TASK,
-    ROUTER_CONFIDENCE_THRESHOLD,
-    VALID_MODES,
+    NEED_CODING_TAG,
+    NEED_RESEARCH_TAG,
+    NEED_TASK_TAG,
 )
 from neuroion.core.agent.policies.guardrails import get_guardrails
 from neuroion.core.agent.policies.validator import get_validator
@@ -66,6 +65,27 @@ from neuroion.core.memory.repository import (
     UserMemoryRepository,
 )
 from neuroion.core.security.audit import AuditLogger
+
+
+def _parse_chat_reply_for_pipeline(reply: str) -> Tuple[str, Optional[str]]:
+    """
+    Parse chat reply for pipeline trigger tags. Returns (cleaned_reply, tag or None).
+    tag is one of NEED_RESEARCH_TAG, NEED_CODING_TAG, NEED_TASK_TAG.
+    """
+    if not (reply or "").strip():
+        return (reply or "").strip(), None
+    tag = None
+    if NEED_RESEARCH_TAG in reply:
+        tag = NEED_RESEARCH_TAG
+    elif NEED_CODING_TAG in reply:
+        tag = NEED_CODING_TAG
+    elif NEED_TASK_TAG in reply:
+        tag = NEED_TASK_TAG
+    if not tag:
+        return reply.strip(), None
+    lines = [ln for ln in reply.splitlines() if tag not in ln]
+    cleaned = "\n".join(lines).strip()
+    return cleaned, tag
 
 
 # Thread pool for parallel context load + relevance LLM (each task uses its own DB session)
@@ -245,7 +265,15 @@ class Agent:
         self.executor = get_executor()
         self.validator = get_validator()
         self.guardrails = get_guardrails()
-    
+
+    @staticmethod
+    def _emit_progress(progress_callback: Optional[Callable[[Dict[str, Any]], None]], event: Dict[str, Any]) -> None:
+        if progress_callback:
+            try:
+                progress_callback(event)
+            except Exception:
+                pass
+
     def process_message(
         self,
         db: Session,
@@ -254,6 +282,7 @@ class Agent:
         message: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         force_task_mode: bool = False,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         """
         Process a user message and return structured response.
@@ -307,30 +336,7 @@ class Agent:
             user_memories_text=user_memories_text,
         )
 
-        # Intent → Mode → Workflow: router selects mode (scheduling > task > research > coding > reflection > chat)
-        mode = MODE_CHAT
-        confidence = 0.0
-        if self.llm:
-            try:
-                router_messages = build_mode_router_messages(
-                    message, filtered_history[-4:] if filtered_history else None
-                )
-                router_raw = self.llm.chat(router_messages, temperature=0.0, max_tokens=64)
-                if router_raw:
-                    obj = extract_json_from_response(router_raw)
-                    if isinstance(obj, dict):
-                        m = (obj.get("mode") or "").strip().lower()
-                        if m in VALID_MODES:
-                            mode = m
-                        c = obj.get("confidence")
-                        if isinstance(c, (int, float)):
-                            confidence = float(c)
-            except (json.JSONDecodeError, ValueError, TypeError, KeyError):
-                pass
-        if confidence < ROUTER_CONFIDENCE_THRESHOLD:
-            mode = MODE_CHAT
-
-        # Explicit client override: header forces task path when scheduling intent
+        # Client override: header forces task path when scheduling intent
         if force_task_mode and self._scheduling_intent(message):
             result = self._process_task_path(
                 db, household_id, user_id, user_id_str, message, filtered_history
@@ -338,19 +344,20 @@ class Agent:
             if result is not None:
                 return result
 
-        # Dispatch by mode: scheduling/task → task path; chat → single call; research/coding → agent loop; reflection → evaluate
-        if mode in (MODE_SCHEDULING, MODE_TASK):
+        # Fast path: one chat call (no separate mode router). Model may add [NEED_RESEARCH], [NEED_CODING], [NEED_TASK].
+        self._emit_progress(progress_callback, {"type": "status", "text": "Ik denk na…"})
+        llm_response = run_chat_mode(agent_input, self.llm)
+        cleaned_reply, pipeline_tag = _parse_chat_reply_for_pipeline(llm_response)
+
+        if pipeline_tag == NEED_TASK_TAG:
             result = self._process_task_path(
                 db, household_id, user_id, user_id_str, message, filtered_history
             )
             if result is not None:
                 return result
-
-        if mode == MODE_CHAT:
-            llm_response = run_chat_mode(agent_input, self.llm)
-        elif mode == MODE_REFLECTION:
-            llm_response = run_reflection_workflow(agent_input, self.llm)
-        elif mode == MODE_RESEARCH:
+            llm_response = cleaned_reply
+        elif pipeline_tag == NEED_RESEARCH_TAG:
+            self._emit_progress(progress_callback, {"type": "status", "text": "Ik zoek op het web…"})
             llm_response = run_agent_turn(
                 agent_input=agent_input,
                 db=db,
@@ -358,8 +365,10 @@ class Agent:
                 user_id=user_id,
                 llm=self.llm,
                 use_codebase_tools=False,
+                progress_callback=progress_callback,
             )
-        elif mode == MODE_CODING:
+        elif pipeline_tag == NEED_CODING_TAG:
+            self._emit_progress(progress_callback, {"type": "status", "text": "Ik zoek in de codebase…"})
             llm_response = run_agent_turn(
                 agent_input=agent_input,
                 db=db,
@@ -367,9 +376,10 @@ class Agent:
                 user_id=user_id,
                 llm=self.llm,
                 use_codebase_tools=True,
+                progress_callback=progress_callback,
             )
         else:
-            llm_response = run_chat_mode(agent_input, self.llm)
+            llm_response = cleaned_reply
 
         llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)
         llm_response = llm_response.strip()

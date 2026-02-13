@@ -2,14 +2,21 @@
 Chat endpoint for agent interactions.
 
 Routes user messages through the agent system and returns structured responses.
+Supports streaming via Server-Sent Events (SSE) for real-time progress.
 """
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+import asyncio
+import json
+import queue
+import threading
 from datetime import timedelta
 from typing import Optional, List, Dict, Any
 
-from neuroion.core.memory.db import get_db
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from neuroion.core.memory.db import get_db, db_session
 from neuroion.core.security.permissions import get_current_user
 from neuroion.core.agent.agent import Agent, compact_and_save_session
 from neuroion.core.memory.repository import ChatMessageRepository
@@ -190,6 +197,127 @@ def chat(
         message=assistant_message,
         reasoning=response.get("reasoning", ""),
         actions=actions,
+    )
+
+
+@router.post("/stream")
+async def chat_stream(
+    request: ChatRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """
+    Send a message to the agent and stream progress via Server-Sent Events.
+
+    Events: status (text), tool_start (tool), tool_done (tool), done (message, actions).
+    Keeps the connection alive so long requests (e.g. market research) complete.
+    """
+    agent = get_agent()
+    household_id = user["household_id"]
+    user_id = user["user_id"]
+
+    RequestCounter.increment(db, household_id)
+
+    recent = ChatMessageRepository.get_recent(db, household_id, limit=1, user_id=user_id)
+    last_msg = recent[0] if recent else None
+
+    new_user_message = ChatMessageRepository.create(
+        db=db,
+        household_id=household_id,
+        user_id=user_id,
+        role="user",
+        content=request.message,
+    )
+
+    if last_msg and new_user_message.created_at and last_msg.created_at:
+        gap = new_user_message.created_at - last_msg.created_at
+        if gap >= timedelta(minutes=SESSION_INACTIVITY_MINUTES):
+            previous_session = ChatMessageRepository.get_previous_session_messages(
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                before_created_at=new_user_message.created_at,
+                inactivity_minutes=SESSION_INACTIVITY_MINUTES,
+            )
+            if previous_session:
+                try:
+                    compact_and_save_session(
+                        db=db,
+                        household_id=household_id,
+                        user_id=user_id,
+                        messages=previous_session,
+                    )
+                except Exception:
+                    pass
+
+    conversation_history = ChatMessageRepository.get_messages_for_current_session(
+        db=db,
+        household_id=household_id,
+        user_id=user_id,
+        before_or_at=None,
+        inactivity_minutes=SESSION_INACTIVITY_MINUTES,
+    )
+
+    force_task_mode = (http_request.headers.get("X-Agent-Task-Mode") or "").strip() == "1"
+    sync_queue: queue.Queue = queue.Queue()
+
+    def run_agent_in_thread() -> None:
+        with db_session() as thread_db:
+            try:
+                result = agent.process_message(
+                    db=thread_db,
+                    household_id=household_id,
+                    user_id=user_id,
+                    message=request.message,
+                    conversation_history=conversation_history,
+                    force_task_mode=force_task_mode,
+                    progress_callback=lambda ev: sync_queue.put(ev),
+                )
+                sync_queue.put({
+                    "type": "done",
+                    "message": result.get("message", ""),
+                    "actions": result.get("actions", []),
+                })
+            except Exception as e:
+                sync_queue.put({
+                    "type": "done",
+                    "message": "",
+                    "actions": [],
+                    "error": str(e),
+                })
+
+    thread = threading.Thread(target=run_agent_in_thread)
+    thread.start()
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+        while True:
+            ev = await loop.run_in_executor(None, sync_queue.get)
+            if ev.get("type") == "done":
+                assistant_message = ev.get("message", "")
+                actions = ev.get("actions", [])
+                if not ev.get("error"):
+                    ChatMessageRepository.create(
+                        db=db,
+                        household_id=household_id,
+                        user_id=user_id,
+                        role="assistant",
+                        content=assistant_message,
+                        metadata={"actions": actions} if actions else None,
+                    )
+                yield f"data: {json.dumps(ev)}\n\n"
+                break
+            yield f"data: {json.dumps(ev)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

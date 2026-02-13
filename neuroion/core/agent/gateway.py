@@ -6,7 +6,7 @@ Full SOUL + system prompt only for the final user-facing message.
 """
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 
 from neuroion.core.agent.agentic import (
     MAX_AGENT_ITERATIONS,
@@ -252,6 +252,15 @@ def run_reflection_workflow(agent_input: AgentInput, llm: LLMClient) -> str:
         return "I couldn't evaluate that. Please try again."
 
 
+def _emit(progress_callback: Optional[Callable[[Dict[str, Any]], None]], event: Dict[str, Any]) -> None:
+    """Emit a progress event if callback is set."""
+    if progress_callback:
+        try:
+            progress_callback(event)
+        except Exception:
+            pass
+
+
 def run_agent_turn(
     *,
     agent_input: AgentInput,
@@ -260,6 +269,7 @@ def run_agent_turn(
     user_id: Optional[int],
     llm: LLMClient,
     use_codebase_tools: Optional[bool] = None,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> str:
     """
     Run agentic turn: plan (JSON) → action (execute tools, log) → observe → reflect (JSON) → repeat or final.
@@ -314,6 +324,7 @@ def run_agent_turn(
     if next_action == NEXT_ACTION_ASK_USER and question_to_user:
         return question_to_user.strip()
 
+    _emit(progress_callback, {"type": "status", "text": "Plan klaar. Tools uitvoeren…"})
     trace = TurnTrace()
     context = RunContext(
         db=db,
@@ -330,8 +341,10 @@ def run_agent_turn(
             targs = tc.get("arguments") or {}
             if not tname:
                 continue
+            _emit(progress_callback, {"type": "tool_start", "tool": tname})
             result = tool_router.call(tname, targs, context)
             record_tool_call(tname, result.success)
+            _emit(progress_callback, {"type": "tool_done", "tool": tname})
             out = result.output if result.success and result.output else {"success": False, "error": result.error}
             summary = _result_summary_for_trace(tname, out)
             trace.append_tool_call(
@@ -345,6 +358,7 @@ def run_agent_turn(
     # No tools used and planner said respond → Writer with goal + user message only
     observation_json = trace.to_observation_json()
     if not observation_json or observation_json == "[]":
+        _emit(progress_callback, {"type": "status", "text": "Antwoord formuleren…"})
         soul = agent_input.soul if agent_input.soul is not None else get_soul_prompt()
         writer_messages = build_writer_messages(
             agent_name=name,
@@ -375,6 +389,7 @@ def run_agent_turn(
         observation_json = trace.to_observation_json()
         if not observation_json or observation_json == "[]":
             break
+        _emit(progress_callback, {"type": "status", "text": "Resultaten verwerken…"})
         reflect_instruction = get_agent_reflect_instruction(observation_json)
         reflect_messages = [
             {"role": "system", "content": system_short + "\n\n" + reflect_instruction},
@@ -401,8 +416,10 @@ def run_agent_turn(
             targs = tc.get("arguments") or {}
             if not tname:
                 continue
+            _emit(progress_callback, {"type": "tool_start", "tool": tname})
             result = tool_router.call(tname, targs, context)
             record_tool_call(tname, result.success)
+            _emit(progress_callback, {"type": "tool_done", "tool": tname})
             out = result.output if result.success and result.output else {"success": False, "error": result.error}
             summary = _result_summary_for_trace(tname, out)
             trace.append_tool_call(
@@ -414,6 +431,7 @@ def run_agent_turn(
             )
 
     # Final response: Writer with goal + facts only (no full conversation dump)
+    _emit(progress_callback, {"type": "status", "text": "Antwoord formuleren…"})
     facts = trace.to_facts_list()
     final_goal = goal or user_message
     soul = agent_input.soul if agent_input.soul is not None else get_soul_prompt()

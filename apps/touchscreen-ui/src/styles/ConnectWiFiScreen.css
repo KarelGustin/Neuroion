@@ -1,0 +1,39 @@
+.connect-wifi-screen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  box-sizing: border-box;
+  background: var(--bg, #0a0a0a);
+  color: var(--text, #fafafa);
+}
+
+.connect-wifi-inner {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  max-height: 90vh;
+}
+
+.connect-wifi-inner .setup-wizard-error {
+  flex-shrink: 0;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.connect-wifi-scanning {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  margin: var(--space-3) 0;
+}

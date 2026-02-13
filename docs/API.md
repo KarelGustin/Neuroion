@@ -120,6 +120,21 @@ Authorization: Bearer <token>
 }
 ```
 
+#### POST /chat/stream
+
+Send a message and receive **Server-Sent Events (SSE)** with real-time progress. Use this for long-running requests (e.g. market research) so the connection stays alive and the client can show status.
+
+**Headers:** same as POST /chat (Bearer token).
+
+**Request:** same body as POST /chat (`message`, optional `conversation_history`).
+
+**Response:** `Content-Type: text/event-stream`. Each event is a JSON object:
+
+- `{"type": "status", "text": "Ik zoek op het web…"}` – status update
+- `{"type": "tool_start", "tool": "web.search"}` – tool started
+- `{"type": "tool_done", "tool": "web.search"}` – tool finished
+- `{"type": "done", "message": "...", "actions": [...]}` – final response (same shape as POST /chat)
+
 #### POST /chat/actions/execute
 
 Execute a confirmed action.

@@ -14,8 +14,13 @@ struct NeuroionApp: App {
     var body: some Scene {
         WindowGroup {
             if authManager.isAuthenticated {
-                ChatView()
-                    .environmentObject(authManager)
+                TabView {
+                    ChatView()
+                        .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+                    SettingsView()
+                        .tabItem { Label("Settings", systemImage: "gearshape") }
+                }
+                .environmentObject(authManager)
             } else {
                 PairingView()
                     .environmentObject(authManager)

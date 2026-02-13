@@ -6,6 +6,7 @@ import SettingsPanel from './components/SettingsPanel'
 import BootScreen from './components/BootScreen'
 import SetupRequiredScreen from './components/SetupRequiredScreen'
 import SetupWizard from './components/SetupWizard'
+import ConnectWiFiScreen from './components/ConnectWiFiScreen'
 import JoinFlow from './components/JoinFlow'
 import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
 import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset, getDashboardMembers, addMember, deleteMember, getPairingCode, getApiBaseUrl } from './services/api'
@@ -78,31 +79,48 @@ function App() {
     }
   }, [isDev])
 
+  // After boot: check WiFi and setup; decide view (wifi → setup → dashboard)
   useEffect(() => {
-    if (isDev && !bootReady) return
+    if (!bootReady) return
     let cancelled = false
-    const checkSetup = async () => {
+    const initialCheck = async () => {
       try {
-        const data = await getSetupStatus()
-        if (!cancelled) {
-          setSetupComplete(Boolean(data?.is_complete))
+        const [statusRes, setupRes] = await Promise.all([
+          getStatus().catch(() => null),
+          getSetupStatus().catch(() => null),
+        ])
+        if (cancelled) return
+        const setupCompleteVal = !!setupRes?.is_complete
+        setSetupComplete(setupCompleteVal)
+        // Skip WiFi step when hardware already has network (WiFi configured or has IP e.g. ethernet)
+        const hasNetwork = !!(
+          statusRes?.network?.wifi_configured ||
+          (statusRes?.network?.ip && statusRes.network.ip !== '')
+        )
+        if (!hasNetwork) {
+          setView('wifi')
+        } else if (!setupCompleteVal) {
+          setView('setup')
+        } else {
+          setView('dashboard')
         }
-      } catch (err) {
-        if (!cancelled) {
-          setSetupComplete(false)
-        }
+      } catch (_) {
+        if (!cancelled) setView('setup')
       }
     }
-    checkSetup()
-    return () => {
-      cancelled = true
-    }
-  }, [bootReady, isDev])
+    initialCheck()
+    return () => { cancelled = true }
+  }, [bootReady])
 
-  useEffect(() => {
-    if (!bootReady || setupComplete === null) return
-    setView(setupComplete ? 'dashboard' : 'setup')
-  }, [bootReady, setupComplete])
+  const handleWifiConnected = () => {
+    getSetupStatus()
+      .then((data) => {
+        const complete = !!data?.is_complete
+        setSetupComplete(complete)
+        setView(complete ? 'dashboard' : 'setup')
+      })
+      .catch(() => setView('setup'))
+  }
 
   useEffect(() => {
     if (view !== 'setup') return
@@ -367,6 +385,14 @@ function App() {
     const progress = isDev ? devProgress.progress : 0
     const stage = isDev ? devProgress.stage : 'starting'
     return <BootScreen progress={progress} stage={stage} />
+  }
+
+  if (view === 'wifi') {
+    return (
+      <div className="app">
+        <ConnectWiFiScreen onConnected={handleWifiConnected} />
+      </div>
+    )
   }
 
   if (view === 'setup') {

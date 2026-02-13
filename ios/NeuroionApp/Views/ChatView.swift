@@ -7,15 +7,16 @@
 
 import SwiftUI
 
+private let typingIndicatorId = UUID()
+
 struct ChatView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var messageText = ""
     @State private var messages: [Message] = []
     @State private var isSending = false
-    @State private var showSettings = false
-    
-    private let chatService = ChatService()
-    
+    @State private var statusText = "Neuroion denkt na…"
+    @State private var sendTask: Task<Void, Never>?
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -26,16 +27,22 @@ struct ChatView: View {
                                 MessageBubble(message: message)
                                     .environmentObject(authManager)
                             }
+                            if isSending {
+                                TypingIndicatorView(statusText: statusText)
+                                    .id(typingIndicatorId)
+                            }
                         }
                         .padding()
                     }
                     .onChange(of: messages.count) { _ in
-                        if let lastMessage = messages.last {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
-                        }
+                        scrollToBottom(proxy: proxy)
                     }
+                    .onChange(of: isSending) { sending in
+                        if sending { scrollToBottom(proxy: proxy) }
+                    }
+                }
+                .onDisappear {
+                    sendTask?.cancel()
                 }
                 
                 Divider()
@@ -61,25 +68,24 @@ struct ChatView: View {
             }
             .navigationTitle("Chat")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                }
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        if isSending {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(typingIndicatorId, anchor: .bottom)
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-                    .environmentObject(authManager)
+        } else if let lastMessage = messages.last {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
             }
         }
     }
-    
+
     private func sendMessage() {
         guard !messageText.isEmpty else { return }
-        
+
         let userMessage = Message(
             id: UUID(),
             text: messageText,
@@ -87,18 +93,23 @@ struct ChatView: View {
             timestamp: Date()
         )
         messages.append(userMessage)
-        
+
         let messageToSend = messageText
         messageText = ""
         isSending = true
-        
-        Task {
+
+        sendTask = Task {
+            await MainActor.run { statusText = "Neuroion denkt na…" }
             do {
-                let response = try await chatService.sendMessage(
+                let response = try await ChatService.shared.sendMessageStreaming(
                     message: messageToSend,
                     token: authManager.token ?? ""
-                )
-                
+                ) { status in
+                    Task { @MainActor in
+                        statusText = status
+                    }
+                }
+                if Task.isCancelled { return }
                 let actions: [Action] = response.actions.map { ar in
                     Action(
                         id: ar.id ?? 0,
@@ -108,11 +119,10 @@ struct ChatView: View {
                         reasoning: ar.reasoning
                     )
                 }
-                
                 await MainActor.run {
                     let botMessage = Message(
                         id: UUID(),
-                        text: response.message,
+                        text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
                         isUser: false,
                         timestamp: Date(),
                         actions: actions.isEmpty ? nil : actions
@@ -121,10 +131,11 @@ struct ChatView: View {
                     isSending = false
                 }
             } catch {
+                if Task.isCancelled { return }
                 await MainActor.run {
                     let errorMessage = Message(
                         id: UUID(),
-                        text: "Error: \(error.localizedDescription)",
+                        text: userFacingErrorMessage(for: error),
                         isUser: false,
                         timestamp: Date()
                     )
@@ -132,6 +143,43 @@ struct ChatView: View {
                     isSending = false
                 }
             }
+        }
+    }
+
+    private func userFacingErrorMessage(for error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return NSLocalizedString("Verzoek duurde te lang. Controleer je verbinding of probeer het opnieuw.", comment: "Chat error")
+            case .notConnectedToInternet, .networkConnectionLost:
+                return NSLocalizedString("Geen internetverbinding. Controleer WiFi of mobiele data.", comment: "Chat error")
+            case .cannotFindHost, .cannotConnectToHost:
+                return NSLocalizedString("Kan Homebase niet bereiken. Klopt het adres in Instellingen?", comment: "Chat error")
+            default:
+                break
+            }
+        }
+        return error.localizedDescription
+    }
+}
+
+struct TypingIndicatorView: View {
+    var statusText: String = "Neuroion denkt na…"
+
+    var body: some View {
+        HStack(alignment: .top) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text(statusText)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.systemGray5))
+            .cornerRadius(18)
+            Spacer(minLength: 48)
         }
     }
 }
@@ -225,7 +273,7 @@ struct ActionCard: View {
         
         Task {
             do {
-                let response = try await ChatService().executeAction(actionId: action.id, token: token)
+                let response = try await ChatService.shared.executeAction(actionId: action.id, token: token)
                 await MainActor.run {
                     isExecuting = false
                     if response.success {

@@ -152,19 +152,6 @@ export async function addMember(name) {
   return response.data
 }
 
-/** Get pairing code for app/device. Optional memberId links device to existing member. */
-export async function getPairingCode(householdId, deviceId, deviceType, name, memberId = null) {
-  const body = {
-    household_id: householdId,
-    device_id: deviceId,
-    device_type: deviceType,
-    name: (name || '').trim(),
-  }
-  if (memberId != null) body.member_id = memberId
-  const response = await api.post('/pair/start', body)
-  return response.data.pairing_code
-}
-
 /** Delete a household member (kiosk, no auth). */
 export async function deleteMember(memberId) {
   const response = await api.post('/dashboard/member-delete', {

@@ -208,6 +208,7 @@ def build_chat_messages_from_input(input: AgentInput) -> List[Dict[str, str]]:
         system_parts.append("\n" + format_context_snapshots(input.memory))
     if input.user_preferences or input.household_preferences:
         system_parts.append("\n" + format_preferences(input.user_preferences, input.household_preferences))
+    system_parts.append(get_chat_pipeline_trigger_instruction())
     messages.append({"role": "system", "content": "\n".join(system_parts)})
     if input.conversation_history:
         messages.extend(input.conversation_history)
@@ -378,6 +379,26 @@ MODE_CHAT = "chat"
 VALID_MODES = (MODE_SCHEDULING, MODE_TASK, MODE_RESEARCH, MODE_CODING, MODE_REFLECTION, MODE_CHAT)
 
 ROUTER_CONFIDENCE_THRESHOLD = 0.6
+
+# Pipeline trigger tags: when the chat model adds one of these, we run the corresponding heavy pipeline.
+NEED_RESEARCH_TAG = "[NEED_RESEARCH]"
+NEED_CODING_TAG = "[NEED_CODING]"
+NEED_TASK_TAG = "[NEED_TASK]"
+
+
+def get_chat_pipeline_trigger_instruction() -> str:
+    """
+    Instruction for the chat model: when the user clearly needs research, code, or multi-step tasks,
+    add one tag so we can run the right pipeline and return the full answer. Keeps default chat fast.
+    """
+    return (
+        "\n\nPIPELINE TRIGGER (only when clearly needed): "
+        "If the user clearly needs (a) web research / up-to-date external info, "
+        "(b) code generation or codebase work, or (c) multi-step task execution (create, update, send, etc.), "
+        "reply naturally and at the end of your reply add exactly one line with only one of these tags: "
+        f"{NEED_RESEARCH_TAG} or {NEED_CODING_TAG} or {NEED_TASK_TAG}. "
+        "For simple Q&A, greetings, small talk, or when you can answer from your knowledge, do not add any tag."
+    )
 
 
 def build_mode_router_messages(

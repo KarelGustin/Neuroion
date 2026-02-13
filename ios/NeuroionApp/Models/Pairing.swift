@@ -117,11 +117,15 @@ struct ActionExecuteResponse: Codable {
 
 // Chat Service
 class ChatService {
+    static let shared = ChatService()
     private let apiClient = APIClient.shared
-    
+
+    private init() {}
+
+    /// Send message and wait for full response (can timeout on long research).
     func sendMessage(message: String, token: String) async throws -> ChatResponse {
         let request = ChatRequest(message: message, conversationHistory: nil)
-        
+
         return try await apiClient.request(
             endpoint: "/chat",
             method: "POST",
@@ -129,15 +133,82 @@ class ChatService {
             token: token
         )
     }
-    
+
+    /// Stream progress and return final response. Use for research/long tasks so the request completes.
+    func sendMessageStreaming(
+        message: String,
+        token: String,
+        onStatus: @escaping (String) -> Void
+    ) async throws -> ChatResponse {
+        let request = ChatRequest(message: message, conversationHistory: nil)
+        let stream = try await apiClient.streamEvents(
+            endpoint: "/chat/stream",
+            method: "POST",
+            body: request,
+            token: token
+        )
+
+        var lastMessage = ""
+        var lastActions: [ActionResponse] = []
+
+        for try await ev in stream {
+            guard let type = ev["type"] as? String else { continue }
+            switch type {
+            case "status":
+                if let text = ev["text"] as? String {
+                    onStatus(text)
+                }
+            case "tool_start":
+                if let tool = ev["tool"] as? String {
+                    onStatus("Bezig met \(tool)…")
+                }
+            case "tool_done":
+                if let tool = ev["tool"] as? String {
+                    onStatus("\(tool) klaar. Volgende stap…")
+                }
+            case "done":
+                if let err = ev["error"] as? String, !err.isEmpty {
+                    lastMessage = NSLocalizedString("Er ging iets mis. Probeer het opnieuw.", comment: "Stream error")
+                } else {
+                    lastMessage = ev["message"] as? String ?? ""
+                }
+                if let rawActions = ev["actions"] as? [[String: Any]] {
+                    lastActions = rawActions.compactMap { dict in
+                        try? ActionResponse(from: dict)
+                    }
+                }
+            default:
+                break
+            }
+        }
+
+        return ChatResponse(
+            message: lastMessage,
+            reasoning: "",
+            actions: lastActions
+        )
+    }
+
     func executeAction(actionId: Int, token: String) async throws -> ActionExecuteResponse {
         let request = ActionExecuteRequest(actionId: actionId)
-        
+
         return try await apiClient.request(
             endpoint: "/chat/actions/execute",
             method: "POST",
             body: request,
             token: token
         )
+    }
+}
+
+extension ActionResponse {
+    init(from dict: [String: Any]) throws {
+        self.id = dict["id"] as? Int
+        self.name = dict["name"] as? String ?? ""
+        self.description = dict["description"] as? String ?? ""
+        self.parameters = (dict["parameters"] as? [String: Any]).map { params in
+            params.mapValues { AnyCodable($0) }
+        } ?? [:]
+        self.reasoning = dict["reasoning"] as? String ?? ""
     }
 }

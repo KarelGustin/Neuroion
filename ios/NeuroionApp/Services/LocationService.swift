@@ -24,7 +24,8 @@ class LocationService: NSObject, ObservableObject {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-        locationManager.allowsBackgroundLocationUpdates = true
+        // Do not set allowsBackgroundLocationUpdates: it requires Background Modes → Location updates
+        // and causes a crash if the app isn’t backgroundable. Significant location changes still work.
     }
     
     func configure(token: String, deviceId: String) {

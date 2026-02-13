@@ -12,10 +12,40 @@ struct SettingsView: View {
     @ObservedObject private var connectionManager = ConnectionManager.shared
     @StateObject private var locationService = LocationService()
     @StateObject private var healthKitService = HealthKitService()
-    
+    @State private var showPairingScanner = false
+    @State private var isPairing = false
+    @State private var pairingError: String?
+
     var body: some View {
         NavigationView {
             Form {
+                Section {
+                    Button {
+                        pairingError = nil
+                        showPairingScanner = true
+                    } label: {
+                        Label("Connect to another Neuroion One", systemImage: "qrcode.viewfinder")
+                    }
+                    .disabled(isPairing)
+                    if isPairing {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.9)
+                            Text("Koppelen…")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    if let err = pairingError {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                } header: {
+                    Text("Switch Homebase")
+                } footer: {
+                    Text("Scan de QR-code op het touchscreen of setup-scherm van een andere Neuroion One om met dat apparaat te koppelen.")
+                }
+
                 Section {
                     TextField("Homebase URL", text: $connectionManager.baseURL)
                         .keyboardType(.URL)
@@ -57,6 +87,32 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .sheet(isPresented: $showPairingScanner) {
+                QRScannerView(
+                    onScan: handleScannedPayload,
+                    onCancel: { showPairingScanner = false }
+                )
+            }
+        }
+    }
+
+    private func handleScannedPayload(_ payload: NeuroionPairQRPayload) {
+        showPairingScanner = false
+        pairingError = nil
+        connectionManager.baseURL = payload.baseURL
+        isPairing = true
+
+        Task {
+            do {
+                let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+                try await authManager.pair(deviceId: deviceId, pairingCode: payload.pairingCode)
+                await MainActor.run { isPairing = false }
+            } catch {
+                await MainActor.run {
+                    pairingError = error.localizedDescription
+                    isPairing = false
+                }
+            }
         }
     }
 }
