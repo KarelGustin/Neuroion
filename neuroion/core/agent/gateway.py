@@ -10,6 +10,9 @@ from typing import Dict, Any, List, Optional
 
 from neuroion.core.agent.agentic import (
     MAX_AGENT_ITERATIONS,
+    NEXT_ACTION_ASK_USER,
+    NEXT_ACTION_RESPOND,
+    NEXT_ACTION_TOOL,
     TurnTrace,
     parse_plan_action_response,
     parse_reflect_response,
@@ -18,10 +21,11 @@ from neuroion.core.agent.agentic import (
 from neuroion.core.agent.cron_tools_schema import get_cron_tools_for_llm
 from neuroion.core.agent.prompts import (
     build_chat_messages_from_input,
-    build_agent_final_messages,
+    build_writer_messages,
     get_agent_loop_system_prompt,
     get_agent_plan_action_instruction,
     get_agent_reflect_instruction,
+    get_soul_prompt,
     build_structured_tool_messages,
     build_tool_result_messages,
 )
@@ -127,6 +131,39 @@ def _result_summary_for_trace(tool_name: str, result: Any) -> str:
         if lines:
             return "\n".join(lines)[:_WEB_SEARCH_SUMMARY_MAX]
         return f"{len(result['results'])} results"
+    # web.shopping_search: same shape as web.search (titles + URLs for product options)
+    if tool_name == "web.shopping_search" and "results" in result and isinstance(result["results"], list):
+        query = result.get("query") or ""
+        lines = [f"Query: {query}"] if query else []
+        for i, r in enumerate(result["results"][:5]):
+            if not isinstance(r, dict):
+                continue
+            title = (r.get("title") or r.get("name") or "").strip()[:120]
+            url = (r.get("url") or r.get("href") or r.get("link") or "").strip()
+            snippet = (r.get("snippet") or r.get("body") or "").strip()[:100]
+            if title or url:
+                lines.append(f"{i + 1}) {title} | {url}" if url else f"{i + 1}) {title}")
+            if snippet:
+                lines.append(f"   {snippet}")
+        if lines:
+            return "\n".join(lines)[:_WEB_SEARCH_SUMMARY_MAX]
+        return f"{len(result['results'])} results"
+    # github.search: name, url, description
+    if tool_name == "github.search" and "results" in result and isinstance(result["results"], list):
+        lines = []
+        for i, r in enumerate(result["results"][:5]):
+            if not isinstance(r, dict):
+                continue
+            name = (r.get("name") or "").strip()
+            url = (r.get("url") or "").strip()
+            desc = (r.get("description") or "").strip()[:120]
+            if name or url:
+                lines.append(f"{i + 1}) {name} | {url}" if url else f"{i + 1}) {name}")
+            if desc:
+                lines.append(f"   {desc}")
+        if lines:
+            return "\n".join(lines)[:_WEB_SEARCH_SUMMARY_MAX]
+        return f"{len(result['results'])} repos"
     # Common shapes
     if "content" in result and isinstance(result.get("content"), str):
         preview = result["content"][:100].replace("\n", " ")
@@ -161,6 +198,60 @@ def _is_web_research_intent(message: str) -> bool:
     return any(p in lower for p in search_phrases)
 
 
+def run_chat_mode(agent_input: AgentInput, llm: LLMClient) -> str:
+    """
+    Chat mode: single LLM call, no plan/reflect, no tools.
+    For simple Q&A, conversation, small talk. One turn, low latency.
+    """
+    messages = build_chat_messages_from_input(agent_input)
+    try:
+        raw = llm.chat(messages, temperature=0.45)
+    except Exception as e:
+        logger.warning("Chat mode failed: %s", e)
+        return "I had trouble answering. Please try again."
+    reply = parse_final_response(raw)
+    if not reply:
+        reply = (raw or "").strip()
+    return reply.strip()
+
+
+def run_reflection_workflow(agent_input: AgentInput, llm: LLMClient) -> str:
+    """
+    Reflection/QA mode: evaluate last exchange for gaps, risks, what's missing.
+    One LLM call; no tool loop unless we extend later.
+    """
+    history = agent_input.conversation_history or []
+    last_user = ""
+    last_assistant = ""
+    for i in range(len(history) - 1, -1, -1):
+        role = (history[i].get("role") or "").strip().lower()
+        content = (history[i].get("content") or "").strip()
+        if role == "user" and not last_user:
+            last_user = content
+        elif role == "assistant" and not last_assistant:
+            last_assistant = content
+        if last_user and last_assistant:
+            break
+    if not last_assistant:
+        return run_chat_mode(agent_input, llm)
+    system = (
+        "You evaluate an assistant's answer for gaps, risks, and what might be missing. "
+        "Reply in 1-2 short paragraphs: what is solid, what could be wrong or incomplete, and what the user might still need. "
+        "Use the same language as the user. Be concise."
+    )
+    user_content = (
+        f"User asked:\n{last_user}\n\nAssistant replied:\n{last_assistant}\n\n"
+        "Evaluate this answer. What is missing or risky?"
+    )
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
+    try:
+        raw = llm.chat(messages, temperature=0.3)
+        return (raw or "").strip()
+    except Exception as e:
+        logger.warning("Reflection workflow failed: %s", e)
+        return "I couldn't evaluate that. Please try again."
+
+
 def run_agent_turn(
     *,
     agent_input: AgentInput,
@@ -168,19 +259,24 @@ def run_agent_turn(
     household_id: int,
     user_id: Optional[int],
     llm: LLMClient,
+    use_codebase_tools: Optional[bool] = None,
 ) -> str:
     """
     Run agentic turn: plan (JSON) → action (execute tools, log) → observe → reflect (JSON) → repeat or final.
-    Final response uses full system prompt + SOUL. Falls back to legacy single-call flow on JSON errors.
+    use_codebase_tools: True = allow all tools (coding mode); False = exclude codebase (research); None = infer from message.
     """
     tool_router = get_tool_router()
     tool_registry = get_tool_registry()
     all_tool_names = list(tool_router.get_all_tool_names())
-    # For web research / product queries, do not allow codebase tools (prevents hallucinated file reads)
-    if _is_web_research_intent(agent_input.user_message or ""):
+    if use_codebase_tools is True:
+        allowed_tools = all_tool_names
+    elif use_codebase_tools is False:
         allowed_tools = [t for t in all_tool_names if not t.startswith("codebase.")]
     else:
-        allowed_tools = all_tool_names
+        if _is_web_research_intent(agent_input.user_message or ""):
+            allowed_tools = [t for t in all_tool_names if not t.startswith("codebase.")]
+        else:
+            allowed_tools = all_tool_names
     name = (agent_input.agent_name or "ion").strip() or "ion"
     user_message = agent_input.user_message or ""
 
@@ -199,12 +295,24 @@ def run_agent_turn(
         logger.warning("Agent plan call failed, falling back to legacy: %s", e)
         return _run_legacy_turn(agent_input=agent_input, db=db, household_id=household_id, user_id=user_id, llm=llm)
 
-    goal, plan_steps, tool_calls = parse_plan_action_response(plan_raw, allowed_tools=allowed_tools)
+    (
+        goal,
+        plan_steps,
+        tool_calls,
+        next_action,
+        response_outline,
+        question_to_user,
+    ) = parse_plan_action_response(plan_raw, allowed_tools=allowed_tools)
+
     if goal is None and plan_steps is None and (not tool_calls or len(tool_calls) == 0):
-        # No valid JSON or no tools: treat as "answer directly", go to final
         goal = user_message
         plan_steps = []
         tool_calls = []
+        next_action = NEXT_ACTION_RESPOND
+
+    # ask_user: return question immediately (Planner decided we need user input)
+    if next_action == NEXT_ACTION_ASK_USER and question_to_user:
+        return question_to_user.strip()
 
     trace = TurnTrace()
     context = RunContext(
@@ -234,21 +342,33 @@ def run_agent_turn(
                 error=None if result.success else result.error,
             )
 
-    # No tools used: answer with direct chat (same context as Ollama app, no turn summary)
+    # No tools used and planner said respond → Writer with goal + user message only
     observation_json = trace.to_observation_json()
     if not observation_json or observation_json == "[]":
-        direct_messages = build_chat_messages_from_input(agent_input)
+        soul = agent_input.soul if agent_input.soul is not None else get_soul_prompt()
+        writer_messages = build_writer_messages(
+            agent_name=name,
+            soul=soul,
+            goal=goal or user_message,
+            facts=[],
+            response_outline=response_outline,
+            user_message=user_message,
+            no_tools_used=True,
+        )
         try:
-            direct_raw = llm.chat(direct_messages, temperature=0.7)
+            direct_raw = llm.chat(writer_messages, temperature=0.45)
         except Exception as e:
-            logger.warning("Direct chat failed: %s", e)
+            logger.warning("Writer (no tools) failed: %s", e)
             return "I had trouble answering. Please try again."
         reply = parse_final_response(direct_raw)
         if not reply:
             reply = (direct_raw or "").strip()
         return reply.strip()
 
-    # Loop: reflect → more tool_calls or final
+    # State for loop: we have tool results; reflect may ask for more tools or respond
+    last_response_outline = response_outline
+
+    # Loop: reflect → next_action (tool | respond | ask_user)
     iterations = 0
     while iterations < MAX_AGENT_ITERATIONS:
         iterations += 1
@@ -258,14 +378,22 @@ def run_agent_turn(
         reflect_instruction = get_agent_reflect_instruction(observation_json)
         reflect_messages = [
             {"role": "system", "content": system_short + "\n\n" + reflect_instruction},
-            {"role": "user", "content": "Reflect on the observation above and output JSON with reflection and tool_calls (or null if done)."},
+            {"role": "user", "content": "Reflect on the observation above and output JSON with next_action and tool_calls (or null if done)."},
         ]
         try:
             reflect_raw = llm.chat(reflect_messages, temperature=0.3)
         except Exception as e:
             logger.warning("Agent reflect call failed: %s", e)
             break
-        _, next_calls = parse_reflect_response(reflect_raw, allowed_tools=allowed_tools)
+        _, next_calls, refl_next_action, refl_outline, refl_question = parse_reflect_response(
+            reflect_raw, allowed_tools=allowed_tools
+        )
+        if refl_outline:
+            last_response_outline = refl_outline
+        if refl_next_action == NEXT_ACTION_ASK_USER and refl_question:
+            return refl_question.strip()
+        if refl_next_action == NEXT_ACTION_RESPOND:
+            break
         if not next_calls:
             break
         for tc in next_calls:
@@ -285,19 +413,23 @@ def run_agent_turn(
                 error=None if result.success else result.error,
             )
 
-    # Final response: full SOUL + summary
-    observation_summary = trace.to_summary_for_final()
+    # Final response: Writer with goal + facts only (no full conversation dump)
+    facts = trace.to_facts_list()
     final_goal = goal or user_message
-    final_messages = build_agent_final_messages(
-        agent_input=agent_input,
+    soul = agent_input.soul if agent_input.soul is not None else get_soul_prompt()
+    writer_messages = build_writer_messages(
+        agent_name=name,
+        soul=soul,
         goal=final_goal,
-        plan=plan_steps,
-        observation_summary=observation_summary,
+        facts=facts,
+        response_outline=last_response_outline,
+        user_message=user_message,
+        no_tools_used=False,
     )
     try:
-        final_raw = llm.chat(final_messages, temperature=0.7)
+        final_raw = llm.chat(writer_messages, temperature=0.45)
     except Exception as e:
-        logger.warning("Agent final call failed: %s", e)
+        logger.warning("Writer (final) call failed: %s", e)
         return "I had trouble finishing that. Please try again."
     reply = parse_final_response(final_raw)
     if not reply:

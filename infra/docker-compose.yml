@@ -22,7 +22,7 @@ services:
 
   setup-ui:
     build:
-      context: ../setup-ui
+      context: ../apps/setup-ui
       dockerfile: Dockerfile
     container_name: neuroion-setup-ui
     ports:

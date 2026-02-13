@@ -72,8 +72,8 @@ class LocationService: NSObject, ObservableObject {
                     eventType: eventType,
                     timestamp: Date(),
                     metadata: [
-                        "latitude": location.coordinate.latitude,
-                        "longitude": location.coordinate.longitude,
+                        "latitude": AnyCodable(location.coordinate.latitude),
+                        "longitude": AnyCodable(location.coordinate.longitude),
                     ]
                 )
                 

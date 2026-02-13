@@ -11,7 +11,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.add",
-                "description": "Add a new scheduled job. Do not use for greetings, 'hoe gaat het', 'how are you', or general conversation; only when the user explicitly asks for a reminder or schedule (e.g. 'herinner me over 20 min', 'elke dag om 8'). For reminders: at (one-off), every (everyMs >= 60000), or cron (5-field). Default timezone Europe/Amsterdam.",
+                "description": "Add a new scheduled job. Only use after the user has confirmed: first describe what you will create and ask 'Zal ik dit inplannen?'; call cron.add only when they agree. Do not use for greetings or general conversation. For reminders: at (one-off), every (everyMs >= 60000), or cron (5-field). Default timezone Europe/Amsterdam.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -68,7 +68,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.remove",
-                "description": "Remove a cron job by jobId. Do not use for greetings or general conversation; only when the user explicitly asks to cancel or delete a reminder or scheduled job.",
+                "description": "Stop and remove a cron job by jobId. Use when the user asks to cancel, stop, remove, or delete a reminder or scheduled job. If you do not know the jobId, call cron.list first to get the list of jobs and their jobIds, then remove the one the user means.",
                 "parameters": {
                     "type": "object",
                     "properties": {"jobId": {"type": "string"}},
@@ -80,7 +80,7 @@ def get_cron_tools_for_llm() -> List[Dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "cron.list",
-                "description": "List all cron jobs for the user. Do not use for greetings or general conversation; only when the user explicitly asks to see their reminders or scheduled jobs.",
+                "description": "List all cron jobs for the user (returns jobs with jobId, schedule, label, etc.). Use when the user asks to see their reminders or scheduled jobs, or when you need jobIds to remove or update a specific job (e.g. 'verwijder die herinnering' – list first, then cron.remove with the right jobId).",
                 "parameters": {"type": "object", "properties": {}},
             },
         },

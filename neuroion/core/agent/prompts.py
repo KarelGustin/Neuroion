@@ -24,6 +24,24 @@ def get_soul_prompt() -> str:
     return ""
 
 
+def get_web_search_rules() -> str:
+    """
+    Rules for which search/service to use by intent. Not hardcoded URLs;
+    the agent chooses the right tool and output format from these rules.
+    """
+    return (
+        "Web and search rules (choose the right tool and output style):\n"
+        "- Informational queries (uitleg, feiten, 'hoe werkt', 'wat is', algemene info): "
+        "Use web.search. Summarize the findings as a clear explanation that answers the question; "
+        "sources/links are optional.\n"
+        "- Product/shopping queries (producten, kopen, prijzen, winkels, bestellen, aanbiedingen): "
+        "Use web.shopping_search. Return about 5 options with names and links; always include sources so the user can click through.\n"
+        "- Repository/code queries (GitHub, repo, open source, code zoeken): "
+        "Use github.search. Return relevant repos with links.\n"
+        "Use web.fetch_url only when the user gives a specific URL to read."
+    )
+
+
 def get_system_prompt(agent_name: str = "ion") -> str:
     """Get the main system prompt for the agent. agent_name is used for identity (default ion)."""
     name = (agent_name or "ion").strip() or "ion"
@@ -66,7 +84,9 @@ Je hebt toegang tot tools. Gebruik ze als ze passen bij wat de gebruiker vraagt 
 
 Codebase-vragen: Je kunt de actuele codebase bekijken (standaard ~/Neuroion). Gebruik codebase.list_directory om mappen te verkennen, codebase.read_file om bestanden te lezen en codebase.search om te zoeken. Gebruik deze tools wanneer de gebruiker vragen stelt over de code, bugs, of hoe iets werkt. Alleen lezen; stel geen wijzigingen voor die het schrijven van bestanden vereisen.
 
-Bij web research, zoekopdrachten of productvragen (bijv. ‘zoek voor mij X’, prijzen, producten, winkels): gebruik alleen web.search (en eventueel web.fetch_url bij een URL). Gebruik geen codebase-tools (geen codebase.read_file, codebase.list_directory, codebase.search).
+Bij web research, zoekopdrachten of productvragen (bijv. ‘zoek voor mij X’, prijzen, producten, winkels): volg de web/search-regels hieronder; gebruik geen codebase-tools (geen codebase.read_file, codebase.list_directory, codebase.search).
+
+{get_web_search_rules()}
 
 Wees authentiek en vriend-achtig: praatgraag, warm, persoonlijk. Gebruik wat je van de gebruiker weet op een natuurlijke manier als het past; nooit als een formeel lijstje.
 
@@ -77,7 +97,8 @@ def get_scheduling_prompt_addition() -> str:
     """Addition to system prompt: when user explicitly asks for scheduling/reminders, use cron.* tools. Default timezone Europe/Amsterdam."""
     return (
         "\n\nScheduling: Use the cron.* tools when the user explicitly asks for a reminder, scheduled action or recurring task. "
-        "Tool descriptions define when each tool applies. Use Europe/Amsterdam as default timezone when not specified."
+        "Tool descriptions define when each tool applies. Use Europe/Amsterdam as default timezone when not specified. "
+        "When creating a scheduled job: always describe in plain language what you will create (when, what message) and ask for confirmation (e.g. 'Zal ik dit inplannen?') before calling cron.add; only create the job after the user agrees."
     )
 
 
@@ -175,13 +196,21 @@ def build_chat_messages_from_input(input: AgentInput) -> List[Dict[str, str]]:
     system_parts.append(get_scheduling_prompt_addition())
     if input.system_instructions_extra:
         system_parts.append("\n" + input.system_instructions_extra)
+    if getattr(input, "user_location", None):
+        system_parts.append("\nUser context (always consider):\n" + input.user_location)
+    if getattr(input, "session_summaries_text", None):
+        system_parts.append("\n" + input.session_summaries_text)
+    if getattr(input, "daily_summaries_text", None):
+        system_parts.append("\n" + input.daily_summaries_text)
+    if getattr(input, "user_memories_text", None):
+        system_parts.append("\n" + input.user_memories_text)
     if input.memory:
         system_parts.append("\n" + format_context_snapshots(input.memory))
     if input.user_preferences or input.household_preferences:
         system_parts.append("\n" + format_preferences(input.user_preferences, input.household_preferences))
     messages.append({"role": "system", "content": "\n".join(system_parts)})
     if input.conversation_history:
-        messages.extend(input.conversation_history[-6:])
+        messages.extend(input.conversation_history)
     messages.append({"role": "user", "content": input.user_message})
     return messages
 
@@ -234,7 +263,7 @@ def build_structured_tool_messages(
     system_content = _get_structured_tool_identity(agent_name) + "\n\n" + get_structured_tool_prompt(tools)
     messages = [{"role": "system", "content": system_content}]
     if conversation_history:
-        messages.extend(conversation_history[-6:])  # Agent already filtered; cap at 6
+        messages.extend(conversation_history[-20:])  # Session context; cap to avoid token overflow
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -269,7 +298,7 @@ def build_tool_result_messages(
     )
     messages = [{"role": "system", "content": "\n".join(system_parts)}]
     if conversation_history:
-        messages.extend(conversation_history[-6:])  # Agent already filtered; cap at 6
+        messages.extend(conversation_history[-20:])  # Session context; cap to avoid token overflow
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -339,16 +368,103 @@ def build_meta_question_classifier_messages(
     ]
 
 
+# Intent → Mode → Workflow: high-level modes for the router (priority order: scheduling, task, research, coding, reflection, chat)
+MODE_SCHEDULING = "scheduling"
+MODE_TASK = "task"
+MODE_RESEARCH = "research"
+MODE_CODING = "coding"
+MODE_REFLECTION = "reflection"
+MODE_CHAT = "chat"
+VALID_MODES = (MODE_SCHEDULING, MODE_TASK, MODE_RESEARCH, MODE_CODING, MODE_REFLECTION, MODE_CHAT)
+
+ROUTER_CONFIDENCE_THRESHOLD = 0.6
+
+
+def build_mode_router_messages(
+    user_message: str,
+    recent_messages: Optional[List[Dict[str, str]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Build messages for the intent/mode router. Returns mode + confidence.
+    Priority: scheduling > task > research > coding > reflection > chat.
+    """
+    recent = recent_messages or []
+    context = ""
+    if recent:
+        lines = [f"{m.get('role', '?')}: {(m.get('content') or '')[:200]}" for m in recent[-4:]]
+        context = "Recent conversation:\n" + "\n".join(lines) + "\n\n"
+    user_content = context + "Current user message:\n" + (user_message or "").strip()
+    system = (
+        "You are a mode classifier. Choose exactly one mode for the user's message.\n\n"
+        "Modes (in priority order):\n"
+        "- scheduling: reminders, cron, 'elke dag', 'over 20 min', 'herinner', 'plan een afspraak', recurring tasks; "
+        "'voortaan', 'elke week/maand', 'blijf me herinneren', 'vanaf nu', 'periodiek'; also 'verwijder/stop die herinnering', 'zet uit', 'annuleer reminder'.\n"
+        "- task: explicit actions like 'maak', 'doe', 'zet', 'verwijder', 'update', 'stuur', tool execution (not search).\n"
+        "- research: market analysis, 'markt', 'trends', 'concurrenten', 'recente info', 'zoek', 'vind', 'look up', needs external sources.\n"
+        "- coding: code, implement, debug, refactor, repo, PR, tests, codebase, 'help me build'.\n"
+        "- reflection: 'klopt dit', 'controleer', 'ben je zeker', 'risico', 'wat mis ik', 'evalueer'.\n"
+        "- chat: simple Q&A, conversation, small talk, greetings, short questions that need no tools or search.\n\n"
+        "Respond with exactly one JSON object: {\"mode\": \"scheduling\"|\"task\"|\"research\"|\"coding\"|\"reflection\"|\"chat\", \"confidence\": 0.0-1.0}. "
+        "No other text."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def build_scheduling_intent_messages(message: str) -> List[Dict[str, str]]:
     """Build messages for LLM to classify whether the user message is about scheduling/reminders."""
     system = (
         "Determine if the user message is about scheduling, reminders, timers, alarms, or recurring/cron-like tasks. "
-        "Examples: setting a reminder, 'remind me in X', 'every day at 8', planning something at a specific time, etc. "
+        "Examples that ARE scheduling: setting a reminder, 'remind me in X', 'every day at 8', 'voortaan elke maandag', "
+        "'blijf me hieraan herinneren', 'elke ochtend om 8', 'vanaf volgende week elke dag', planning at a specific time, "
+        "or asking to cancel/remove/stop a reminder or scheduled job. "
+        "Examples that are NOT: general chat, weather, non-time-related questions. "
         "Answer with ONLY a JSON object, no other text. Format: {\"scheduling_intent\": true} or {\"scheduling_intent\": false}."
     )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": (message or "").strip() or " "},
+    ]
+
+
+def build_daily_summary_messages(session_summary_texts: List[str]) -> List[Dict[str, str]]:
+    """Build messages for LLM to summarize a day's session summaries into one daily summary."""
+    if not session_summary_texts:
+        return []
+    block = "\n".join(f"- {s}" for s in session_summary_texts)
+    system = (
+        "You are given a list of short session summaries from one day of conversation. "
+        "Write one short paragraph (2-4 sentences) summarizing the day: main topics and outcomes. "
+        "Keep it concise. Use the same language as the summaries (Dutch or English). "
+        "Respond with only the summary text, no JSON and no other formatting."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "Session summaries for the day:\n" + block},
+    ]
+
+
+def build_session_summary_messages(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Build messages for LLM to summarize a chat session (for compaction)."""
+    if not messages:
+        return []
+    lines = []
+    for m in messages:
+        role = m.get("role", "unknown")
+        content = (m.get("content") or "").strip() or "(empty)"
+        lines.append(f"{role}: {content}")
+    conversation_block = "\n".join(lines)
+    system = (
+        "You are given a conversation (chat session) between user and assistant. "
+        "Write one short paragraph (2-4 sentences) summarizing: main topics, questions asked, key answers or outcomes. "
+        "Keep it factual and concise. Use the same language as the conversation (Dutch or English). "
+        "Respond with only the summary text, no JSON and no other formatting."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "Conversation:\n" + conversation_block},
     ]
 
 
@@ -417,6 +533,7 @@ def get_agent_loop_system_prompt(agent_name: str, tools_list_text: str) -> str:
     return (
         f"You are {name} in agent mode. You must respond with exactly one JSON object. No other text.\n\n"
         "Language: Use the same language as the user's message. If the user wrote in Dutch, use Dutch for goal, plan, and all tool arguments (e.g. web.search \"query\" must be in Dutch). If they wrote in English, use English. Do not translate the user's language.\n\n"
+        f"{get_web_search_rules()}\n\n"
         "For small talk and greetings, always return tool_calls: null.\n\n"
         "Available tools (name(params): required params without ?, optional with ?; use these exact names in \"arguments\"):\n"
         f"{tools_list_text}\n\n"
@@ -425,26 +542,40 @@ def get_agent_loop_system_prompt(agent_name: str, tools_list_text: str) -> str:
 
 
 def get_agent_plan_action_instruction() -> str:
-    """Instruction for first step: output goal, plan, and optional tool_calls."""
+    """Instruction for first step: output goal, plan, next_action, tool_calls, optional response_outline and question_to_user."""
     return (
-        "Output one JSON object with: \"goal\" (one sentence), \"plan\" (array of short steps), "
-        "\"tool_calls\" (array of {\"name\": \"tool_name\", \"arguments\": {{...}}} or null if no tools needed). "
-        "In \"arguments\" use only the exact parameter names shown in the tool list (e.g. path not file_path for codebase.read_file). "
-        "For web.search: the \"query\" must be in the same language as the user's message—do not translate to English (e.g. if the user wrote in Dutch, keep the search query in Dutch for better local results). "
-        "Use tool_calls only when the user clearly asks for an action that requires a tool (e.g. look up code, set a reminder, get dashboard link). "
-        "For greetings, small talk, short or unclear messages always use tool_calls: null and a one-sentence goal; do not invent tasks (e.g. codebase or file actions)."
+        "Output exactly one JSON object. Required fields:\n"
+        "- \"goal\": one sentence describing what we want to achieve.\n"
+        "- \"plan\": array of short step strings (optional but recommended).\n"
+        "- \"next_action\": exactly one of \"tool\" | \"respond\" | \"ask_user\" | \"revise_plan\".\n"
+        "  Use \"tool\" only when you are requesting tool_calls in this same output. "
+        "Use \"respond\" when you have enough information to answer the user (with or without having called tools). "
+        "Use \"ask_user\" when you must ask the user a question before continuing (provide \"question_to_user\"). "
+        "Use \"revise_plan\" only when changing the plan without executing tools now.\n"
+        "- \"tool_calls\": array of {\"name\": \"tool_name\", \"arguments\": {...}} or null. "
+        "In \"arguments\" use only the exact parameter names from the tool list (e.g. path not file_path for codebase.read_file). "
+        "For web.search: \"query\" must be in the same language as the user's message (e.g. Dutch if they wrote in Dutch).\n"
+        "Optional: \"response_outline\" (array of strings for the final reply structure), \"question_to_user\" (string, required when next_action is ask_user).\n"
+        "Use tool_calls only when the user clearly asks for an action that requires a tool. "
+        "For greetings, small talk, or unclear messages use next_action: \"respond\" and tool_calls: null; do not invent tasks."
     )
 
 
 def get_agent_reflect_instruction(observation_json: str) -> str:
-    """Instruction for reflect step: observation log + JSON schema."""
+    """Instruction for reflect step: observation log + JSON with next_action."""
     return (
         "Observation (log of what was done):\n"
         f"{observation_json}\n\n"
-        "Reflect on the observation. Output one JSON object with: \"reflection\" (1-2 sentences), "
-        "\"tool_calls\" (array of {\"name\": \"...\", \"arguments\": {{...}}} for more actions, or null if done and ready for final answer). "
-        "Use only the exact parameter names from the tool list in \"arguments\". "
-        "If adding web.search: keep the \"query\" in the same language as the user's original message (do not translate to English)."
+        "Reflect. Output exactly one JSON object with:\n"
+        "- \"reflection\": 1-2 sentences on what was done and what is still needed.\n"
+        "- \"next_action\": exactly one of \"tool\" | \"respond\" | \"ask_user\" | \"revise_plan\". "
+        "Use \"tool\" only if you are requesting more tool_calls below. "
+        "Use \"respond\" when done and ready to give the final answer to the user. "
+        "Use \"ask_user\" if you need a clarification (set \"question_to_user\").\n"
+        "- \"tool_calls\": array of {\"name\": \"...\", \"arguments\": {...}} or null. "
+        "Use only exact parameter names from the tool list. "
+        "For web.search keep \"query\" in the user's language.\n"
+        "Optional: \"response_outline\" (array of strings), \"question_to_user\" (string when next_action is ask_user)."
     )
 
 
@@ -490,6 +621,59 @@ def build_agent_final_messages(
         system_parts.append("\n" + format_preferences(agent_input.user_preferences, agent_input.household_preferences))
     messages = [{"role": "system", "content": "\n".join(system_parts)}]
     if agent_input.conversation_history:
-        messages.extend(agent_input.conversation_history[-6:])
+        messages.extend(agent_input.conversation_history[-20:])  # Session context
     messages.append({"role": "user", "content": agent_input.user_message})
+    return messages
+
+
+def build_writer_messages(
+    agent_name: str,
+    soul: Optional[str],
+    goal: str,
+    facts: List[str],
+    response_outline: Optional[List[str]] = None,
+    user_message: str = "",
+    no_tools_used: bool = False,
+) -> List[Dict[str, str]]:
+    """
+    Writer (LLM-B): only goal + facts + outline. No full conversation, no tool dumps.
+    Use for the final user-facing reply so the model does not leak planning/tool noise.
+    """
+    name = (agent_name or "ion").strip() or "ion"
+    system_parts = [get_system_prompt(name)]
+    if soul:
+        system_parts.append(f"Your name is {name}.\n\n{soul}")
+    system_parts.append(get_scheduling_prompt_addition())
+
+    if no_tools_used:
+        system_parts.append(
+            "\n\nYou are the Writer. Reply directly to the user in one short, natural message. "
+            "Do not mention codebase, tools, or any action you did not perform. "
+            "Use the same language as the user's message. "
+            "Write with correct grammar and spelling; do not merge words or invent compound words (e.g. write 'hoeveel tegels' not 'hoeveeltegels')."
+        )
+        user_content = f"Goal: {goal or 'Answer the user.'}\n\nUser message:\n{user_message}"
+    else:
+        facts_block = "\n".join(f"- " + f for f in facts) if facts else "(no tool results)"
+        outline_block = ""
+        if response_outline:
+            outline_block = "\nSuggested structure for your reply:\n" + "\n".join(f"- {s}" for s in response_outline)
+        system_parts.append(
+            "\n\nYou are the Writer. You receive only the goal and the facts gathered. "
+            "Your reply MUST: (1) Be in the same language as the user's message (Dutch if they wrote Dutch, etc.). "
+            "(2) Use correct grammar and spelling; do not merge words or invent compounds (e.g. 'hoeveel tegels' not 'hoeveeltegels', 'bestelt' not 'besteldoeist'). "
+            "(3) If the facts are from product/shopping search (web.shopping_search): give about 5 options and always include links so the user can click through. "
+            "If the facts are from general web search (web.search) or info: summarize as a clear explanation that answers the question; links are optional. "
+            "(4) Be concrete and useful; no generic filler. Never say you 'used a tool' or 'will search'—the results are below; answer now. "
+            "One natural message. You may use JSON {\"message\": \"...\"} or plain text."
+        )
+        user_content = (
+            f"Goal: {goal or 'N/A'}\n\nFacts (tool results):\n{facts_block}{outline_block}\n\n"
+            f"User message:\n{user_message}"
+        )
+
+    messages = [
+        {"role": "system", "content": "\n".join(system_parts)},
+        {"role": "user", "content": user_content},
+    ]
     return messages

@@ -7,6 +7,7 @@ All tools are pure Python functions with validated input/output.
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import json
 import importlib
 import pkgutil
@@ -126,6 +127,40 @@ def _load_skill_modules() -> None:
 
 
 # Tool implementations
+
+@register_tool(
+    name="get_current_time",
+    description="Get the current date and time (local or in a given IANA timezone). Use when the user asks for time, date, day of week, or when scheduling.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "timezone": {
+                "type": "string",
+                "description": "Optional IANA timezone (e.g. Europe/Amsterdam). If omitted, use Europe/Amsterdam as default.",
+            },
+        },
+        "required": [],
+    },
+)
+def get_current_time(
+    db: Session,
+    household_id: int,
+    timezone: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Return current date and time for the agent (e.g. for greetings, scheduling).
+    Default timezone: Europe/Amsterdam.
+    """
+    tz = ZoneInfo(timezone) if timezone else ZoneInfo("Europe/Amsterdam")
+    now = datetime.now(tz)
+    return {
+        "iso": now.isoformat(),
+        "date": now.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M"),
+        "weekday": now.strftime("%A"),
+        "timezone": str(tz),
+    }
+
 
 @register_tool(
     name="generate_week_menu",

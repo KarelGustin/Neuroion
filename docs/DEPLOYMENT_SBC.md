@@ -71,7 +71,7 @@ pip install -r neuroion/core/requirements.txt
 
 ```bash
 # Setup UI
-cd setup-ui
+cd apps/setup-ui
 npm install
 npm run build
 
@@ -81,7 +81,7 @@ npm install
 npm run build
 
 # Dashboard
-cd ../dashboard-nextjs
+cd ../dashboard
 npm install
 npm run build
 ```
@@ -239,15 +239,15 @@ source venv/bin/activate
 python3 -m neuroion.core.main
 
 # Start setup UI (new terminal)
-cd setup-ui
+cd apps/setup-ui
 npm run dev
 
 # Start touchscreen UI (new terminal)
-cd touchscreen-ui
+cd apps/touchscreen-ui
 npm run dev
 
 # Start Next.js dashboard (new terminal)
-cd dashboard-nextjs
+cd apps/dashboard
 npm run dev
 ```
 

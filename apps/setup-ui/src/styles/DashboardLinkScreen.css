@@ -1,0 +1,101 @@
+.dashboard-link-card {
+  text-align: center;
+  padding: 2rem;
+  border-radius: 16px;
+  background: var(--bg-secondary, #111);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  min-width: 320px;
+  max-width: 420px;
+}
+
+.dashboard-link-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin: 0 0 0.5rem 0;
+}
+
+.dashboard-link-text {
+  font-size: 0.9375rem;
+  color: var(--text-secondary, #e5e5e5);
+  margin: 0 0 1.5rem 0;
+  line-height: 1.4;
+}
+
+.dashboard-link-button {
+  display: inline-block;
+  padding: 0.875rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: white;
+  background: var(--accent-blue, #3b82f6);
+  border: none;
+  border-radius: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.dashboard-link-button:hover {
+  background: var(--accent-blue-dark, #2563eb);
+}
+
+.dashboard-link-url {
+  font-size: 0.8125rem;
+  color: var(--text-muted, #a3a3a3);
+  margin: 1.5rem 0 0 0;
+  word-break: break-all;
+}
+
+.dashboard-link-app-qr {
+  margin-top: 1.5rem;
+}
+
+.dashboard-link-app-qr-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  margin: 0 0 0.5rem 0;
+}
+
+.dashboard-link-app-qr-text {
+  font-size: 0.9375rem;
+  color: var(--text-secondary, #e5e5e5);
+  margin: 0 0 1rem 0;
+  line-height: 1.4;
+}
+
+.dashboard-link-app-qr-code {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+  background: white;
+  border-radius: 12px;
+  margin: 0 auto 0.5rem;
+  width: fit-content;
+}
+
+.dashboard-link-app-qr-code-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted, #a3a3a3);
+  margin: 0;
+}
+
+.dashboard-link-invite {
+  margin-top: 1.5rem;
+}
+
+.dashboard-link-invite-error {
+  font-size: 0.875rem;
+  color: var(--accent-red, #ef4444);
+  margin: 0.75rem 0 0;
+}
+
+.dashboard-link-button-secondary {
+  background: var(--bg-tertiary, #333);
+  margin-top: 0.5rem;
+}
+
+.dashboard-link-button-secondary:hover {
+  background: var(--border-default, rgba(255, 255, 255, 0.15));
+}

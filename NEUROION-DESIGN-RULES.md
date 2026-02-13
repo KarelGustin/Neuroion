@@ -1,6 +1,6 @@
 # Neuroion design rules
 
-Use this document to keep all Neuroion UIs (touchscreen-ui, setup-ui, dashboard-nextjs, dashboard-ui, etc.) visually and behaviorally consistent. The target aesthetic is **Vercel/Apple-like**: calm, premium, clear hierarchy, and plenty of whitespace.
+Use this document to keep all Neuroion UIs (touchscreen-ui, setup-ui, dashboard, etc.) visually and behaviorally consistent. The target aesthetic is **Vercel/Apple-like**: calm, premium, clear hierarchy, and plenty of whitespace.
 
 ---
 
@@ -157,7 +157,7 @@ Use a consistent scale. Prefer tokens over raw pixels.
 ## 5. Implementation per app
 
 - **touchscreen-ui:** Reference implementation; uses `variables.css` and the patterns above.
-- **setup-ui / dashboard-ui (Vite/React):** Add a `variables.css` (or copy from touchscreen-ui) and import it first; use the same tokens in component CSS.
-- **dashboard-nextjs:** Use the same token names in CSS Modules, Tailwind theme, or global CSS so values match this doc. If using Tailwind, map `colors`, `fontSize`, `spacing`, and `borderRadius` to these tokens.
+- **setup-ui (Vite/React):** Add a `variables.css` (or copy from touchscreen-ui) and import it first; use the same tokens in component CSS.
+- **dashboard (Next.js):** Use the same token names in CSS Modules, Tailwind theme, or global CSS so values match this doc. If using Tailwind, map `colors`, `fontSize`, `spacing`, and `borderRadius` to these tokens.
 
 When in doubt, align with the touchscreen-ui implementation and this document.

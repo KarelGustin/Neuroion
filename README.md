@@ -56,10 +56,9 @@ Neuroion is a privacy-first home intelligence system that runs entirely on your 
    pip install -r requirements.txt
    ```
 
-3. **Initialize database**:
+3. **Initialize database** (created automatically on first API run). For demo data (default household), run:
    ```bash
-   python -m neuroion.core.main
-   # Database will be created automatically
+   python scripts/seed_demo.py
    ```
 
 4. **Start the Homebase server**:
@@ -69,7 +68,7 @@ Neuroion is a privacy-first home intelligence system that runs entirely on your 
 
 5. **Start the setup UI** (in another terminal):
    ```bash
-   cd setup-ui
+   cd apps/setup-ui
    npm install
    npm run dev
    ```
@@ -78,7 +77,7 @@ Neuroion is a privacy-first home intelligence system that runs entirely on your 
    ```bash
    export TELEGRAM_BOT_TOKEN=your_bot_token
    export HOMEBASE_URL=http://localhost:8000
-   python -m telegram.bot
+   python -m neuroion.telegram.bot
    ```
 
 ### Run everything locally (one command)
@@ -94,7 +93,7 @@ From the **repository root**, after installing Python and Node dependencies once
 2. **Node**: install root and subproject deps (run from repo root):
    ```bash
    npm install
-   npm install --prefix setup-ui && npm install --prefix touchscreen-ui && npm install --prefix dashboard-nextjs
+   npm install --prefix apps/setup-ui && npm install --prefix apps/touchscreen-ui && npm install --prefix apps/dashboard
    ```
 3. **Start everything**:
    ```bash
@@ -112,7 +111,7 @@ This starts:
 | Touchscreen UI | http://localhost:3001  |
 | Dashboard      | http://localhost:3002  |
 
-If you set **`API_PORT`** in `.env` (e.g. `API_PORT=8001`), also set **`VITE_API_PORT=8001`** in the same `.env` so the touchscreen-ui, setup-ui and dashboard-ui use that API port. For the dashboard-nextjs app, set **`NEXT_PUBLIC_API_PORT=8001`**. The backend, Telegram default URL, and dev scripts already read `API_PORT`.
+If you set **`API_PORT`** in `.env` (e.g. `API_PORT=8001`), also set **`VITE_API_PORT=8001`** in the same `.env` so the touchscreen-ui and setup-ui use that API port. For the dashboard app, set **`NEXT_PUBLIC_API_PORT=8001`**. The backend, Telegram default URL, and dev scripts already read `API_PORT`.
 
 Useful for **local testing** and **testing on a Raspberry Pi** on your network (open the URLs via the Pi’s IP, e.g. `http://192.168.1.x:3001` for the touchscreen).
 
@@ -141,18 +140,25 @@ Useful for **local testing** and **testing on a Raspberry Pi** on your network (
 
 ```
 Neuroion/
-├── neuroion/
-│   └── core/              # FastAPI core server
-│       ├── api/           # API endpoints
-│       ├── agent/         # Agent system
-│       ├── llm/           # LLM integration
-│       ├── memory/        # Database layer
-│       └── security/      # Security & auth
-├── setup-ui/              # React setup UI
-├── telegram/              # Telegram bot service
-├── ios/                   # iOS SwiftUI app
-└── infra/                 # Docker & deployment
+├── neuroion/              # Python package (backend)
+│   ├── core/              # FastAPI core server
+│   │   ├── api/           # API endpoints
+│   │   ├── agent/         # Agent system
+│   │   ├── llm/           # LLM integration
+│   │   ├── memory/        # Database layer
+│   │   └── security/      # Security & auth
+│   └── telegram/          # Telegram bot (standalone or embedded)
+├── apps/                  # Frontend applications
+│   ├── setup-ui/          # React setup wizard
+│   ├── touchscreen-ui/    # Kiosk / touch UI
+│   └── dashboard/        # Next.js dashboard
+├── scripts/               # Dev and utility scripts (e.g. seed_demo.py)
+├── infra/                 # Docker & deployment
+├── docs/                  # Documentation
+└── ios/                   # iOS SwiftUI app
 ```
+
+For demo data (default household), run from repo root: `python scripts/seed_demo.py`.
 
 ## Adding Agent Skills
 

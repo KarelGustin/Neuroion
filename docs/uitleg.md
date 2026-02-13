@@ -29,7 +29,7 @@
 | Doel | Bestand(en) |
 |------|-------------|
 | Cron-job limiet of tijdzone wijzigen | `neuroion/core/config.py` (env vars), `neuroion/core/cron/validation.py`, `neuroion/core/cron/service.py` |
-| Telegram-berichten aanpassen | `telegram/bot.py` (`handle_message`, `execute_command`) |
+| Telegram-berichten aanpassen | `neuroion/telegram/bot.py` (`handle_message`, `execute_command`) |
 | Agent prompt (normale chat) | `neuroion/core/agent/prompts.py` |
 | Task-prompt (alleen JSON) | `neuroion/core/agent/task_prompts.py` |
 | Welke tool wanneer uitvoeren | `neuroion/core/agent/tools/dispatcher.py`, `neuroion/core/agent/tools/cron_handlers.py` |

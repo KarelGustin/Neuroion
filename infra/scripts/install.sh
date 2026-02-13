@@ -60,17 +60,17 @@ pip install -r neuroion/core/requirements.txt
 
 # Install Node.js dependencies and build UIs
 echo "Building setup UI..."
-cd "$PROJECT_ROOT/setup-ui"
+cd "$PROJECT_ROOT/apps/setup-ui"
 npm install
 npm run build
 
 echo "Building touchscreen UI..."
-cd "$PROJECT_ROOT/touchscreen-ui"
+cd "$PROJECT_ROOT/apps/touchscreen-ui"
 npm install
 npm run build
 
 echo "Building Next.js dashboard..."
-cd "$PROJECT_ROOT/dashboard-nextjs"
+cd "$PROJECT_ROOT/apps/dashboard"
 npm install
 npm run build
 

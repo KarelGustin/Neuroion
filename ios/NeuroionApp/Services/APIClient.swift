@@ -2,7 +2,7 @@
 //  APIClient.swift
 //  NeuroionApp
 //
-//  HTTP client for Homebase API
+//  HTTP client for Homebase API. Uses ConnectionManager for configurable base URL.
 //
 
 import Foundation
@@ -10,12 +10,28 @@ import Foundation
 class APIClient {
     static let shared = APIClient()
     
-    private let baseURL: String
     private let session: URLSession
     
-    init(baseURL: String = "http://localhost:8000") {
-        self.baseURL = baseURL
+    /// Encoder: camelCase → snake_case for API request bodies
+    private let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.keyEncodingStrategy = .convertToSnakeCase
+        return e
+    }()
+    
+    /// Decoder: snake_case → camelCase for API responses
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        return d
+    }()
+    
+    init() {
         self.session = URLSession.shared
+    }
+    
+    private var baseURL: String {
+        ConnectionManager.shared.effectiveBaseURL
     }
     
     func request<T: Decodable>(
@@ -24,7 +40,8 @@ class APIClient {
         body: Encodable? = nil,
         token: String? = nil
     ) async throws -> T {
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+        let path = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        guard let url = URL(string: "\(baseURL)\(path)") else {
             throw APIError.invalidURL
         }
         
@@ -37,7 +54,7 @@ class APIClient {
         }
         
         if let body = body {
-            request.httpBody = try JSONEncoder().encode(body)
+            request.httpBody = try encoder.encode(body)
         }
         
         let (data, response) = try await session.data(for: request)
@@ -50,7 +67,7 @@ class APIClient {
             throw APIError.httpError(httpResponse.statusCode)
         }
         
-        return try JSONDecoder().decode(T.self, from: data)
+        return try decoder.decode(T.self, from: data)
     }
 }
 

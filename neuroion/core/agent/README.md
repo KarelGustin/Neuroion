@@ -33,3 +33,10 @@ All user-facing chat is **strictly per `user_id`**. The gateway and agent receiv
 - **tool_router.py**: Exposes cron and registry tools to the LLM; `get_all_tools_for_llm()`, `call(tool_name, args, context)`.
 - **prompts.py**: System prompt, SOUL, scheduling; identity and "one answer" behaviour; untrusted-tool warning in tool-result messages.
 - **task_prompts.py**: System prompt for task path (JSON-only protocol) when `X-Agent-Task-Mode: 1` is used.
+
+## File map
+
+- **Loop (agentic turn)**: `agent.py` → `gateway.py` → `agentic.py` (plan/act/reflect); one iteration is `agent_loop.py` (plan → act → validate). `planner.py` and `executor.py` drive the task path; `types.py` holds `RunContext`, `RunState`, `Action`, `Observation`, `ToolResult`.
+- **Tools**: Tools are registered in `tool_registry.py` (decorator `@register_tool`). Implementations live in `tools/` (e.g. `dispatcher.py`, `cron_handlers.py`) and in `neuroion.core.skills` and `agent/skills/` (auto-loaded). Cron tool schemas for the LLM: `cron_tools_schema.py`. Routing and execution: `tool_router.py`, `tool_protocol.py`.
+- **Policies**: `policies/guardrails.py`, `policies/validator.py` – safety and output validation.
+- **Onboarding**: `onboarding.py` – onboarding question index, completion state, and prompt addition for the agent when the user is in onboarding.

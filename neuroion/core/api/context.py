@@ -1,7 +1,7 @@
 """
 Context API: list, add, and delete current user's context snapshots.
 
-Used by dashboard-ui Context tab for personal context management.
+Used by the dashboard for personal context management.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
