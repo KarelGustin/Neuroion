@@ -198,6 +198,60 @@ def _is_web_research_intent(message: str) -> bool:
     return any(p in lower for p in search_phrases)
 
 
+def run_chat_mode(agent_input: AgentInput, llm: LLMClient) -> str:
+    """
+    Chat mode: single LLM call, no plan/reflect, no tools.
+    For simple Q&A, conversation, small talk. One turn, low latency.
+    """
+    messages = build_chat_messages_from_input(agent_input)
+    try:
+        raw = llm.chat(messages, temperature=0.45)
+    except Exception as e:
+        logger.warning("Chat mode failed: %s", e)
+        return "I had trouble answering. Please try again."
+    reply = parse_final_response(raw)
+    if not reply:
+        reply = (raw or "").strip()
+    return reply.strip()
+
+
+def run_reflection_workflow(agent_input: AgentInput, llm: LLMClient) -> str:
+    """
+    Reflection/QA mode: evaluate last exchange for gaps, risks, what's missing.
+    One LLM call; no tool loop unless we extend later.
+    """
+    history = agent_input.conversation_history or []
+    last_user = ""
+    last_assistant = ""
+    for i in range(len(history) - 1, -1, -1):
+        role = (history[i].get("role") or "").strip().lower()
+        content = (history[i].get("content") or "").strip()
+        if role == "user" and not last_user:
+            last_user = content
+        elif role == "assistant" and not last_assistant:
+            last_assistant = content
+        if last_user and last_assistant:
+            break
+    if not last_assistant:
+        return run_chat_mode(agent_input, llm)
+    system = (
+        "You evaluate an assistant's answer for gaps, risks, and what might be missing. "
+        "Reply in 1-2 short paragraphs: what is solid, what could be wrong or incomplete, and what the user might still need. "
+        "Use the same language as the user. Be concise."
+    )
+    user_content = (
+        f"User asked:\n{last_user}\n\nAssistant replied:\n{last_assistant}\n\n"
+        "Evaluate this answer. What is missing or risky?"
+    )
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
+    try:
+        raw = llm.chat(messages, temperature=0.3)
+        return (raw or "").strip()
+    except Exception as e:
+        logger.warning("Reflection workflow failed: %s", e)
+        return "I couldn't evaluate that. Please try again."
+
+
 def run_agent_turn(
     *,
     agent_input: AgentInput,
@@ -205,19 +259,24 @@ def run_agent_turn(
     household_id: int,
     user_id: Optional[int],
     llm: LLMClient,
+    use_codebase_tools: Optional[bool] = None,
 ) -> str:
     """
     Run agentic turn: plan (JSON) → action (execute tools, log) → observe → reflect (JSON) → repeat or final.
-    Final response uses full system prompt + SOUL. Falls back to legacy single-call flow on JSON errors.
+    use_codebase_tools: True = allow all tools (coding mode); False = exclude codebase (research); None = infer from message.
     """
     tool_router = get_tool_router()
     tool_registry = get_tool_registry()
     all_tool_names = list(tool_router.get_all_tool_names())
-    # For web research / product queries, do not allow codebase tools (prevents hallucinated file reads)
-    if _is_web_research_intent(agent_input.user_message or ""):
+    if use_codebase_tools is True:
+        allowed_tools = all_tool_names
+    elif use_codebase_tools is False:
         allowed_tools = [t for t in all_tool_names if not t.startswith("codebase.")]
     else:
-        allowed_tools = all_tool_names
+        if _is_web_research_intent(agent_input.user_message or ""):
+            allowed_tools = [t for t in all_tool_names if not t.startswith("codebase.")]
+        else:
+            allowed_tools = all_tool_names
     name = (agent_input.agent_name or "ion").strip() or "ion"
     user_message = agent_input.user_message or ""
 

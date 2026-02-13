@@ -97,7 +97,8 @@ def get_scheduling_prompt_addition() -> str:
     """Addition to system prompt: when user explicitly asks for scheduling/reminders, use cron.* tools. Default timezone Europe/Amsterdam."""
     return (
         "\n\nScheduling: Use the cron.* tools when the user explicitly asks for a reminder, scheduled action or recurring task. "
-        "Tool descriptions define when each tool applies. Use Europe/Amsterdam as default timezone when not specified."
+        "Tool descriptions define when each tool applies. Use Europe/Amsterdam as default timezone when not specified. "
+        "When creating a scheduled job: always describe in plain language what you will create (when, what message) and ask for confirmation (e.g. 'Zal ik dit inplannen?') before calling cron.add; only create the job after the user agrees."
     )
 
 
@@ -195,13 +196,21 @@ def build_chat_messages_from_input(input: AgentInput) -> List[Dict[str, str]]:
     system_parts.append(get_scheduling_prompt_addition())
     if input.system_instructions_extra:
         system_parts.append("\n" + input.system_instructions_extra)
+    if getattr(input, "user_location", None):
+        system_parts.append("\nUser context (always consider):\n" + input.user_location)
+    if getattr(input, "session_summaries_text", None):
+        system_parts.append("\n" + input.session_summaries_text)
+    if getattr(input, "daily_summaries_text", None):
+        system_parts.append("\n" + input.daily_summaries_text)
+    if getattr(input, "user_memories_text", None):
+        system_parts.append("\n" + input.user_memories_text)
     if input.memory:
         system_parts.append("\n" + format_context_snapshots(input.memory))
     if input.user_preferences or input.household_preferences:
         system_parts.append("\n" + format_preferences(input.user_preferences, input.household_preferences))
     messages.append({"role": "system", "content": "\n".join(system_parts)})
     if input.conversation_history:
-        messages.extend(input.conversation_history[-6:])
+        messages.extend(input.conversation_history)
     messages.append({"role": "user", "content": input.user_message})
     return messages
 
@@ -254,7 +263,7 @@ def build_structured_tool_messages(
     system_content = _get_structured_tool_identity(agent_name) + "\n\n" + get_structured_tool_prompt(tools)
     messages = [{"role": "system", "content": system_content}]
     if conversation_history:
-        messages.extend(conversation_history[-6:])  # Agent already filtered; cap at 6
+        messages.extend(conversation_history[-20:])  # Session context; cap to avoid token overflow
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -289,7 +298,7 @@ def build_tool_result_messages(
     )
     messages = [{"role": "system", "content": "\n".join(system_parts)}]
     if conversation_history:
-        messages.extend(conversation_history[-6:])  # Agent already filtered; cap at 6
+        messages.extend(conversation_history[-20:])  # Session context; cap to avoid token overflow
     messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -359,16 +368,103 @@ def build_meta_question_classifier_messages(
     ]
 
 
+# Intent → Mode → Workflow: high-level modes for the router (priority order: scheduling, task, research, coding, reflection, chat)
+MODE_SCHEDULING = "scheduling"
+MODE_TASK = "task"
+MODE_RESEARCH = "research"
+MODE_CODING = "coding"
+MODE_REFLECTION = "reflection"
+MODE_CHAT = "chat"
+VALID_MODES = (MODE_SCHEDULING, MODE_TASK, MODE_RESEARCH, MODE_CODING, MODE_REFLECTION, MODE_CHAT)
+
+ROUTER_CONFIDENCE_THRESHOLD = 0.6
+
+
+def build_mode_router_messages(
+    user_message: str,
+    recent_messages: Optional[List[Dict[str, str]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Build messages for the intent/mode router. Returns mode + confidence.
+    Priority: scheduling > task > research > coding > reflection > chat.
+    """
+    recent = recent_messages or []
+    context = ""
+    if recent:
+        lines = [f"{m.get('role', '?')}: {(m.get('content') or '')[:200]}" for m in recent[-4:]]
+        context = "Recent conversation:\n" + "\n".join(lines) + "\n\n"
+    user_content = context + "Current user message:\n" + (user_message or "").strip()
+    system = (
+        "You are a mode classifier. Choose exactly one mode for the user's message.\n\n"
+        "Modes (in priority order):\n"
+        "- scheduling: reminders, cron, 'elke dag', 'over 20 min', 'herinner', 'plan een afspraak', recurring tasks; "
+        "'voortaan', 'elke week/maand', 'blijf me herinneren', 'vanaf nu', 'periodiek'; also 'verwijder/stop die herinnering', 'zet uit', 'annuleer reminder'.\n"
+        "- task: explicit actions like 'maak', 'doe', 'zet', 'verwijder', 'update', 'stuur', tool execution (not search).\n"
+        "- research: market analysis, 'markt', 'trends', 'concurrenten', 'recente info', 'zoek', 'vind', 'look up', needs external sources.\n"
+        "- coding: code, implement, debug, refactor, repo, PR, tests, codebase, 'help me build'.\n"
+        "- reflection: 'klopt dit', 'controleer', 'ben je zeker', 'risico', 'wat mis ik', 'evalueer'.\n"
+        "- chat: simple Q&A, conversation, small talk, greetings, short questions that need no tools or search.\n\n"
+        "Respond with exactly one JSON object: {\"mode\": \"scheduling\"|\"task\"|\"research\"|\"coding\"|\"reflection\"|\"chat\", \"confidence\": 0.0-1.0}. "
+        "No other text."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
+
+
 def build_scheduling_intent_messages(message: str) -> List[Dict[str, str]]:
     """Build messages for LLM to classify whether the user message is about scheduling/reminders."""
     system = (
         "Determine if the user message is about scheduling, reminders, timers, alarms, or recurring/cron-like tasks. "
-        "Examples: setting a reminder, 'remind me in X', 'every day at 8', planning something at a specific time, etc. "
+        "Examples that ARE scheduling: setting a reminder, 'remind me in X', 'every day at 8', 'voortaan elke maandag', "
+        "'blijf me hieraan herinneren', 'elke ochtend om 8', 'vanaf volgende week elke dag', planning at a specific time, "
+        "or asking to cancel/remove/stop a reminder or scheduled job. "
+        "Examples that are NOT: general chat, weather, non-time-related questions. "
         "Answer with ONLY a JSON object, no other text. Format: {\"scheduling_intent\": true} or {\"scheduling_intent\": false}."
     )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": (message or "").strip() or " "},
+    ]
+
+
+def build_daily_summary_messages(session_summary_texts: List[str]) -> List[Dict[str, str]]:
+    """Build messages for LLM to summarize a day's session summaries into one daily summary."""
+    if not session_summary_texts:
+        return []
+    block = "\n".join(f"- {s}" for s in session_summary_texts)
+    system = (
+        "You are given a list of short session summaries from one day of conversation. "
+        "Write one short paragraph (2-4 sentences) summarizing the day: main topics and outcomes. "
+        "Keep it concise. Use the same language as the summaries (Dutch or English). "
+        "Respond with only the summary text, no JSON and no other formatting."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "Session summaries for the day:\n" + block},
+    ]
+
+
+def build_session_summary_messages(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Build messages for LLM to summarize a chat session (for compaction)."""
+    if not messages:
+        return []
+    lines = []
+    for m in messages:
+        role = m.get("role", "unknown")
+        content = (m.get("content") or "").strip() or "(empty)"
+        lines.append(f"{role}: {content}")
+    conversation_block = "\n".join(lines)
+    system = (
+        "You are given a conversation (chat session) between user and assistant. "
+        "Write one short paragraph (2-4 sentences) summarizing: main topics, questions asked, key answers or outcomes. "
+        "Keep it factual and concise. Use the same language as the conversation (Dutch or English). "
+        "Respond with only the summary text, no JSON and no other formatting."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "Conversation:\n" + conversation_block},
     ]
 
 
@@ -525,7 +621,7 @@ def build_agent_final_messages(
         system_parts.append("\n" + format_preferences(agent_input.user_preferences, agent_input.household_preferences))
     messages = [{"role": "system", "content": "\n".join(system_parts)}]
     if agent_input.conversation_history:
-        messages.extend(agent_input.conversation_history[-6:])
+        messages.extend(agent_input.conversation_history[-20:])  # Session context
     messages.append({"role": "user", "content": agent_input.user_message})
     return messages
 

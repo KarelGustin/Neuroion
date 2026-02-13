@@ -5,6 +5,7 @@
 //  HealthKit integration for health summaries (with explicit consent)
 //
 
+import Combine
 import Foundation
 import HealthKit
 
@@ -30,7 +31,7 @@ class HealthKitService: ObservableObject {
             throw HealthKitError.notAvailable
         }
         
-        try await healthStore.requestAuthorization(toShare: nil, read: readTypes)
+        try await healthStore.requestAuthorization(toShare: Set<HKSampleType>(), read: readTypes)
     }
     
     func startMonitoring() {

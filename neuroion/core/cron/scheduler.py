@@ -110,6 +110,14 @@ def _tick() -> None:
             record = {"timestamp": now.isoformat(), "status": "error", "error": str(e)}
             storage.append_run(job.id, record)
 
+    # Run daily summary compaction once per day (in first 5 minutes after midnight UTC)
+    if now.hour == 0 and now.minute < 5:
+        try:
+            from neuroion.core.agent.daily_compaction import maybe_run_daily_compaction
+            maybe_run_daily_compaction()
+        except Exception as e:
+            logger.exception("daily compaction check failed: %s", e)
+
 
 async def run_scheduler_loop() -> None:
     """Async loop: every TICK_INTERVAL seconds run _tick()."""

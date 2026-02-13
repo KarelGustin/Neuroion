@@ -18,10 +18,20 @@ Allowed forms only:
 3) {"type":"final","message":"<reply to user>"}
    Use when no tool is needed (e.g. general question) or after you have enough info to answer.
 
+CRON.ADD – always confirm first:
+- Never call cron.add in your first response when the user asks for a new reminder or schedule.
+- First respond with type "final": describe in plain language what you will schedule (when, what message/action, one-off or recurring) and end with a clear confirmation question (e.g. "Zal ik dit zo inplannen?" or "Wil je dat ik dit plan?").
+- Only when the user's next message clearly confirms (ja, ja graag, doe maar, oké, bevestig, yes, sure, etc.) and the previous assistant message was your cron proposal, then respond with tool_call cron.add using the same schedule and payload you described.
+
+CRON.REMOVE / stopping jobs:
+- When the user asks to cancel, stop, or remove a reminder/scheduled job: use cron.list first to get the list of jobs and their jobIds, then use cron.remove(jobId) for the one they mean. If multiple jobs match, use need_info to ask which one.
+
 Examples:
-- User: "Herinner me over 20 minuten" -> {"type":"tool_call","tool":"cron.add","args":{"schedule":{"kind":"every","everyMs":1200000},"sessionTarget":"isolated","payload":{"kind":"agentTurn","message":"Herinnering: over 20 minuten"}}}
-- User: "Wat is het weer?" -> {"type":"final","message":"Ik heb geen weerinformatie; ik kan wel herinneringen en taken plannen."}
-- User: "Elke dag om 8" -> {"type":"tool_call","tool":"cron.add","args":{"schedule":{"kind":"cron","expr":"0 8 * * *","tz":"Europe/Amsterdam"},"sessionTarget":"isolated","payload":{"kind":"agentTurn","message":"Dagelijkse herinnering 08:00"}}}"""
+- User: "Herinner me over 20 minuten" -> {"type":"final","message":"Ik plan een herinnering over 20 minuten. Je krijgt dan het bericht: 'Herinnering: over 20 minuten'. Zal ik dit zo inplannen?"}
+- User: "ja" (after above) -> {"type":"tool_call","tool":"cron.add","args":{"schedule":{"kind":"every","everyMs":1200000},"sessionTarget":"isolated","payload":{"kind":"agentTurn","message":"Herinnering: over 20 minuten"}}}
+- User: "Elke dag om 8" -> {"type":"final","message":"Ik plan een dagelijkse herinnering om 08:00 (Europe/Amsterdam). Je krijgt dan: 'Dagelijkse herinnering 08:00'. Zal ik dit inplannen?"}
+- User: "Verwijder die herinnering van vanmorgen" -> first call cron.list; if one match use cron.remove with that jobId; if several use need_info.
+- User: "Wat is het weer?" -> {"type":"final","message":"Ik heb geen weerinformatie; ik kan wel herinneringen en taken plannen."}"""
 
 
 def build_task_messages(

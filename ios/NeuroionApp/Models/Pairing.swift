@@ -5,6 +5,7 @@
 //  Pairing models
 //
 
+import Combine
 import Foundation
 import UIKit
 
@@ -59,6 +60,8 @@ struct EventResponse: Codable {
     let message: String
 }
 
+private let tokenKey = "neuroion_token"
+
 // Auth Manager
 class AuthManager: ObservableObject {
     @Published var isAuthenticated = false
@@ -66,6 +69,13 @@ class AuthManager: ObservableObject {
     
     private let apiClient = APIClient.shared
     private let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+    
+    init() {
+        if let storedToken = UserDefaults.standard.string(forKey: tokenKey) {
+            token = storedToken
+            isAuthenticated = true
+        }
+    }
     
     func pair(deviceId: String, pairingCode: String) async throws {
         let request = PairConfirmRequest(
@@ -82,22 +92,27 @@ class AuthManager: ObservableObject {
         await MainActor.run {
             self.token = response.token
             self.isAuthenticated = true
-            UserDefaults.standard.set(response.token, forKey: "neuroion_token")
+            UserDefaults.standard.set(response.token, forKey: tokenKey)
         }
     }
     
     func unpair() {
         token = nil
         isAuthenticated = false
-        UserDefaults.standard.removeObject(forKey: "neuroion_token")
+        UserDefaults.standard.removeObject(forKey: tokenKey)
     }
     
-    func loadStoredToken() {
-        if let storedToken = UserDefaults.standard.string(forKey: "neuroion_token") {
-            token = storedToken
-            isAuthenticated = true
-        }
-    }
+}
+
+struct ActionExecuteRequest: Codable {
+    let actionId: Int
+    enum CodingKeys: String, CodingKey { case actionId = "action_id" }
+}
+
+struct ActionExecuteResponse: Codable {
+    let success: Bool
+    let result: [String: AnyCodable]?
+    let error: String?
 }
 
 // Chat Service
@@ -109,6 +124,17 @@ class ChatService {
         
         return try await apiClient.request(
             endpoint: "/chat",
+            method: "POST",
+            body: request,
+            token: token
+        )
+    }
+    
+    func executeAction(actionId: Int, token: String) async throws -> ActionExecuteResponse {
+        let request = ActionExecuteRequest(actionId: actionId)
+        
+        return try await apiClient.request(
+            endpoint: "/chat/actions/execute",
             method: "POST",
             body: request,
             token: token

@@ -6,13 +6,17 @@ Routes user messages through the agent system and returns structured responses.
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from datetime import timedelta
 from typing import Optional, List, Dict, Any
 
 from neuroion.core.memory.db import get_db
 from neuroion.core.security.permissions import get_current_user
-from neuroion.core.agent.agent import Agent
+from neuroion.core.agent.agent import Agent, compact_and_save_session
 from neuroion.core.memory.repository import ChatMessageRepository
 from neuroion.core.services.request_counter import RequestCounter
+
+# Inactivity gap (minutes) after which a new session starts; previous session is then compacted.
+SESSION_INACTIVITY_MINUTES = 15
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -101,35 +105,60 @@ def chat(
     
     # Increment daily request counter
     RequestCounter.increment(db, household_id)
-    
-    # Always fetch conversation history from DB (server is source of truth; works after offline/restart)
-    conversation_history = ChatMessageRepository.get_conversation_history(
-        db=db,
-        household_id=household_id,
-        user_id=user_id,
-        limit=20,
-    )
 
-    # Save user message
-    ChatMessageRepository.create(
+    # Last message before this one (to detect session boundary)
+    recent = ChatMessageRepository.get_recent(db, household_id, limit=1, user_id=user_id)
+    last_msg = recent[0] if recent else None
+
+    # Save user message (server is source of truth)
+    new_user_message = ChatMessageRepository.create(
         db=db,
         household_id=household_id,
         user_id=user_id,
         role="user",
         content=request.message,
     )
-    
-    # Always use Python agent for user-scoped chat so user_id is enforced (conversation history,
-    # context and preferences stay strictly per user; neuroion_adapter does not receive user_id).
+
+    # If there was a gap >= SESSION_INACTIVITY_MINUTES, compact the previous session
+    if last_msg and new_user_message.created_at and last_msg.created_at:
+        gap = new_user_message.created_at - last_msg.created_at
+        if gap >= timedelta(minutes=SESSION_INACTIVITY_MINUTES):
+            previous_session = ChatMessageRepository.get_previous_session_messages(
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                before_created_at=new_user_message.created_at,
+                inactivity_minutes=SESSION_INACTIVITY_MINUTES,
+            )
+            if previous_session:
+                try:
+                    compact_and_save_session(
+                        db=db,
+                        household_id=household_id,
+                        user_id=user_id,
+                        messages=previous_session,
+                    )
+                except Exception:
+                    pass  # Don't fail the request if compaction fails
+
+    # Current session = all messages in the active window (including the one we just saved)
+    conversation_history = ChatMessageRepository.get_messages_for_current_session(
+        db=db,
+        household_id=household_id,
+        user_id=user_id,
+        before_or_at=None,
+        inactivity_minutes=SESSION_INACTIVITY_MINUTES,
+    )
+
     force_task_mode = (http_request.headers.get("X-Agent-Task-Mode") or "").strip() == "1"
     response = agent.process_message(
-            db=db,
-            household_id=household_id,
-            user_id=user_id,
-            message=request.message,
-            conversation_history=conversation_history,
-            force_task_mode=force_task_mode,
-        )
+        db=db,
+        household_id=household_id,
+        user_id=user_id,
+        message=request.message,
+        conversation_history=conversation_history,
+        force_task_mode=force_task_mode,
+    )
 
     # Save assistant response
     assistant_message = response.get("message", "")

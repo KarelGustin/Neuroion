@@ -20,6 +20,11 @@ class AgentInput:
     household_preferences: Optional[Dict[str, Any]] = None
     conversation_history: Optional[List[Dict[str, str]]] = None
     system_instructions_extra: Optional[str] = None  # e.g. scheduling addition
+    # Session & long-term context (formatted for system prompt)
+    user_location: Optional[str] = None  # e.g. "Timezone: Europe/Amsterdam"
+    session_summaries_text: Optional[str] = None  # Recent session summaries
+    daily_summaries_text: Optional[str] = None  # Last 3 days compacted
+    user_memories_text: Optional[str] = None  # Long-term facts about the user
 
 # Pending decision from LLM: (kind, payload) where kind in ("tool_call", "need_info", "final")
 PendingDecision = Tuple[str, Any]

@@ -15,6 +15,9 @@ from neuroion.core.memory.models import (
     User,
     Preference,
     ContextSnapshot,
+    SessionSummary,
+    DailySummary,
+    UserMemory,
     CronJobRecord,
     CronRunRecord,
     AuditLog,
@@ -804,6 +807,270 @@ class ChatMessageRepository:
                 }
             )
         return history
+
+    @staticmethod
+    def get_messages_for_current_session(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        before_or_at: Optional[datetime] = None,
+        inactivity_minutes: int = 15,
+    ) -> List[Dict[str, str]]:
+        """
+        Get all messages belonging to the current session in chronological order.
+        Session = messages where gap between consecutive messages is < inactivity_minutes.
+        before_or_at: consider only messages with created_at <= this time (e.g. time of latest message).
+        """
+        require_active_session(db)
+        query = (
+            db.query(ChatMessage)
+            .filter(
+                ChatMessage.household_id == household_id,
+                ChatMessage.user_id == user_id,
+            )
+        )
+        if before_or_at is not None:
+            query = query.filter(ChatMessage.created_at <= before_or_at)
+        messages = (
+            query.order_by(ChatMessage.created_at.desc())
+            .limit(500)
+            .all()
+        )
+        if not messages:
+            return []
+        # Build session: from newest backwards until we hit a gap >= inactivity_minutes
+        cutoff = timedelta(minutes=inactivity_minutes)
+        session_messages = []
+        prev_ts = None
+        for msg in messages:
+            ts = msg.created_at
+            if prev_ts is not None and (prev_ts - ts) > cutoff:
+                break
+            session_messages.append(msg)
+            prev_ts = ts
+        # Reverse to chronological order
+        session_messages.reverse()
+        return [{"role": m.role, "content": m.content} for m in session_messages]
+
+    @staticmethod
+    def get_previous_session_messages(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        before_created_at: datetime,
+        inactivity_minutes: int = 15,
+    ) -> List[ChatMessage]:
+        """
+        Get all messages of the session that ended before before_created_at.
+        Used to compact the previous session when a new one starts.
+        """
+        require_active_session(db)
+        # All messages strictly before before_created_at, newest first
+        messages = (
+            db.query(ChatMessage)
+            .filter(
+                ChatMessage.household_id == household_id,
+                ChatMessage.user_id == user_id,
+                ChatMessage.created_at < before_created_at,
+            )
+            .order_by(ChatMessage.created_at.desc())
+            .limit(500)
+            .all()
+        )
+        if not messages:
+            return []
+        cutoff = timedelta(minutes=inactivity_minutes)
+        session_messages = []
+        prev_ts = None
+        for msg in messages:
+            ts = msg.created_at
+            if prev_ts is not None and (prev_ts - ts) > cutoff:
+                break
+            session_messages.append(msg)
+            prev_ts = ts
+        session_messages.reverse()
+        return session_messages
+
+
+class SessionSummaryRepository:
+    """Repository for session summary operations."""
+
+    @staticmethod
+    def create(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        session_start_at: datetime,
+        session_end_at: datetime,
+        summary: str,
+        message_count: Optional[int] = None,
+    ) -> SessionSummary:
+        """Create a new session summary."""
+        require_active_session(db)
+        rec = SessionSummary(
+            household_id=household_id,
+            user_id=user_id,
+            session_start_at=session_start_at,
+            session_end_at=session_end_at,
+            summary=summary,
+            message_count=message_count,
+        )
+        db.add(rec)
+        db.commit()
+        safe_refresh(db, rec)
+        return rec
+
+    @staticmethod
+    def get_recent_for_user(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        limit: int = 5,
+    ) -> List[SessionSummary]:
+        """Get most recent session summaries for the user (newest first)."""
+        return (
+            db.query(SessionSummary)
+            .filter(
+                SessionSummary.household_id == household_id,
+                SessionSummary.user_id == user_id,
+            )
+            .order_by(SessionSummary.session_end_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+    @staticmethod
+    def get_for_date(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        day_start: datetime,
+        day_end: datetime,
+    ) -> List[SessionSummary]:
+        """Get session summaries with session_end_at in [day_start, day_end)."""
+        return (
+            db.query(SessionSummary)
+            .filter(
+                SessionSummary.household_id == household_id,
+                SessionSummary.user_id == user_id,
+                SessionSummary.session_end_at >= day_start,
+                SessionSummary.session_end_at < day_end,
+            )
+            .order_by(SessionSummary.session_end_at.asc())
+            .all()
+        )
+
+
+class DailySummaryRepository:
+    """Repository for daily summary operations."""
+
+    @staticmethod
+    def create_or_update(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        date: datetime,
+        summary: str,
+    ) -> DailySummary:
+        """Create or update daily summary for a user on a given date (date = 00:00:00)."""
+        require_active_session(db)
+        d = date.date() if isinstance(date, datetime) else date
+        day_start = datetime.combine(d, datetime.min.time())
+        rec = (
+            db.query(DailySummary)
+            .filter(
+                DailySummary.household_id == household_id,
+                DailySummary.user_id == user_id,
+                DailySummary.date == day_start,
+            )
+            .first()
+        )
+        if rec:
+            rec.summary = summary
+        else:
+            rec = DailySummary(
+                household_id=household_id,
+                user_id=user_id,
+                date=day_start,
+                summary=summary,
+            )
+            db.add(rec)
+        db.commit()
+        safe_refresh(db, rec)
+        return rec
+
+    @staticmethod
+    def get_recent_days(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        days: int = 3,
+    ) -> List[DailySummary]:
+        """Get daily summaries for the last `days` days (excluding today)."""
+        from datetime import date as date_type
+        today = date_type.today()
+        start = today - timedelta(days=days)
+        # Build datetime at 00:00 for comparison (SQLite stores as string)
+        start_dt = datetime.combine(start, datetime.min.time())
+        end_dt = datetime.combine(today, datetime.min.time())
+        return (
+            db.query(DailySummary)
+            .filter(
+                DailySummary.household_id == household_id,
+                DailySummary.user_id == user_id,
+                DailySummary.date >= start_dt,
+                DailySummary.date < end_dt,
+            )
+            .order_by(DailySummary.date.desc())
+            .limit(days)
+            .all()
+        )
+
+
+class UserMemoryRepository:
+    """Repository for long-term user memory operations."""
+
+    @staticmethod
+    def create(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        memory_type: str,
+        summary: str,
+        memory_metadata: Optional[Dict[str, Any]] = None,
+    ) -> UserMemory:
+        """Create a new user memory."""
+        require_active_session(db)
+        rec = UserMemory(
+            household_id=household_id,
+            user_id=user_id,
+            memory_type=memory_type[:50] if memory_type else "fact",
+            summary=summary,
+            memory_metadata=memory_metadata,
+        )
+        db.add(rec)
+        db.commit()
+        safe_refresh(db, rec)
+        return rec
+
+    @staticmethod
+    def get_all_for_user(
+        db: Session,
+        household_id: int,
+        user_id: int,
+        limit: int = 50,
+    ) -> List[UserMemory]:
+        """Get all long-term memories for the user (newest first)."""
+        return (
+            db.query(UserMemory)
+            .filter(
+                UserMemory.household_id == household_id,
+                UserMemory.user_id == user_id,
+            )
+            .order_by(UserMemory.created_at.desc())
+            .limit(limit)
+            .all()
+        )
 
 
 class SystemConfigRepository:

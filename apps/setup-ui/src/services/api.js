@@ -6,7 +6,7 @@ import axios from 'axios'
  * - If accessed via IP address, use that IP for API
  * - Falls back to environment variable or localhost
  */
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   // Use environment variable if explicitly set
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL

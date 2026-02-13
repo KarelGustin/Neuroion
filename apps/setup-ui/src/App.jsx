@@ -162,7 +162,7 @@ function App() {
   }
 
   if (setupComplete) {
-    return <DashboardLinkScreen />
+    return <DashboardLinkScreen pairingCode={pairingCode} />
   }
 
   return (

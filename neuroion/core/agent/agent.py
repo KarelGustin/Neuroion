@@ -18,10 +18,11 @@ from neuroion.core.llm.base import LLMClient
 from neuroion.core.memory.db import db_session
 from neuroion.core.agent.tool_registry import get_tool_registry
 from neuroion.core.agent.planner import Planner
-from neuroion.core.agent.gateway import run_agent_turn
+from neuroion.core.agent.gateway import run_agent_turn, run_chat_mode, run_reflection_workflow
 from neuroion.core.agent.types import AgentInput, RunContext, RunState
 from neuroion.core.agent.executor import get_executor
 from neuroion.core.agent.agent_loop import run_one_turn
+from neuroion.core.agent.agentic import extract_json_from_response
 from neuroion.core.agent.task_manager import (
     DONE,
     FAILED,
@@ -38,14 +39,32 @@ from neuroion.core.agent.task_prompts import build_task_messages
 from neuroion.core.agent.prompts import (
     build_history_relevance_messages,
     build_meta_question_classifier_messages,
+    build_mode_router_messages,
     build_scheduling_intent_messages,
+    build_session_summary_messages,
     get_soul_prompt,
+    MODE_CHAT,
+    MODE_CODING,
+    MODE_REFLECTION,
+    MODE_RESEARCH,
+    MODE_SCHEDULING,
+    MODE_TASK,
+    ROUTER_CONFIDENCE_THRESHOLD,
+    VALID_MODES,
 )
 from neuroion.core.agent.policies.guardrails import get_guardrails
 from neuroion.core.agent.policies.validator import get_validator
 from neuroion.core.observability.tracing import start_run, end_run
 from neuroion.core.observability.metrics import record_run_result
-from neuroion.core.memory.repository import ContextSnapshotRepository, PreferenceRepository, SystemConfigRepository
+from neuroion.core.memory.repository import (
+    ContextSnapshotRepository,
+    PreferenceRepository,
+    SystemConfigRepository,
+    UserRepository,
+    SessionSummaryRepository,
+    DailySummaryRepository,
+    UserMemoryRepository,
+)
 from neuroion.core.security.audit import AuditLogger
 
 
@@ -60,8 +79,19 @@ def _get_agent_executor() -> ThreadPoolExecutor:
     return _agent_executor
 
 
-def _load_context_task(household_id: int, user_id: Optional[int]) -> Tuple[List[Dict[str, Any]], Optional[Dict], Optional[Dict], str]:
-    """Run in thread: load context snapshots, preferences, agent_name. Uses its own DB session."""
+def _load_context_task(
+    household_id: int, user_id: Optional[int]
+) -> Tuple[
+    List[Dict[str, Any]],
+    Optional[Dict],
+    Optional[Dict],
+    str,
+    Optional[str],
+    Optional[str],
+    Optional[str],
+    Optional[str],
+]:
+    """Run in thread: load context snapshots, preferences, agent_name, location, session/daily summaries, user memories."""
     with db_session() as db:
         context_snapshots = ContextSnapshotRepository.get_recent(db, household_id, limit=10, user_id=user_id)
         context_dicts = [
@@ -79,7 +109,104 @@ def _load_context_task(household_id: int, user_id: Optional[int]) -> Tuple[List[
                     agent_name = v.strip()
             except (TypeError, ValueError):
                 pass
-        return (context_dicts, user_preferences, household_preferences, agent_name)
+
+        user_location: Optional[str] = None
+        session_summaries_text: Optional[str] = None
+        daily_summaries_text: Optional[str] = None
+        user_memories_text: Optional[str] = None
+
+        if user_id is not None:
+            user = UserRepository.get_by_id(db, user_id)
+            if user and getattr(user, "timezone", None):
+                tz = (user.timezone or "").strip() or "Europe/Amsterdam"
+                user_location = f"Timezone: {tz}. Always take the user's location and time into account (scheduling, local services, 'here', 'local', etc.)."
+
+            session_summaries = SessionSummaryRepository.get_recent_for_user(
+                db, household_id, user_id, limit=5
+            )
+            if session_summaries:
+                lines = [
+                    f"- [{s.session_end_at}] {s.summary}"
+                    for s in reversed(session_summaries)
+                ]
+                session_summaries_text = "Recent session context:\n" + "\n".join(lines)
+
+            daily_summaries = DailySummaryRepository.get_recent_days(
+                db, household_id, user_id, days=3
+            )
+            if daily_summaries:
+                lines = []
+                for s in daily_summaries:
+                    d = s.date.strftime("%Y-%m-%d") if hasattr(s.date, "strftime") else str(s.date)[:10]
+                    lines.append(f"- {d}: {s.summary}")
+                daily_summaries_text = "Summary of the last 3 days:\n" + "\n".join(lines)
+
+            user_memories = UserMemoryRepository.get_all_for_user(
+                db, household_id, user_id, limit=30
+            )
+            if user_memories:
+                lines = [f"- [{m.memory_type}] {m.summary}" for m in reversed(user_memories)]
+                user_memories_text = "What you know about this user (long-term):\n" + "\n".join(lines)
+
+        return (
+            context_dicts,
+            user_preferences,
+            household_preferences,
+            agent_name,
+            user_location,
+            session_summaries_text,
+            daily_summaries_text,
+            user_memories_text,
+        )
+
+
+# Max messages from current session to send to LLM (rest is summarized via session summaries)
+MAX_SESSION_MESSAGES_IN_CONTEXT = 50
+
+
+def _get_llm_task() -> LLMClient:
+    """Run in thread: get LLM client. Uses its own DB session."""
+    with db_session() as db:
+        return get_llm_client_from_config(db)
+
+
+def compact_and_save_session(
+    db: Session,
+    household_id: int,
+    user_id: int,
+    messages: List[Any],
+) -> None:
+    """
+    Summarize a list of chat messages (a session) and save as SessionSummary.
+    messages: list of objects with .role, .content, .created_at (e.g. ChatMessage).
+    """
+    if not messages or len(messages) == 0:
+        return
+    try:
+        llm = get_llm_client_from_config(db)
+    except Exception:
+        return
+    hist = [{"role": getattr(m, "role", m.get("role")), "content": getattr(m, "content", m.get("content", ""))} for m in messages]
+    prompt_messages = build_session_summary_messages(hist)
+    raw = llm.chat(prompt_messages, temperature=0.2, max_tokens=300)
+    summary = (raw or "").strip()[:2000] if raw else ""
+    if not summary:
+        return
+    first = messages[0]
+    last = messages[-1]
+    session_start_at = getattr(first, "created_at", first.get("created_at"))
+    session_end_at = getattr(last, "created_at", last.get("created_at"))
+    if not session_start_at or not session_end_at:
+        return
+    SessionSummaryRepository.create(
+        db=db,
+        household_id=household_id,
+        user_id=user_id,
+        session_start_at=session_start_at,
+        session_end_at=session_end_at,
+        summary=summary,
+        message_count=len(messages),
+    )
 
 
 def _relevance_and_llm_task(
@@ -144,37 +271,27 @@ class Agent:
         if user_id is not None:
             PreferenceRepository.delete_onboarding_preferences(db, household_id, user_id)
 
-        recent_6 = (conversation_history or [])[-6:]
+        # Use full current session as conversation history (caller provides session messages)
+        full_session = conversation_history or []
+        filtered_history = full_session[-MAX_SESSION_MESSAGES_IN_CONTEXT:] if full_session else []
+
         executor = _get_agent_executor()
         future_context = executor.submit(_load_context_task, household_id, user_id)
-        future_relevance = executor.submit(_relevance_and_llm_task, message, recent_6, household_id, user_id)
+        future_llm = executor.submit(_get_llm_task)
 
-        context_dicts, user_preferences, household_preferences, agent_name = future_context.result()
-        filtered_history, self.llm = future_relevance.result()
+        (
+            context_dicts,
+            user_preferences,
+            household_preferences,
+            agent_name,
+            user_location,
+            session_summaries_text,
+            daily_summaries_text,
+            user_memories_text,
+        ) = future_context.result()
+        self.llm = future_llm.result()
 
-        # If relevance included no history, ask LLM whether user is asking about the conversation (meta-question)
-        if not filtered_history and recent_6 and self.llm:
-            try:
-                meta_messages = build_meta_question_classifier_messages(
-                    message, recent_6, memory=context_dicts
-                )
-                raw = self.llm.chat(meta_messages, temperature=0.0, max_tokens=32)
-                if raw:
-                    parsed = json.loads(raw.strip())
-                    if isinstance(parsed, dict) and parsed.get("meta_question") is True:
-                        filtered_history = list(recent_6)
-            except (json.JSONDecodeError, ValueError, TypeError, KeyError):
-                pass
-
-        # Task path only when client explicitly requests it (X-Agent-Task-Mode: 1)
         user_id_str = str(user_id) if user_id is not None else "0"
-        if force_task_mode and self._scheduling_intent(message):
-            result = self._process_task_path(
-                db, household_id, user_id, user_id_str, message, filtered_history
-            )
-            if result is not None:
-                return result
-
         agent_input = AgentInput(
             user_message=message,
             agent_name=agent_name,
@@ -184,18 +301,79 @@ class Agent:
             household_preferences=household_preferences,
             conversation_history=filtered_history,
             system_instructions_extra=None,
+            user_location=user_location,
+            session_summaries_text=session_summaries_text,
+            daily_summaries_text=daily_summaries_text,
+            user_memories_text=user_memories_text,
         )
-        llm_response = run_agent_turn(
-            agent_input=agent_input,
-            db=db,
-            household_id=household_id,
-            user_id=user_id,
-            llm=self.llm,
-        )
-        # Post-process response: strip markdown bold syntax and trim
+
+        # Intent → Mode → Workflow: router selects mode (scheduling > task > research > coding > reflection > chat)
+        mode = MODE_CHAT
+        confidence = 0.0
+        if self.llm:
+            try:
+                router_messages = build_mode_router_messages(
+                    message, filtered_history[-4:] if filtered_history else None
+                )
+                router_raw = self.llm.chat(router_messages, temperature=0.0, max_tokens=64)
+                if router_raw:
+                    obj = extract_json_from_response(router_raw)
+                    if isinstance(obj, dict):
+                        m = (obj.get("mode") or "").strip().lower()
+                        if m in VALID_MODES:
+                            mode = m
+                        c = obj.get("confidence")
+                        if isinstance(c, (int, float)):
+                            confidence = float(c)
+            except (json.JSONDecodeError, ValueError, TypeError, KeyError):
+                pass
+        if confidence < ROUTER_CONFIDENCE_THRESHOLD:
+            mode = MODE_CHAT
+
+        # Explicit client override: header forces task path when scheduling intent
+        if force_task_mode and self._scheduling_intent(message):
+            result = self._process_task_path(
+                db, household_id, user_id, user_id_str, message, filtered_history
+            )
+            if result is not None:
+                return result
+
+        # Dispatch by mode: scheduling/task → task path; chat → single call; research/coding → agent loop; reflection → evaluate
+        if mode in (MODE_SCHEDULING, MODE_TASK):
+            result = self._process_task_path(
+                db, household_id, user_id, user_id_str, message, filtered_history
+            )
+            if result is not None:
+                return result
+
+        if mode == MODE_CHAT:
+            llm_response = run_chat_mode(agent_input, self.llm)
+        elif mode == MODE_REFLECTION:
+            llm_response = run_reflection_workflow(agent_input, self.llm)
+        elif mode == MODE_RESEARCH:
+            llm_response = run_agent_turn(
+                agent_input=agent_input,
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                llm=self.llm,
+                use_codebase_tools=False,
+            )
+        elif mode == MODE_CODING:
+            llm_response = run_agent_turn(
+                agent_input=agent_input,
+                db=db,
+                household_id=household_id,
+                user_id=user_id,
+                llm=self.llm,
+                use_codebase_tools=True,
+            )
+        else:
+            llm_response = run_chat_mode(agent_input, self.llm)
+
         llm_response = re.sub(r"\*\*(.+?)\*\*", r"\1", llm_response)
         llm_response = llm_response.strip()
-        
+
         if user_id:
             self._store_context_snapshot(
                 db=db,
@@ -204,7 +382,7 @@ class Agent:
                 user_message=message,
                 assistant_message=llm_response,
             )
-        
+
         return {
             "message": llm_response,
             "reasoning": "",
@@ -372,6 +550,19 @@ class Agent:
                 summary=summary,
                 context_metadata=metadata if isinstance(metadata, dict) else None,
             )
+            # Also store in long-term user memories when scope is user (so agent learns about the user)
+            if scope == "user" and user_id is not None:
+                try:
+                    UserMemoryRepository.create(
+                        db=db,
+                        household_id=household_id,
+                        user_id=user_id,
+                        memory_type=event_type[:50] or "note",
+                        summary=summary,
+                        memory_metadata=metadata if isinstance(metadata, dict) else None,
+                    )
+                except Exception:
+                    pass
         except Exception:
             return
 

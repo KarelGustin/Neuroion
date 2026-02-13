@@ -200,6 +200,63 @@ class ChatMessage(Base):
     )
 
 
+class SessionSummary(Base):
+    """Compacted summary of a chat session (messages within one continuous period)."""
+    __tablename__ = "session_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    session_start_at = Column(DateTime, nullable=False, index=True)
+    session_end_at = Column(DateTime, nullable=False, index=True)
+    summary = Column(Text, nullable=False)
+    message_count = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_session_summary_user_end", "user_id", "session_end_at"),
+    )
+
+
+class DailySummary(Base):
+    """Compacted summary of a day's sessions (filled at midnight)."""
+    __tablename__ = "daily_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    date = Column(DateTime, nullable=False, index=True)  # Date only (00:00:00)
+    summary = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_daily_summary_user_date", "user_id", "date", unique=True),
+    )
+
+
+class UserMemory(Base):
+    """Long-term facts about the user (preferences, location, interests)."""
+    __tablename__ = "user_memories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    memory_type = Column(String(50), nullable=False, index=True)  # preference, fact, location, etc.
+    summary = Column(Text, nullable=False)
+    memory_metadata = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=func.now(), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("idx_user_memory_user_created", "user_id", "created_at"),
+    )
+
+
 class SystemConfig(Base):
     """System-wide configuration (WiFi, LLM, etc.)."""
     __tablename__ = "system_config"
