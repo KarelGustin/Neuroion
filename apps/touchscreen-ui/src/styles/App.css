@@ -1,11 +1,14 @@
 .app {
   width: 100vw;
   height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   padding: 8px;
   overflow: hidden;
   box-sizing: border-box;
+  background: var(--bg, #0a0a0a);
+  color: var(--text, #fafafa);
 }
 
 .header {
@@ -23,7 +26,7 @@
 /* 5" touch: larger loading text */
 .loading-label {
   font-size: var(--text-lg);
-  color: var(--text-muted);
+  color: var(--text-muted, #a1a1a1);
 }
 
 .status-grid {
@@ -57,6 +60,8 @@
   height: 100vh;
   padding: 8px;
   box-sizing: border-box;
+  background: var(--bg, #0a0a0a);
+  color: var(--text, #fafafa);
 }
 
 .loading-spinner {
@@ -137,6 +142,51 @@
   margin-top: var(--space-4);
 }
 
+.add-member-modal .add-member-actions--two {
+  flex-wrap: wrap;
+}
+
+.add-member-modal .add-member-actions--two .qr-close {
+  flex: 1 1 100%;
+  order: 3;
+  margin-top: var(--space-2);
+}
+
+.add-member-modal .add-member-actions--two .add-member-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-member-modal .add-member-btn-telegram {
+  background: #0088cc;
+  color: white;
+}
+
+.add-member-modal .add-member-btn-telegram:hover:not(:disabled) {
+  background: #006699;
+}
+
+.add-member-modal .add-member-btn-app {
+  background: var(--accent-blue, #3b82f6);
+  color: white;
+}
+
+.add-member-modal .add-member-btn-app:hover:not(:disabled) {
+  background: var(--accent-blue-dark, #2563eb);
+}
+
+.add-member-modal .add-member-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .add-member-modal .add-member-actions .qr-close {
   flex: 1;
 }
@@ -181,6 +231,95 @@
 .members-list li {
   font-size: var(--text-base);
   color: var(--text);
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.member-row:last-child {
+  border-bottom: none;
+}
+
+.member-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-remove-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.member-remove-btn:hover {
+  background: var(--error, #dc2626);
+  color: white;
+  border-color: var(--error, #dc2626);
+}
+
+/* Delete member confirmation modal */
+.delete-member-modal .delete-member-warning {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-4);
+  line-height: 1.4;
+}
+
+.delete-member-modal .delete-member-error {
+  color: var(--error, #dc2626);
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-3);
+}
+
+.delete-member-modal .delete-member-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.delete-member-modal .delete-member-actions .qr-close {
+  flex: 1;
+}
+
+.delete-member-modal .delete-member-confirm-btn {
+  flex: 1;
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: white;
+  background: var(--error, #dc2626);
+  border: none;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+}
+
+.delete-member-modal .delete-member-confirm-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.delete-member-modal .delete-member-confirm-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 @media (min-width: 768px) {

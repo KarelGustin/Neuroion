@@ -4,7 +4,7 @@ import axios from 'axios'
  * Automatically detect API base URL based on current hostname.
  * Set VITE_API_PORT in .env to match API_PORT when using a custom port (default: 8000).
  */
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL
   }
@@ -149,6 +149,27 @@ export async function getDashboardMembers() {
 /** Add member and get Telegram pairing QR (member_id, pairing_code, qr_value). */
 export async function addMember(name) {
   const response = await api.post('/dashboard/add-member', { name: (name || '').trim() })
+  return response.data
+}
+
+/** Get pairing code for app/device. Optional memberId links device to existing member. */
+export async function getPairingCode(householdId, deviceId, deviceType, name, memberId = null) {
+  const body = {
+    household_id: householdId,
+    device_id: deviceId,
+    device_type: deviceType,
+    name: (name || '').trim(),
+  }
+  if (memberId != null) body.member_id = memberId
+  const response = await api.post('/pair/start', body)
+  return response.data.pairing_code
+}
+
+/** Delete a household member (kiosk, no auth). */
+export async function deleteMember(memberId) {
+  const response = await api.post('/dashboard/member-delete', {
+    member_id: Number(memberId),
+  })
   return response.data
 }
 

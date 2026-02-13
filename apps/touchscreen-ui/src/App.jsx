@@ -8,7 +8,7 @@ import SetupRequiredScreen from './components/SetupRequiredScreen'
 import SetupWizard from './components/SetupWizard'
 import JoinFlow from './components/JoinFlow'
 import { Connectivity, Sparkles, Home, Smartphone, UserPlus, Wrench, RotateCw } from './components/icons'
-import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset, getDashboardMembers, addMember } from './services/api'
+import { getStatus, getSetupStatus, getDevStatus, createDashboardJoinToken, factoryReset, getDashboardMembers, addMember, deleteMember, getPairingCode, getApiBaseUrl } from './services/api'
 import { QRCodeSVG } from 'qrcode.react'
 import './styles/App.css'
 
@@ -36,6 +36,9 @@ function App() {
   const [addMemberName, setAddMemberName] = useState('')
   const [addMemberQr, setAddMemberQr] = useState(null)
   const [members, setMembers] = useState([])
+  const [deleteConfirmMember, setDeleteConfirmMember] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const isDev = import.meta.env.DEV
 
@@ -229,7 +232,9 @@ function App() {
     fetchMembers()
   }
 
-  const handleAddMemberConnect = async () => {
+  const HOUSEHOLD_ID = 1
+
+  const handleAddMemberTelegram = async () => {
     const name = (addMemberName || '').trim()
     if (!name) {
       setAddMemberError('Vul een naam in.')
@@ -240,9 +245,9 @@ function App() {
     try {
       const data = await addMember(name)
       setAddMemberQr({
-        member_id: data.member_id,
-        pairing_code: data.pairing_code,
+        type: 'telegram',
         qr_value: data.qr_value,
+        pairing_code: data.pairing_code,
       })
     } catch (err) {
       const detail = err.response?.data?.detail
@@ -254,6 +259,68 @@ function App() {
       setAddMemberError(message)
     } finally {
       setAddMemberLoading(false)
+    }
+  }
+
+  const handleAddMemberApp = async () => {
+    const name = (addMemberName || '').trim()
+    if (!name) {
+      setAddMemberError('Vul een naam in.')
+      return
+    }
+    setAddMemberLoading(true)
+    setAddMemberError(null)
+    try {
+      const code = await getPairingCode(HOUSEHOLD_ID, `ios-${Date.now()}`, 'ios', name)
+      const apiBase = getApiBaseUrl()
+      const qrValue = `neuroion://pair?base=${encodeURIComponent(apiBase)}&code=${encodeURIComponent(code)}`
+      setAddMemberQr({
+        type: 'app',
+        qr_value: qrValue,
+        pairing_code: code,
+      })
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
+          : err.message || 'Kon geen code ophalen.'
+      setAddMemberError(message)
+    } finally {
+      setAddMemberLoading(false)
+    }
+  }
+
+  const handleDeleteMemberOpen = (m) => (e) => {
+    e.stopPropagation()
+    setDeleteConfirmMember(m)
+    setDeleteError(null)
+  }
+
+  const handleDeleteMemberClose = () => {
+    setDeleteConfirmMember(null)
+    setDeleteError(null)
+  }
+
+  const handleDeleteMemberConfirm = async () => {
+    if (!deleteConfirmMember) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      await deleteMember(deleteConfirmMember.id)
+      setDeleteConfirmMember(null)
+      fetchMembers()
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d) => d.msg ?? JSON.stringify(d)).join('. ')
+          : err.message || 'Verwijderen mislukt.'
+      setDeleteError(message)
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -376,7 +443,18 @@ function App() {
           <h4>Leden</h4>
           <ul>
             {members.map((m) => (
-              <li key={m.id}>{m.name}</li>
+              <li key={m.id} className="member-row">
+                <span className="member-name">{m.name}</span>
+                <button
+                  type="button"
+                  className="member-remove-btn"
+                  onClick={handleDeleteMemberOpen(m)}
+                  title="Lid verwijderen"
+                  aria-label={`Verwijder ${m.name}`}
+                >
+                  ×
+                </button>
+              </li>
             ))}
           </ul>
         </div>
@@ -448,6 +526,32 @@ function App() {
         />
       )}
 
+      {deleteConfirmMember && (
+        <div className="qr-overlay" onClick={handleDeleteMemberClose}>
+          <div className="qr-container delete-member-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Lid verwijderen</h3>
+            <p className="delete-member-warning">
+              Weet je het zeker? Alle data van <strong>{deleteConfirmMember.name}</strong> wordt permanent
+              verwijderd.
+            </p>
+            {deleteError && <p className="delete-member-error">{deleteError}</p>}
+            <div className="delete-member-actions">
+              <button type="button" className="qr-close" onClick={handleDeleteMemberClose}>
+                Annuleren
+              </button>
+              <button
+                type="button"
+                className="delete-member-confirm-btn"
+                onClick={handleDeleteMemberConfirm}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? 'Bezig…' : 'Verwijderen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {addMemberModalOpen && (
         <div className="qr-overlay" onClick={handleAddMemberClose}>
           <div className="qr-container add-member-modal" onClick={(e) => e.stopPropagation()}>
@@ -465,23 +569,35 @@ function App() {
                   />
                 </label>
                 {addMemberError && <p className="add-member-error">{addMemberError}</p>}
-                <div className="add-member-actions">
+                <div className="add-member-actions add-member-actions--two">
                   <button type="button" className="qr-close" onClick={handleAddMemberClose}>
                     Annuleren
                   </button>
                   <button
                     type="button"
-                    className="qr-open-on-device"
-                    onClick={handleAddMemberConnect}
+                    className="add-member-btn add-member-btn-telegram"
+                    onClick={handleAddMemberTelegram}
                     disabled={addMemberLoading}
                   >
-                    {addMemberLoading ? 'Bezig…' : 'Connect to Telegram'}
+                    {addMemberLoading ? 'Bezig…' : 'Telegram'}
+                  </button>
+                  <button
+                    type="button"
+                    className="add-member-btn add-member-btn-app"
+                    onClick={handleAddMemberApp}
+                    disabled={addMemberLoading}
+                  >
+                    {addMemberLoading ? 'Bezig…' : 'App'}
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <p className="add-member-hint">Scan met Telegram om te koppelen</p>
+                <p className="add-member-hint">
+                  {addMemberQr.type === 'telegram'
+                    ? 'Scan met Telegram om te koppelen'
+                    : 'Scan met de Neuroion-app om te koppelen'}
+                </p>
                 <div className="qr-code">
                   <QRCodeSVG value={addMemberQr.qr_value} size={220} level="H" includeMargin={true} />
                 </div>

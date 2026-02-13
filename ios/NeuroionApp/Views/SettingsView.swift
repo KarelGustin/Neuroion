@@ -21,10 +21,15 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
+                    TextField("Remote Homebase URL", text: $connectionManager.remoteBaseURL)
+                        .keyboardType(.URL)
+                        .autocapitalization(.none)
+                        .autocorrectionDisabled()
+                    Toggle("Use remote connection", isOn: $connectionManager.useRemoteURL)
                 } header: {
                     Text("Connection")
                 } footer: {
-                    Text("URL of your Neuroion Homebase (e.g. http://192.168.1.1:8000). Change only if your server address changed.")
+                    Text("Homebase URL: your Pi on local Wi‑Fi (e.g. http://192.168.1.1:8000). Remote URL: use when away (e.g. Tailscale: http://neuroion-pi:8000). Turn on \"Use remote connection\" when not at home.")
                 }
                 
                 Section("Location") {

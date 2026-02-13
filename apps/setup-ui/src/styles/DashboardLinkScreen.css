@@ -80,3 +80,22 @@
   color: var(--text-muted, #a3a3a3);
   margin: 0;
 }
+
+.dashboard-link-invite {
+  margin-top: 1.5rem;
+}
+
+.dashboard-link-invite-error {
+  font-size: 0.875rem;
+  color: var(--accent-red, #ef4444);
+  margin: 0.75rem 0 0;
+}
+
+.dashboard-link-button-secondary {
+  background: var(--bg-tertiary, #333);
+  margin-top: 0.5rem;
+}
+
+.dashboard-link-button-secondary:hover {
+  background: var(--border-default, rgba(255, 255, 255, 0.15));
+}

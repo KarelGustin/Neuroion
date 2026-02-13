@@ -43,6 +43,15 @@ docker-compose up -d
 - Setup UI: http://localhost:3000
 - API Docs: http://localhost:8000/docs
 
+## Raspberry Pi 5 as 24/7 Home Core
+
+Neuroion is designed to run on a Raspberry Pi 5 at home, connected to Wi‑Fi, as the single "Home Core" engine. All household data and agent context stay on the Pi.
+
+- **Restart policy**: Docker Compose services use `restart: unless-stopped`, so the stack comes back after a power cut or reboot.
+- **One-time setup**: From a phone or laptop on the same Wi‑Fi, open the Setup UI at `http://<pi-ip>:3000`, complete the wizard, then use "iPhone koppelen" (or "Koppel extra iPhone" for more members) to pair the app via QR.
+- **Ollama**: Run Ollama on the Pi (or on another machine on the network) and set `OLLAMA_URL` in `.env` so the Homebase can reach it.
+- **Per-member context**: Chat history and agent context are stored per household member (per `user_id` within the household). Each paired device gets its own member; the agent uses that member’s context when replying.
+
 ## Raspberry Pi 5 Deployment
 
 ### Initial Setup
@@ -105,6 +114,18 @@ For clients to connect, ensure:
    sudo ufw allow 8000/tcp  # Homebase API
    sudo ufw allow 3000/tcp  # Setup UI
    ```
+
+## Remote access (use the app from anywhere)
+
+To reach your Home Core when you're not on home Wi‑Fi (e.g. on 4G or another network), use a **secure tunnel** so the app still talks only to your Pi—no user data on third‑party servers.
+
+### Option: Tailscale (recommended)
+
+1. **On the Raspberry Pi**: Install [Tailscale](https://tailscale.com) and log in. Note the Pi’s Tailscale name (e.g. `neuroion-pi`) or IP (100.x.x.x).
+2. **On your iPhone**: Install the Tailscale app and log in with the same account.
+3. **In the Neuroion app**: In Settings, set **Remote Homebase URL** to `http://<pi-tailscale-name>:8000` (e.g. `http://neuroion-pi:8000` or `http://100.x.x.x:8000`). Turn on **Use remote connection** when you’re away from home.
+
+Traffic is end-to-end encrypted; Tailscale does not see your chat or agent data. Your data stays on the Pi.
 
 ## Mac Development Setup
 
