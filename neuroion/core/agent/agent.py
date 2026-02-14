@@ -6,10 +6,14 @@ Supports LLM tool-calling for cron.* tools (scheduling/reminders).
 
 Context loading and history-relevance LLM run in parallel (thread pool) so
 the answering LLM is not delayed by surrounding preprocessing.
+
+Stream progress events are enriched with ts (ISO timestamp) and step (phase, label, status)
+so clients can show a Cursor-like pipeline log in real time.
 """
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple, Callable
 from sqlalchemy.orm import Session
 
@@ -64,6 +68,61 @@ from neuroion.core.memory.repository import (
 from neuroion.core.security.audit import AuditLogger
 
 
+def _status_text_to_step(text: str) -> Dict[str, Any]:
+    """Map status message to a step object for pipeline log (Cursor-style)."""
+    t = (text or "").strip()
+    if "denk na" in t or "denkt na" in t:
+        return {"phase": "thinking", "label": t or "Denken…", "status": "running"}
+    if "Plan klaar" in t or "Tools uitvoeren" in t:
+        return {"phase": "planning", "label": t or "Plan uitvoeren…", "status": "running"}
+    if "zoekt op het web" in t or "zoek op het web" in t:
+        return {"phase": "research", "label": t or "Web zoeken…", "status": "running"}
+    if "zoek in de codebase" in t or "codebase" in t.lower():
+        return {"phase": "coding", "label": t or "Codebase doorzoeken…", "status": "running"}
+    if "Resultaten verwerken" in t:
+        return {"phase": "reflecting", "label": t or "Resultaten verwerken…", "status": "running"}
+    if "Antwoord formuleren" in t:
+        return {"phase": "writing", "label": t or "Antwoord formuleren…", "status": "running"}
+    return {"phase": "status", "label": t or "Bezig…", "status": "running"}
+
+
+def _enrich_progress_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Add ts (ISO timestamp) and step (for pipeline log) to a progress event."""
+    ev = dict(event)
+    ev["ts"] = datetime.now(timezone.utc).isoformat()
+    kind = ev.get("type")
+    if kind == "status":
+        ev["step"] = _status_text_to_step(ev.get("text") or "")
+    elif kind == "tool_start":
+        tool = ev.get("tool") or ""
+        ev["step"] = {"phase": "tool", "label": tool, "status": "running", "detail": tool}
+    elif kind == "tool_done":
+        tool = ev.get("tool") or ""
+        ev["step"] = {"phase": "tool", "label": tool, "status": "done"}
+    elif kind == "token":
+        # No step per token to avoid spam; "Antwoord formuleren…" already set the writing step
+        pass
+    elif kind == "done":
+        ev["step"] = {"phase": "done", "label": "Klaar", "status": "done"}
+    return ev
+
+
+def _wrap_progress_with_steps(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+) -> Optional[Callable[[Dict[str, Any]], None]]:
+    """Wrap progress_callback so every event gets ts and step for real-time pipeline log."""
+    if not progress_callback:
+        return None
+
+    def wrapped(event: Dict[str, Any]) -> None:
+        try:
+            progress_callback(_enrich_progress_event(event))
+        except Exception:
+            pass
+
+    return wrapped
+
+
 def _parse_chat_reply_for_pipeline(reply: str) -> Tuple[str, Optional[str]]:
     """
     Parse chat reply for pipeline trigger tags. Returns (cleaned_reply, tag or None).
@@ -96,8 +155,8 @@ def _get_agent_executor() -> ThreadPoolExecutor:
     return _agent_executor
 
 
-# Max messages from current session to send to LLM (rest is summarized via session summaries)
-MAX_SESSION_MESSAGES_IN_CONTEXT = 50
+# Max messages from current session to send to LLM (rest is summarized via session summaries). Lower = faster first token.
+MAX_SESSION_MESSAGES_IN_CONTEXT = 24
 
 
 def _get_llm_task() -> LLMClient:
@@ -252,6 +311,9 @@ class Agent:
             user_memories_text=user_memories_text,
         )
 
+        # Enrich all progress events with ts + step so the client can show a Cursor-like pipeline log
+        progress = _wrap_progress_with_steps(progress_callback)
+
         # Client override: header forces task path when scheduling intent
         if force_task_mode and self._scheduling_intent(message):
             result = self._process_task_path(
@@ -261,8 +323,8 @@ class Agent:
                 return result
 
         # Fast path: one chat call (no separate mode router). Model may add [NEED_RESEARCH], [NEED_CODING], [NEED_TASK].
-        self._emit_progress(progress_callback, {"type": "status", "text": "Ik denk na…"})
-        llm_response = run_chat_mode(agent_input, self.llm)
+        self._emit_progress(progress, {"type": "status", "text": "Ik denk na…"})
+        llm_response = run_chat_mode(agent_input, self.llm, progress_callback=progress)
         cleaned_reply, pipeline_tag = _parse_chat_reply_for_pipeline(llm_response)
 
         if pipeline_tag == NEED_TASK_TAG:
@@ -273,7 +335,7 @@ class Agent:
                 return result
             llm_response = cleaned_reply
         elif pipeline_tag == NEED_RESEARCH_TAG:
-            self._emit_progress(progress_callback, {"type": "status", "text": "Ik zoek op het web…"})
+            self._emit_progress(progress, {"type": "status", "text": "Ik zoek op het web…"})
             llm_response = run_agent_turn(
                 agent_input=agent_input,
                 db=db,
@@ -281,10 +343,10 @@ class Agent:
                 user_id=user_id,
                 llm=self.llm,
                 use_codebase_tools=False,
-                progress_callback=progress_callback,
+                progress_callback=progress,
             )
         elif pipeline_tag == NEED_CODING_TAG:
-            self._emit_progress(progress_callback, {"type": "status", "text": "Ik zoek in de codebase…"})
+            self._emit_progress(progress, {"type": "status", "text": "Ik zoek in de codebase…"})
             llm_response = run_agent_turn(
                 agent_input=agent_input,
                 db=db,
@@ -292,7 +354,7 @@ class Agent:
                 user_id=user_id,
                 llm=self.llm,
                 use_codebase_tools=True,
-                progress_callback=progress_callback,
+                progress_callback=progress,
             )
         else:
             llm_response = cleaned_reply

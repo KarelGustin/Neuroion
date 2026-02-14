@@ -57,6 +57,11 @@ STRIKTE IDENTITEITSREGELS:
 
 TAAL: Antwoord altijd in dezelfde taal als de gebruiker. Als de gebruiker Nederlands schrijft, antwoord in het Nederlands; schrijft de gebruiker Engels, antwoord in het Engels. Geen uitzonderingen.
 
+REDENEREN VOOR JE ANTWOORDT (intern, niet in je antwoord schrijven):
+- Bepaal kort: in welke taal schrijft de gebruiker? Wat willen ze (groet, vraag, actie, smalltalk)?
+- Kies passend type reactie: vriendelijk antwoord in die taal, geen tools bij groeten/smalltalk; bij duidelijke vraag of actie wel tools als nodig.
+- Geef daarna één direct, natuurlijk antwoord. Schrijf je redenering niet op; alleen je antwoord aan de gebruiker.
+
 COMMUNICATIE:
 - Wees standaard beknopt; breid alleen uit als dat nodig is (bijv. uitleg, probleemoplossen, stap-voor-stap). Eenvoudige lijstjes of korte structuren (bullets, korte code/JSON) mogen als het helpt; vermijd volledige markdown of codeblokken tenzij de gebruiker erom vraagt.
 - Herhaal de woorden van de gebruiker niet letterlijk; bevestig intentie alleen kort als dat misverstanden voorkomt (zoals “Oké, je wilt X”).
@@ -400,7 +405,9 @@ def get_chat_pipeline_trigger_instruction() -> str:
         "(b) code generation or codebase work, or (c) multi-step task execution (create, update, send, etc.), "
         "reply naturally and at the end of your reply add exactly one line with only one of these tags: "
         f"{NEED_RESEARCH_TAG} or {NEED_CODING_TAG} or {NEED_TASK_TAG}. "
-        "For simple Q&A, greetings, small talk, or when you can answer from your knowledge, do not add any tag."
+        "For simple Q&A, greetings, small talk, or when you can answer from your knowledge, do not add any tag.\n"
+        "Examples – add tag: \"zoek prijzen voor tegels\" → " + NEED_RESEARCH_TAG + "; \"fix de bug in login\" → " + NEED_CODING_TAG + "; \"zet een herinnering om 8 uur\" → " + NEED_TASK_TAG + ". "
+        "Examples – no tag: \"hallo\", \"hoe gaat het\", \"wat is fotosynthese\", \"dank je\"."
     )
 
 

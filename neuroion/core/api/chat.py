@@ -3,13 +3,15 @@ Chat endpoint for agent interactions.
 
 Routes user messages through the agent system and returns structured responses.
 Supports streaming via Server-Sent Events (SSE) for real-time progress.
+
+Stream events include ts (ISO timestamp) and step (phase, label, status) for a Cursor-like pipeline log.
 """
 import asyncio
 import json
 import logging
 import queue
 import threading
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -87,7 +89,15 @@ async def chat_stream(
     """
     Send a message to the agent and stream progress via Server-Sent Events.
 
-    Events: status (text), tool_start (tool), tool_done (tool), done (message, actions).
+    Every event includes ts (ISO timestamp). Pipeline-step events include step: { phase, label, status }.
+    Use step.phase to build a Cursor-like log: thinking | planning | research | coding | tool | reflecting | writing | done.
+
+    Events:
+      - status: { type, text, ts, step }; current status line.
+      - token: { type, text, ts }; streamed reply text (append to message).
+      - tool_start / tool_done: { type, tool, ts, step }; tool step running/done.
+      - done: { type, message, actions?, error?, ts, step }; final message and step "Klaar".
+
     Keeps the connection alive so long requests (e.g. market research) complete.
     Uses db_session() per thread so the request session is never used from another thread.
     """
@@ -151,25 +161,40 @@ async def chat_stream(
                     force_task_mode=force_task_mode,
                     progress_callback=lambda ev: sync_queue.put(ev),
                 )
-                sync_queue.put({
+                sync_queue.put(_enrich_ev({
                     "type": "done",
                     "message": result.get("message", ""),
                     "actions": result.get("actions", []),
-                })
+                }))
             except Exception as e:
-                sync_queue.put({
+                sync_queue.put(_enrich_ev({
                     "type": "done",
                     "message": "",
                     "actions": [],
                     "error": str(e),
-                })
+                }))
 
     thread = threading.Thread(target=run_agent_in_thread)
     thread.start()
 
+    def _first_step_event() -> Dict[str, Any]:
+        """First event with same shape as agent events (ts + step) for Cursor-like pipeline log."""
+        ev = {"type": "status", "text": "Neuroion denkt na…"}
+        ev["ts"] = datetime.now(timezone.utc).isoformat()
+        ev["step"] = {"phase": "thinking", "label": "Neuroion denkt na…", "status": "running"}
+        return ev
+
+    def _enrich_ev(ev: Dict[str, Any]) -> Dict[str, Any]:
+        """Add ts and step to an event (e.g. done) that is not sent via agent progress."""
+        e = dict(ev)
+        e["ts"] = datetime.now(timezone.utc).isoformat()
+        if e.get("type") == "done":
+            e["step"] = {"phase": "done", "label": "Klaar", "status": "done"}
+        return e
+
     async def event_stream():
         # Send immediate status so the client gets data within ~1s and doesn't hit "no data" timeout
-        yield f"data: {json.dumps({'type': 'status', 'text': 'Neuroion denkt na…'})}\n\n"
+        yield f"data: {json.dumps(_first_step_event())}\n\n"
         loop = asyncio.get_event_loop()
         while True:
             ev = await loop.run_in_executor(None, sync_queue.get)

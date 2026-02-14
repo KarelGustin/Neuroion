@@ -58,17 +58,39 @@ def _is_web_research_intent(message: str) -> bool:
     return any(p in lower for p in search_phrases)
 
 
-def run_chat_mode(agent_input: AgentInput, llm: LLMClient) -> str:
+# Max tokens for chat-mode reply to keep latency predictable (quality preserved with concise prompts).
+CHAT_MODE_MAX_TOKENS = 1024
+
+
+def run_chat_mode(
+    agent_input: AgentInput,
+    llm: LLMClient,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> str:
     """
     Chat mode: single LLM call, no plan/reflect, no tools.
     For simple Q&A, conversation, small talk. One turn, low latency.
+    When progress_callback is set and the LLM supports stream(), tokens are emitted as {"type": "token", "text": "..."}.
     """
     messages = build_chat_messages_from_input(agent_input)
-    try:
-        raw = llm.chat(messages, temperature=0.45)
-    except Exception as e:
-        logger.warning("Chat mode failed: %s", e)
-        return "I had trouble answering. Please try again."
+    use_stream = progress_callback is not None and hasattr(llm, "stream") and callable(getattr(llm, "stream"))
+    if use_stream:
+        try:
+            chunks: List[str] = []
+            for chunk in llm.stream(messages, temperature=0.45):
+                if chunk:
+                    chunks.append(chunk)
+                    progress_callback({"type": "token", "text": chunk})
+            raw = "".join(chunks)
+        except Exception as e:
+            logger.warning("Chat mode stream failed, falling back to sync: %s", e)
+            use_stream = False
+    if not use_stream:
+        try:
+            raw = llm.chat(messages, temperature=0.45, max_tokens=CHAT_MODE_MAX_TOKENS)
+        except Exception as e:
+            logger.warning("Chat mode failed: %s", e)
+            return "I had trouble answering. Please try again."
     reply = parse_final_response(raw)
     if not reply:
         reply = (raw or "").strip()
