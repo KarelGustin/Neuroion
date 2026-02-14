@@ -415,3 +415,21 @@ class JoinToken(Base):
         Index("idx_join_token_expires", "expires_at"),
         Index("idx_join_token_used", "used_at"),
     )
+
+
+class VpnPeer(Base):
+    """WireGuard VPN peer for a device (iOS app). Used to issue config at pairing and revoke on unpair."""
+    __tablename__ = "vpn_peers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    device_id = Column(String(255), nullable=False, index=True)
+    client_public_key = Column(String(255), nullable=False, unique=True)
+    client_ip = Column(String(45), nullable=False)  # e.g. 10.66.66.2
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_vpn_peer_device_id", "device_id"),
+    )

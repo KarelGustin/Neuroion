@@ -30,6 +30,7 @@ from neuroion.core.memory.models import (
     LoginCode,
     DeviceConfig,
     JoinToken,
+    VpnPeer,
 )
 from neuroion.core.utils.slug import slugify
 
@@ -1662,3 +1663,49 @@ class JoinTokenRepository:
         )
         db.commit()
         return deleted
+
+
+class VpnPeerRepository:
+    """Repository for WireGuard VPN peer records (for revoke on unpair)."""
+
+    @staticmethod
+    def create(
+        db: Session,
+        user_id: int,
+        device_id: str,
+        client_public_key: str,
+        client_ip: str,
+    ) -> VpnPeer:
+        """Create a VPN peer record."""
+        require_active_session(db)
+        peer = VpnPeer(
+            user_id=user_id,
+            device_id=device_id,
+            client_public_key=client_public_key,
+            client_ip=client_ip,
+        )
+        db.add(peer)
+        db.commit()
+        safe_refresh(db, peer)
+        return peer
+
+    @staticmethod
+    def get_by_device_id(db: Session, device_id: str) -> Optional[VpnPeer]:
+        """Get VPN peer by device_id."""
+        return db.query(VpnPeer).filter(VpnPeer.device_id == device_id).first()
+
+    @staticmethod
+    def get_by_user_id(db: Session, user_id: int) -> List[VpnPeer]:
+        """Get all VPN peers for a user."""
+        return db.query(VpnPeer).filter(VpnPeer.user_id == user_id).all()
+
+    @staticmethod
+    def delete_by_device_id(db: Session, device_id: str) -> bool:
+        """Delete VPN peer by device_id. Returns True if one was deleted."""
+        require_active_session(db)
+        peer = db.query(VpnPeer).filter(VpnPeer.device_id == device_id).first()
+        if peer:
+            db.delete(peer)
+            db.commit()
+            return True
+        return False

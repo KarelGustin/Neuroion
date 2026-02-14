@@ -1,0 +1,540 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1196678F5FD63B36B4AE2B31 /* NeuroionTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7040403A34AFE70D793E225E /* NeuroionTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3436DD4552F5E2EABC8C7A53 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55278E2655B9B40C74497804 /* APIClient.swift */; };
+		34D2B723FE55D6E55A72DCE5 /* HealthKitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE458FBAABEF683DBED1863 /* HealthKitService.swift */; };
+		3893ED901AFB78D110A66E14 /* VPNTunnelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C239106C3C1FA509167C5BA5 /* VPNTunnelManager.swift */; };
+		4E584758CEE0F7C1C703760F /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C7E8BE29E6E161CD968444 /* ConnectionManager.swift */; };
+		61473ECCEB2C87535E51571F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D173313A6D57F2F022EDA187 /* Assets.xcassets */; };
+		6F0AE3A1E41E3ECFD8A82EA8 /* NeuroionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBF4B5C23049E829E6BFED06 /* NeuroionApp.swift */; };
+		723017A938171FE00A5D360E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A10BEF0CD2683657C629766 /* Message.swift */; };
+		7718C1EF1674D31EB599BE6C /* AgendaEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9CC23D8133EDF79B6B349D3 /* AgendaEvent.swift */; };
+		7E0423F4E748910F31FE7ED6 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1EE6315A012BE1BB7EBEBE9 /* PacketTunnelProvider.swift */; };
+		8F0489230E4AFA7953DCAA10 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18205788464D6A9F820FAE9 /* ChatView.swift */; };
+		A322FBEC247B306B515DBEA6 /* AgendaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7143ABACF9F05DDA2CF61980 /* AgendaView.swift */; };
+		B590B28FC6ABCE04AD3BBC8A /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A357EA7DCAF2F9F6FBD7A427 /* LocationService.swift */; };
+		D7138247D278E3C97D4185DE /* Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F65B0CE57AA3D340A8193F /* Pairing.swift */; };
+		E749982D8AA3F04DF0C02E2D /* WireGuardKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5DA192BA8FDD6B80345A8E17 /* WireGuardKit */; };
+		F386613BA3895BA9E5DEEB83 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E611653F7877101D5D510295 /* SettingsView.swift */; };
+		F45993E62632D61D23090C30 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EBCB0CEF91992E06BEB720E /* PairingView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		38C5032A422F4E83BA0AFCB8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1F08EAF20AAFB19183D3E84F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1B9417BEE870B5D77F6E86A4;
+			remoteInfo = NeuroionTunnel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		11DFABC7BB4686F9387A61ED /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1196678F5FD63B36B4AE2B31 /* NeuroionTunnel.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		2EBCB0CEF91992E06BEB720E /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
+		3AE458FBAABEF683DBED1863 /* HealthKitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitService.swift; sourceTree = "<group>"; };
+		3BAADF0E03CB0F29DB2351A3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4CA03CB31FA7B57E101F2685 /* NeuroionOne.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NeuroionOne.entitlements; sourceTree = "<group>"; };
+		55278E2655B9B40C74497804 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		7040403A34AFE70D793E225E /* NeuroionTunnel.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = NeuroionTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7143ABACF9F05DDA2CF61980 /* AgendaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaView.swift; sourceTree = "<group>"; };
+		76F2C89C8FF871BDFEF785B0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		86F65B0CE57AA3D340A8193F /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pairing.swift; sourceTree = "<group>"; };
+		8A10BEF0CD2683657C629766 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		A357EA7DCAF2F9F6FBD7A427 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		A9CC23D8133EDF79B6B349D3 /* AgendaEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaEvent.swift; sourceTree = "<group>"; };
+		BBF4B5C23049E829E6BFED06 /* NeuroionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuroionApp.swift; sourceTree = "<group>"; };
+		C239106C3C1FA509167C5BA5 /* VPNTunnelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPNTunnelManager.swift; sourceTree = "<group>"; };
+		D173313A6D57F2F022EDA187 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D1EE6315A012BE1BB7EBEBE9 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		D9F231C6CB70522AFC0CFC56 /* NeuroionOne.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NeuroionOne.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E4C7E8BE29E6E161CD968444 /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		E611653F7877101D5D510295 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F18205788464D6A9F820FAE9 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		FF313A3CF3DD216B6264DF1F /* NeuroionTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NeuroionTunnel.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B447260F39E8ECEE4A89E74B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E749982D8AA3F04DF0C02E2D /* WireGuardKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		69E1ACA743D3501C9C8CD82C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D9F231C6CB70522AFC0CFC56 /* NeuroionOne.app */,
+				7040403A34AFE70D793E225E /* NeuroionTunnel.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		71F320DFB1B92CADFFF4253D /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				7143ABACF9F05DDA2CF61980 /* AgendaView.swift */,
+				F18205788464D6A9F820FAE9 /* ChatView.swift */,
+				2EBCB0CEF91992E06BEB720E /* PairingView.swift */,
+				E611653F7877101D5D510295 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		87E8FF9C22024C87D5E9CCB6 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A9CC23D8133EDF79B6B349D3 /* AgendaEvent.swift */,
+				8A10BEF0CD2683657C629766 /* Message.swift */,
+				86F65B0CE57AA3D340A8193F /* Pairing.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		8E9E8E39D1C35FA108F50A04 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				55278E2655B9B40C74497804 /* APIClient.swift */,
+				E4C7E8BE29E6E161CD968444 /* ConnectionManager.swift */,
+				3AE458FBAABEF683DBED1863 /* HealthKitService.swift */,
+				A357EA7DCAF2F9F6FBD7A427 /* LocationService.swift */,
+				C239106C3C1FA509167C5BA5 /* VPNTunnelManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		A8C6C63245E362DB7BC2CE2F = {
+			isa = PBXGroup;
+			children = (
+				B32A87B2347C18507B210C06 /* NeuroionApp */,
+				D36D887E830E4C7F533CFE37 /* NeuroionTunnel */,
+				69E1ACA743D3501C9C8CD82C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B32A87B2347C18507B210C06 /* NeuroionApp */ = {
+			isa = PBXGroup;
+			children = (
+				87E8FF9C22024C87D5E9CCB6 /* Models */,
+				8E9E8E39D1C35FA108F50A04 /* Services */,
+				71F320DFB1B92CADFFF4253D /* Views */,
+				D173313A6D57F2F022EDA187 /* Assets.xcassets */,
+				3BAADF0E03CB0F29DB2351A3 /* Info.plist */,
+				BBF4B5C23049E829E6BFED06 /* NeuroionApp.swift */,
+				4CA03CB31FA7B57E101F2685 /* NeuroionOne.entitlements */,
+			);
+			path = NeuroionApp;
+			sourceTree = "<group>";
+		};
+		D36D887E830E4C7F533CFE37 /* NeuroionTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				76F2C89C8FF871BDFEF785B0 /* Info.plist */,
+				FF313A3CF3DD216B6264DF1F /* NeuroionTunnel.entitlements */,
+				D1EE6315A012BE1BB7EBEBE9 /* PacketTunnelProvider.swift */,
+			);
+			path = NeuroionTunnel;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1B9417BEE870B5D77F6E86A4 /* NeuroionTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 416EA0AA5FB87202C5015AC7 /* Build configuration list for PBXNativeTarget "NeuroionTunnel" */;
+			buildPhases = (
+				652111C7E37B2524B2154C81 /* Sources */,
+				B447260F39E8ECEE4A89E74B /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NeuroionTunnel;
+			packageProductDependencies = (
+				5DA192BA8FDD6B80345A8E17 /* WireGuardKit */,
+			);
+			productName = NeuroionTunnel;
+			productReference = 7040403A34AFE70D793E225E /* NeuroionTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		BEF3AE5E4BD69ECE88CAC6A0 /* NeuroionOne */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 543F0711C8B7663FDB2E7DE4 /* Build configuration list for PBXNativeTarget "NeuroionOne" */;
+			buildPhases = (
+				D5DADFF8F494D1F9F962D9E9 /* Sources */,
+				404BC5F9BE000EC14D8EE5D3 /* Resources */,
+				11DFABC7BB4686F9387A61ED /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1CAD4F78D037B3C7F8D5F4EC /* PBXTargetDependency */,
+			);
+			name = NeuroionOne;
+			packageProductDependencies = (
+			);
+			productName = NeuroionOne;
+			productReference = D9F231C6CB70522AFC0CFC56 /* NeuroionOne.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1F08EAF20AAFB19183D3E84F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = 3745A57FF998BB3812FFE651 /* Build configuration list for PBXProject "Neuroion" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A8C6C63245E362DB7BC2CE2F;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7F0048A1AA34BAC5EA09C453 /* XCRemoteSwiftPackageReference "wireguard-apple" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BEF3AE5E4BD69ECE88CAC6A0 /* NeuroionOne */,
+				1B9417BEE870B5D77F6E86A4 /* NeuroionTunnel */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		404BC5F9BE000EC14D8EE5D3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				61473ECCEB2C87535E51571F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		652111C7E37B2524B2154C81 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E0423F4E748910F31FE7ED6 /* PacketTunnelProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D5DADFF8F494D1F9F962D9E9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3436DD4552F5E2EABC8C7A53 /* APIClient.swift in Sources */,
+				7718C1EF1674D31EB599BE6C /* AgendaEvent.swift in Sources */,
+				A322FBEC247B306B515DBEA6 /* AgendaView.swift in Sources */,
+				8F0489230E4AFA7953DCAA10 /* ChatView.swift in Sources */,
+				4E584758CEE0F7C1C703760F /* ConnectionManager.swift in Sources */,
+				34D2B723FE55D6E55A72DCE5 /* HealthKitService.swift in Sources */,
+				B590B28FC6ABCE04AD3BBC8A /* LocationService.swift in Sources */,
+				723017A938171FE00A5D360E /* Message.swift in Sources */,
+				6F0AE3A1E41E3ECFD8A82EA8 /* NeuroionApp.swift in Sources */,
+				D7138247D278E3C97D4185DE /* Pairing.swift in Sources */,
+				F45993E62632D61D23090C30 /* PairingView.swift in Sources */,
+				F386613BA3895BA9E5DEEB83 /* SettingsView.swift in Sources */,
+				3893ED901AFB78D110A66E14 /* VPNTunnelManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1CAD4F78D037B3C7F8D5F4EC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1B9417BEE870B5D77F6E86A4 /* NeuroionTunnel */;
+			targetProxy = 38C5032A422F4E83BA0AFCB8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3BBB844DF1CCE0C2C6ABEEF8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = NeuroionApp/NeuroionOne.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NeuroionApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.neuroion.NeuroionOne;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = NEUROION_VPN_ENABLED;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		62B786A2DCEE4A035801D294 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NeuroionTunnel/NeuroionTunnel.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NeuroionTunnel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.neuroion.NeuroionOne.NeuroionTunnel;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		714481A52035D43755FB5B5C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NeuroionTunnel/NeuroionTunnel.entitlements;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NeuroionTunnel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.neuroion.NeuroionOne.NeuroionTunnel;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		776E8C25A37BDD22715B88CC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		9438CC28D4B1734AD7D71A17 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		FF5C197D253A46A6D1819FCD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = NeuroionApp/NeuroionOne.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NeuroionApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.neuroion.NeuroionOne;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = NEUROION_VPN_ENABLED;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3745A57FF998BB3812FFE651 /* Build configuration list for PBXProject "Neuroion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9438CC28D4B1734AD7D71A17 /* Debug */,
+				776E8C25A37BDD22715B88CC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		416EA0AA5FB87202C5015AC7 /* Build configuration list for PBXNativeTarget "NeuroionTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				714481A52035D43755FB5B5C /* Debug */,
+				62B786A2DCEE4A035801D294 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		543F0711C8B7663FDB2E7DE4 /* Build configuration list for PBXNativeTarget "NeuroionOne" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3BBB844DF1CCE0C2C6ABEEF8 /* Debug */,
+				FF5C197D253A46A6D1819FCD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		7F0048A1AA34BAC5EA09C453 /* XCRemoteSwiftPackageReference "wireguard-apple" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/WireGuard/wireguard-apple";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5DA192BA8FDD6B80345A8E17 /* WireGuardKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F0048A1AA34BAC5EA09C453 /* XCRemoteSwiftPackageReference "wireguard-apple" */;
+			productName = WireGuardKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 1F08EAF20AAFB19183D3E84F /* Project object */;
+}

@@ -8,7 +8,10 @@
     "dev:api": "node scripts/dev-api.js",
     "dev:dashboard": "cross-env PORT=3002 npm run dev --prefix apps/dashboard",
     "dev:softap": "node scripts/dev-softap.js",
-    "dev:kiosk": "node scripts/dev-kiosk.js"
+    "dev:kiosk": "node scripts/dev-kiosk.js",
+    "generate:ios": "bash scripts/ios-generate.sh",
+    "build:ios": "npm run generate:ios && cd ios && xcodebuild -project Neuroion.xcodeproj -scheme NeuroionOne -destination 'generic/platform=iOS' -configuration Debug build",
+    "ios": "npm run build:ios"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

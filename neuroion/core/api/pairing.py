@@ -8,9 +8,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 
+from neuroion.core.config import settings
 from neuroion.core.memory.db import get_db
-from neuroion.core.memory.repository import HouseholdRepository, UserRepository
+from neuroion.core.memory.repository import HouseholdRepository, UserRepository, VpnPeerRepository
+from neuroion.core.security.permissions import get_current_user
 from neuroion.core.security.tokens import TokenManager, PairingCodeStore
+from neuroion.core.wireguard_manager import add_peer as wireguard_add_peer, remove_peer as wireguard_remove_peer
 
 router = APIRouter(prefix="/pair", tags=["pairing"])
 
@@ -34,6 +37,7 @@ class PairConfirmRequest(BaseModel):
     """Request to confirm pairing with code."""
     pairing_code: str
     device_id: str
+    include_vpn: Optional[bool] = False  # When True, generate WireGuard config and return in response
 
 
 class PairConfirmResponse(BaseModel):
@@ -44,6 +48,8 @@ class PairConfirmResponse(BaseModel):
     user_id: int
     expires_in_hours: int
     onboarding_message: Optional[str] = None  # First onboarding question if needed
+    wireguard_config: Optional[str] = None  # WireGuard client config when include_vpn was True
+    vpn_base_url: Optional[str] = None  # e.g. https://10.66.66.1
 
 
 @router.post("/start")
@@ -170,7 +176,22 @@ def confirm_pairing(
         "household_id": household_id,
         "device_id": request.device_id,
     })
-    
+
+    wireguard_config: Optional[str] = None
+    vpn_base_url: Optional[str] = None
+    if request.include_vpn and settings.wireguard_endpoint:
+        wg = wireguard_add_peer(request.device_id)
+        if wg:
+            VpnPeerRepository.create(
+                db,
+                user_id=user.id,
+                device_id=request.device_id,
+                client_public_key=wg["client_public_key"],
+                client_ip=wg["client_ip"],
+            )
+            wireguard_config = wg["client_config"]
+            vpn_base_url = f"https://{settings.vpn_server_ip}"
+
     return PairConfirmResponse(
         token=token,
         household_id=household_id,
@@ -178,4 +199,26 @@ def confirm_pairing(
         user_id=user.id,
         expires_in_hours=8760,  # 1 year from config
         onboarding_message=None,
+        wireguard_config=wireguard_config,
+        vpn_base_url=vpn_base_url,
     )
+
+
+@router.post("/vpn-revoke")
+def revoke_vpn_peer(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Revoke the WireGuard VPN peer for the current device. Call when unpairing.
+    Removes the peer from the unit's WireGuard config and from the database.
+    """
+    device_id = current_user.get("device_id")
+    if not device_id:
+        return {"revoked": False, "message": "No device_id in token"}
+    peer = VpnPeerRepository.get_by_device_id(db, device_id)
+    if not peer:
+        return {"revoked": False, "message": "No VPN peer for this device"}
+    wireguard_remove_peer(peer.client_public_key)
+    VpnPeerRepository.delete_by_device_id(db, device_id)
+    return {"revoked": True}

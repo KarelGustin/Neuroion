@@ -9,7 +9,7 @@ import SetupWizard from './components/SetupWizard'
 import ConnectWiFiScreen from './components/ConnectWiFiScreen'
 import JoinFlow from './components/JoinFlow'
 import { Connectivity, Sparkles, Home, Smartphone, Wrench, RotateCw } from './components/icons'
-import { getStatus, getSetupStatus, getDevStatus, factoryReset } from './services/api'
+import { getStatus, getSetupStatus, getDevStatus, factoryReset, getPairingCode, getApiBaseUrl } from './services/api'
 import './styles/App.css'
 
 function App() {
@@ -22,6 +22,7 @@ function App() {
   const [status, setStatus] = useState(null)
   const [statusLoading, setStatusLoading] = useState(true)
   const [qrData, setQrData] = useState(null)
+  const [connectLoading, setConnectLoading] = useState(false)
   const [error, setError] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [view, setView] = useState('boot')
@@ -210,6 +211,28 @@ function App() {
     setQrData({ url, title: 'Open Dashboard' })
   }
 
+  const handleConnect = async () => {
+    setError(null)
+    setConnectLoading(true)
+    try {
+      const householdId = 1
+      const deviceId = `connect-${Date.now()}`
+      const pairingCode = await getPairingCode(householdId, deviceId, 'ios', 'iPhone')
+      const apiPort = import.meta.env.VITE_API_PORT || '8000'
+      const rawIp = status?.network?.ip
+      const ip = (typeof rawIp === 'string' && rawIp.trim() !== '' && rawIp !== '—') ? rawIp.trim() : null
+      const homebaseUrl = ip ? `http://${ip}:${apiPort}` : getApiBaseUrl()
+      const vpnBase = 'https://10.66.66.1'
+      const params = new URLSearchParams({ base: homebaseUrl, code: pairingCode, vpn: '1', vpn_base: vpnBase })
+      const qrValue = `neuroion://pair?${params.toString()}`
+      setQrData({ url: qrValue, title: 'Koppelen met app (VPN)' })
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || 'Kon geen koppelcode ophalen')
+    } finally {
+      setConnectLoading(false)
+    }
+  }
+
   const handleSettingsOpen = () => setSettingsOpen(true)
   const handleSettingsClose = () => setSettingsOpen(false)
   const handleFactoryReset = () => {
@@ -356,10 +379,17 @@ function App() {
 
       <div className="actions-grid">
         <ActionButton
+          label={connectLoading ? 'Bezig…' : 'Koppelen'}
+          icon={<Smartphone size={36} />}
+          onClick={handleConnect}
+          variant="primary"
+          disabled={connectLoading}
+        />
+        <ActionButton
           label="Open Dashboard"
           icon={<Smartphone size={36} />}
           onClick={handleOpenDashboard}
-          variant="primary"
+          variant="secondary"
         />
         <ActionButton
           label="Instellingen"

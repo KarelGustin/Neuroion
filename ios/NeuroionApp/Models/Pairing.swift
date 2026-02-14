@@ -24,13 +24,18 @@ struct PairStartResponse: Codable {
 struct PairConfirmRequest: Codable {
     let pairingCode: String
     let deviceId: String
+    let includeVpn: Bool?
 }
 
 struct PairConfirmResponse: Codable {
     let token: String
     let householdId: Int
+    let householdName: String?
     let userId: Int
     let expiresInHours: Int
+    let onboardingMessage: String?
+    let wireguardConfig: String?
+    let vpnBaseUrl: String?
 }
 
 struct LocationEvent: Codable {
@@ -77,10 +82,12 @@ class AuthManager: ObservableObject {
         }
     }
     
-    func pair(deviceId: String, pairingCode: String) async throws {
+    /// Pairs with the Homebase. When includeVpn is true and the server returns WireGuard config, the response contains wireguardConfig and vpnBaseUrl for the caller to set up the tunnel.
+    func pair(deviceId: String, pairingCode: String, includeVpn: Bool = false) async throws -> PairConfirmResponse {
         let request = PairConfirmRequest(
             pairingCode: pairingCode,
-            deviceId: deviceId
+            deviceId: deviceId,
+            includeVpn: includeVpn ? true : nil
         )
         
         let response: PairConfirmResponse = try await apiClient.request(
@@ -94,12 +101,28 @@ class AuthManager: ObservableObject {
             self.isAuthenticated = true
             UserDefaults.standard.set(response.token, forKey: tokenKey)
         }
+        return response
     }
     
     func unpair() {
-        token = nil
-        isAuthenticated = false
-        UserDefaults.standard.removeObject(forKey: tokenKey)
+        let currentToken = token
+        Task { @MainActor in
+            if let t = currentToken {
+                try? await apiClient.requestNoContent(
+                    endpoint: "/pair/vpn-revoke",
+                    method: "POST",
+                    token: t
+                )
+            }
+            #if NEUROION_VPN_ENABLED
+            VPNTunnelManager.shared.stopTunnel()
+            VPNTunnelManager.shared.removeConfiguration()
+            #endif
+            ConnectionManager.shared.useVPNBaseURL = false
+            self.token = nil
+            self.isAuthenticated = false
+            UserDefaults.standard.removeObject(forKey: tokenKey)
+        }
     }
     
 }

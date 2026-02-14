@@ -1,0 +1,62 @@
+# XcodeGen spec: run from repo root with npm run generate:ios (or cd ios && xcodegen generate)
+# Generates Neuroion.xcodeproj with main app + Packet Tunnel Extension and WireGuard SPM.
+name: Neuroion
+options:
+  bundleIdPrefix: com.neuroion
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+  createIntermediateGroups: true
+
+packages:
+  WireGuard:
+    url: https://github.com/WireGuard/wireguard-apple
+    branch: master
+
+targets:
+  NeuroionOne:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: NeuroionApp
+        excludes:
+          - "**/*.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.neuroion.NeuroionOne
+        INFOPLIST_FILE: NeuroionApp/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: NeuroionApp/NeuroionOne.entitlements
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: NEUROION_VPN_ENABLED
+    entitlements:
+      path: NeuroionApp/NeuroionOne.entitlements
+    dependencies:
+      - target: NeuroionTunnel
+        embed: true
+
+  NeuroionTunnel:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: NeuroionTunnel
+        excludes:
+          - "*.md"
+          - "README.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.neuroion.NeuroionOne.NeuroionTunnel
+        INFOPLIST_FILE: NeuroionTunnel/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: NeuroionTunnel/NeuroionTunnel.entitlements
+    entitlements:
+      path: NeuroionTunnel/NeuroionTunnel.entitlements
+    dependencies:
+      - package: WireGuard
+        product: WireGuardKit

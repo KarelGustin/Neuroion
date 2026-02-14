@@ -9,11 +9,16 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-// MARK: - Pairing payload from QR (neuroion://pair?base=...&code=...)
+// MARK: - Pairing payload from QR (neuroion://pair?base=...&code=...&vpn=1&vpn_base=...)
 
 struct NeuroionPairQRPayload {
+    /// Homebase URL (local network, e.g. http://neuroion.local:8000).
     let baseURL: String
     let pairingCode: String
+    /// When true, request WireGuard config and use VPN for API.
+    let useVPN: Bool
+    /// VPN/tunnel URL (e.g. https://10.66.66.1). Stored as Remote URL in settings when present.
+    let vpnBaseURL: String?
 }
 
 enum NeuroionPairQRParser {
@@ -23,12 +28,19 @@ enum NeuroionPairQRParser {
               let query = components.queryItems else { return nil }
         let base = query.first(where: { $0.name == "base" })?.value
         let code = query.first(where: { $0.name == "code" })?.value
+        let vpn = query.first(where: { $0.name == "vpn" })?.value
+        let vpnBase = query.first(where: { $0.name == "vpn_base" })?.value?.removingPercentEncoding
         guard let baseURL = base?.removingPercentEncoding, !baseURL.isEmpty,
               let pairingCode = code?.trimmingCharacters(in: .whitespacesAndNewlines), !pairingCode.isEmpty else {
             return nil
         }
         let normalizedBase = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
-        return NeuroionPairQRPayload(baseURL: normalizedBase, pairingCode: pairingCode)
+        let useVPN = vpn == "1" || vpn?.lowercased() == "true"
+        let normalizedVpnBase = vpnBase.flatMap { s in
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : (t.hasSuffix("/") ? String(t.dropLast()) : t)
+        }
+        return NeuroionPairQRPayload(baseURL: normalizedBase, pairingCode: pairingCode, useVPN: useVPN, vpnBaseURL: normalizedVpnBase)
     }
 }
 
@@ -103,12 +115,28 @@ struct PairingView: View {
         isPairing = true
 
         connectionManager.baseURL = payload.baseURL
+        if payload.useVPN {
+            connectionManager.remoteBaseURL = payload.vpnBaseURL ?? neuroionVPNBaseURL
+            connectionManager.useVPNBaseURL = true
+        }
 
         Task {
             do {
                 let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-                try await authManager.pair(deviceId: deviceId, pairingCode: payload.pairingCode)
-                await MainActor.run { isPairing = false }
+                let response = try await authManager.pair(
+                    deviceId: deviceId,
+                    pairingCode: payload.pairingCode,
+                    includeVpn: payload.useVPN
+                )
+                await MainActor.run {
+                    if payload.useVPN, let config = response.wireguardConfig, !config.isEmpty {
+                        #if NEUROION_VPN_ENABLED
+                        VPNTunnelManager.shared.setConfiguration(wireguardConfig: config)
+                        VPNTunnelManager.shared.startTunnel()
+                        #endif
+                    }
+                    isPairing = false
+                }
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription

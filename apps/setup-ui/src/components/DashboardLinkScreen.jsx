@@ -5,11 +5,18 @@ import '../styles/DashboardLinkScreen.css'
 
 const DASHBOARD_PORT = 3001
 
+/** VPN base URL when using WireGuard (fixed IP on unit). */
+const VPN_BASE_URL = 'https://10.66.66.1'
+
 /**
  * Builds the URL that the iOS app scans to connect in one step (base URL + pairing code).
+ * @param {boolean} [vpn=false] - If true, use VPN base URL and add vpn=1 so app requests WireGuard config.
  */
-function buildAppPairingQRValue(apiBase, pairingCode) {
-  return `neuroion://pair?base=${encodeURIComponent(apiBase)}&code=${encodeURIComponent(pairingCode)}`
+function buildAppPairingQRValue(apiBase, pairingCode, vpn = false) {
+  const base = vpn ? VPN_BASE_URL : apiBase
+  const params = new URLSearchParams({ base, code: pairingCode })
+  if (vpn) params.set('vpn', '1')
+  return `neuroion://pair?${params.toString()}`
 }
 
 function DashboardLinkScreen({ pairingCode = null }) {
@@ -20,6 +27,7 @@ function DashboardLinkScreen({ pairingCode = null }) {
 
   const apiBase = typeof window !== 'undefined' ? getApiBaseUrl() : ''
   const appPairingQRValue = pairingCode && apiBase ? buildAppPairingQRValue(apiBase, pairingCode) : null
+  const appPairingQRValueVpn = pairingCode ? buildAppPairingQRValue(apiBase, pairingCode, true) : null
   const inviteQRValue = inviteCode && apiBase ? buildAppPairingQRValue(apiBase, inviteCode) : null
 
   const handleInviteMember = async () => {
@@ -67,6 +75,18 @@ function DashboardLinkScreen({ pairingCode = null }) {
             </p>
             <div className="dashboard-link-app-qr-code">
               <QRCodeSVG value={appPairingQRValue} size={200} level="H" includeMargin />
+            </div>
+            <p className="dashboard-link-app-qr-code-label">Code: {pairingCode}</p>
+          </div>
+        )}
+        {appPairingQRValueVpn && (
+          <div className="dashboard-link-card dashboard-link-app-qr">
+            <h3 className="dashboard-link-app-qr-title">iPhone koppelen (via VPN)</h3>
+            <p className="dashboard-link-app-qr-text">
+              Scan om te koppelen met VPN: daarna bereik je Neuroion overal via 10.66.66.1.
+            </p>
+            <div className="dashboard-link-app-qr-code">
+              <QRCodeSVG value={appPairingQRValueVpn} size={200} level="H" includeMargin />
             </div>
             <p className="dashboard-link-app-qr-code-label">Code: {pairingCode}</p>
           </div>

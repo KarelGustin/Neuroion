@@ -6,17 +6,15 @@
 //
 
 import SwiftUI
+import Combine
 
 private let typingIndicatorId = UUID()
 
 struct ChatView: View {
     @EnvironmentObject var authManager: AuthManager
+    @ObservedObject private var store = ChatSessionStore.shared
     @FocusState private var isInputFocused: Bool
     @State private var messageText = ""
-    @State private var messages: [Message] = []
-    @State private var isSending = false
-    @State private var statusText = "Neuroion denkt na…"
-    @State private var sendTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -24,12 +22,12 @@ struct ChatView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 16) {
-                            ForEach(messages) { message in
+                            ForEach(store.messages) { message in
                                 MessageBubble(message: message)
                                     .environmentObject(authManager)
                             }
-                            if isSending {
-                                TypingIndicatorView(statusText: statusText)
+                            if store.isSending {
+                                TypingIndicatorView(statusText: store.statusText)
                                     .id(typingIndicatorId)
                             }
                         }
@@ -40,20 +38,16 @@ struct ChatView: View {
                         }
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    .onChange(of: messages.count) { _ in
+                    .onChange(of: store.messages.count) { _ in
                         scrollToBottom(proxy: proxy)
                     }
-                    .onChange(of: isSending) { sending in
+                    .onChange(of: store.isSending) { sending in
                         if sending { scrollToBottom(proxy: proxy) }
                     }
                 }
-                .onDisappear {
-                    sendTask?.cancel()
-                    sendTask = nil
-                }
-                
+
                 Divider()
-                
+
                 HStack(alignment: .bottom, spacing: 12) {
                     TextField("Message...", text: $messageText, axis: .vertical)
                         .textFieldStyle(.plain)
@@ -62,14 +56,20 @@ struct ChatView: View {
                         .cornerRadius(20)
                         .lineLimit(1...6)
                         .focused($isInputFocused)
-                        .onSubmit { sendMessage() }
-                    
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(messageText.isEmpty ? .gray : .blue)
+                        .onSubmit { sendOrStop() }
+
+                    Button(action: sendOrStop) {
+                        if store.isSending {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(.red)
+                        } else {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(messageText.isEmpty ? .gray : .blue)
+                        }
                     }
-                    .disabled(messageText.isEmpty || isSending)
+                    .disabled(!store.isSending && messageText.isEmpty)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -80,130 +80,35 @@ struct ChatView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        if isSending {
+        if store.isSending {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo(typingIndicatorId, anchor: .bottom)
             }
-        } else if let lastMessage = messages.last {
+        } else if let lastMessage = store.messages.last {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
             }
         }
     }
 
-    private func sendMessage() {
-        guard !messageText.isEmpty else { return }
-
-        let userMessage = Message(
-            id: UUID(),
-            text: messageText,
-            isUser: true,
-            timestamp: Date()
-        )
-        messages.append(userMessage)
-
-        let messageToSend = messageText
-        messageText = ""
-        isSending = true
-
-        let token = authManager.token ?? ""
-        sendTask = Task { @MainActor in
-            statusText = "Neuroion denkt na…"
-            do {
-                let stream = ChatService.shared.sendMessageStreaming(message: messageToSend, token: token)
-                for try await event in stream {
-                    if Task.isCancelled {
-                        sendTask = nil
-                        return
-                    }
-                    switch event {
-                    case .status(let text):
-                        statusText = text
-                    case .done(let response):
-                        let actions: [Action] = response.actions.map { ar in
-                            Action(
-                                id: ar.id ?? 0,
-                                name: ar.name,
-                                description: ar.description,
-                                parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
-                                reasoning: ar.reasoning
-                            )
-                        }
-                        let botMessage = Message(
-                            id: UUID(),
-                            text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
-                            isUser: false,
-                            timestamp: Date(),
-                            actions: actions.isEmpty ? nil : actions
-                        )
-                        messages.append(botMessage)
-                        isSending = false
-                        sendTask = nil
-                        return
-                    }
-                }
-                isSending = false
-                sendTask = nil
-            } catch {
-                if Task.isCancelled {
-                    sendTask = nil
-                    return
-                }
-                // Fallback: if server returns 404 for /chat/stream, use non-streaming POST /chat
-                if let apiError = error as? APIError, case .httpError(404) = apiError {
-                    do {
-                        let response = try await ChatService.shared.sendMessage(message: messageToSend, token: token)
-                        let actions: [Action] = response.actions.map { ar in
-                            Action(
-                                id: ar.id ?? 0,
-                                name: ar.name,
-                                description: ar.description,
-                                parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
-                                reasoning: ar.reasoning
-                            )
-                        }
-                        let botMessage = Message(
-                            id: UUID(),
-                            text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
-                            isUser: false,
-                            timestamp: Date(),
-                            actions: actions.isEmpty ? nil : actions
-                        )
-                        messages.append(botMessage)
-                        isSending = false
-                        sendTask = nil
-                        return
-                    } catch {
-                        // fall through to show error
-                    }
-                }
-                let errorMessage = Message(
-                    id: UUID(),
-                    text: userFacingErrorMessage(for: error),
-                    isUser: false,
-                    timestamp: Date()
-                )
-                messages.append(errorMessage)
-                isSending = false
-                sendTask = nil
-            }
+    private func sendOrStop() {
+        if store.isSending {
+            store.cancelSend()
+            return
         }
+        guard !messageText.isEmpty else { return }
+        let text = messageText
+        messageText = ""
+        let token = authManager.token ?? ""
+        store.sendMessage(text, token: token)
     }
 
-    private func userFacingErrorMessage(for error: Error) -> String {
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .timedOut:
-                return NSLocalizedString("Verzoek duurde te lang. Controleer je verbinding of probeer het opnieuw.", comment: "Chat error")
-            case .notConnectedToInternet, .networkConnectionLost:
-                return NSLocalizedString("Geen internetverbinding. Controleer WiFi of mobiele data.", comment: "Chat error")
-            case .cannotFindHost, .cannotConnectToHost:
-                return NSLocalizedString("Kan Homebase niet bereiken. Klopt het adres in Instellingen?", comment: "Chat error")
-            default:
-                break
-            }
-        }
-        return error.localizedDescription
+    private func sendMessage() {
+        guard !messageText.isEmpty else { return }
+        let text = messageText
+        messageText = ""
+        let token = authManager.token ?? ""
+        store.sendMessage(text, token: token)
     }
 }
 
@@ -340,4 +245,157 @@ struct ActionCard: View {
             }
         }
     }
+}
+
+// MARK: - ChatSessionStore (shared state so streaming continues when switching tabs)
+
+final class ChatSessionStore: ObservableObject {
+    static let shared = ChatSessionStore()
+
+    @Published var messages: [Message] = []
+    @Published var isSending = false
+    @Published var statusText = "Neuroion denkt na…"
+
+    private var currentTask: Task<Void, Never>?
+
+    private init() {}
+
+    func sendMessage(_ text: String, token: String) {
+        guard !text.isEmpty else { return }
+        neuroionLog("send message: \(text.prefix(200))\(text.count > 200 ? "…" : "")")
+
+        let userMessage = Message(
+            id: UUID(),
+            text: text,
+            isUser: true,
+            timestamp: Date()
+        )
+        messages.append(userMessage)
+        isSending = true
+        statusText = "Neuroion denkt na…"
+
+        currentTask = Task { @MainActor in
+            await runStream(message: text, token: token)
+            currentTask = nil
+        }
+    }
+
+    func cancelSend() {
+        neuroionLog("cancelSend")
+        currentTask?.cancel()
+        currentTask = nil
+        isSending = false
+        let stoppedMessage = Message(
+            id: UUID(),
+            text: NSLocalizedString("Gestopt. Je kunt een nieuw bericht sturen.", comment: "Chat stopped"),
+            isUser: false,
+            timestamp: Date()
+        )
+        messages.append(stoppedMessage)
+    }
+
+    private func runStream(message: String, token: String) async {
+        do {
+            let stream = ChatService.shared.sendMessageStreaming(message: message, token: token)
+            for try await event in stream {
+                if Task.isCancelled { break }
+                switch event {
+                case .status(let text):
+                    statusText = text
+                    neuroionLog("stream status: \(text)")
+                case .done(let response):
+                    let actions: [Action] = response.actions.map { ar in
+                        Action(
+                            id: ar.id ?? 0,
+                            name: ar.name,
+                            description: ar.description,
+                            parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
+                            reasoning: ar.reasoning
+                        )
+                    }
+                    let botMessage = Message(
+                        id: UUID(),
+                        text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
+                        isUser: false,
+                        timestamp: Date(),
+                        actions: actions.isEmpty ? nil : actions
+                    )
+                    messages.append(botMessage)
+                    neuroionLog("stream done: \(response.message.prefix(100))...")
+                    isSending = false
+                    return
+                }
+            }
+            if Task.isCancelled {
+                isSending = false
+                return
+            }
+            isSending = false
+        } catch is CancellationError {
+            neuroionLog("stream cancelled")
+            isSending = false
+        } catch {
+            if let apiError = error as? APIError, case .httpError(404) = apiError {
+                do {
+                    let response = try await ChatService.shared.sendMessage(message: message, token: token)
+                    let actions: [Action] = response.actions.map { ar in
+                        Action(
+                            id: ar.id ?? 0,
+                            name: ar.name,
+                            description: ar.description,
+                            parameters: Dictionary(uniqueKeysWithValues: ar.parameters.map { ($0.key, $0.value.value) }),
+                            reasoning: ar.reasoning
+                        )
+                    }
+                    let botMessage = Message(
+                        id: UUID(),
+                        text: response.message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : response.message,
+                        isUser: false,
+                        timestamp: Date(),
+                        actions: actions.isEmpty ? nil : actions
+                    )
+                    await MainActor.run {
+                        messages.append(botMessage)
+                        neuroionLog("non-stream done")
+                    }
+                } catch {
+                    await MainActor.run { appendErrorMessage(for: error) }
+                }
+            } else {
+                await MainActor.run { appendErrorMessage(for: error) }
+            }
+            await MainActor.run { isSending = false }
+        }
+    }
+
+    private func appendErrorMessage(for error: Error) {
+        let errorMessage = Message(
+            id: UUID(),
+            text: userFacingErrorMessage(for: error),
+            isUser: false,
+            timestamp: Date()
+        )
+        messages.append(errorMessage)
+        neuroionLog("chat error: \(error.localizedDescription)")
+    }
+
+    private func userFacingErrorMessage(for error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut:
+                return NSLocalizedString("Het duurde te lang. Tik op Stop en stuur opnieuw, of controleer VPN/verbinding in Instellingen.", comment: "Chat timeout")
+            case .notConnectedToInternet, .networkConnectionLost:
+                return NSLocalizedString("Geen internetverbinding. Controleer WiFi of mobiele data.", comment: "Chat error")
+            case .cannotFindHost, .cannotConnectToHost:
+                return NSLocalizedString("Kan Homebase niet bereiken. Klopt het adres in Instellingen?", comment: "Chat error")
+            default:
+                break
+            }
+        }
+        return error.localizedDescription
+    }
+}
+
+private func neuroionLog(_ message: String) {
+    NSLog("[Neuroion] %@", message)
 }

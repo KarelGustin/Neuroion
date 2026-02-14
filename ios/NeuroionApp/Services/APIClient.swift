@@ -3,13 +3,71 @@
 //  NeuroionApp
 //
 //  HTTP client for Homebase API. Uses ConnectionManager for configurable base URL.
+//  Certificate pinning for host 10.66.66.1 (VPN) when a pin is set.
 //
 
+import CryptoKit
 import Foundation
+import Security
+
+/// Host that uses certificate pinning when a pin is configured (VPN base URL).
+private let pinnedHost = "10.66.66.1"
+private let pinnedPublicKeyHashKey = "neuroion_vpn_pinned_public_key_hash"
+
+/// Optional: set to base64-encoded SHA-256 of the server cert's public key (SPKI) to pin 10.66.66.1. If nil, 10.66.66.1 is trusted with default validation (for dev/self-signed).
+func getVPNCertificatePin() -> Data? {
+    guard let b64 = UserDefaults.standard.string(forKey: pinnedPublicKeyHashKey), !b64.isEmpty,
+          let data = Data(base64Encoded: b64) else { return nil }
+    return data
+}
+
+func setVPNCertificatePin(_ hash: Data?) {
+    if let hash = hash {
+        UserDefaults.standard.set(hash.base64EncodedString(), forKey: pinnedPublicKeyHashKey)
+    } else {
+        UserDefaults.standard.removeObject(forKey: pinnedPublicKeyHashKey)
+    }
+}
+
+private final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        guard challenge.protectionSpace.host == pinnedHost,
+              challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+        if let pin = getVPNCertificatePin() {
+            guard SecTrustGetCertificateCount(serverTrust) > 0,
+                  let cert = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+                return
+            }
+            let key = SecCertificateCopyKey(cert)
+            guard let key = key else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+                return
+            }
+            guard let keyData = SecKeyCopyExternalRepresentation(key, nil) as Data? else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+                return
+            }
+            let hash = Data(SHA256.hash(data: keyData))
+            if hash == pin {
+                completionHandler(.useCredential, URLCredential(trust: serverTrust))
+            } else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+            }
+        } else {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        }
+    }
+}
 
 class APIClient {
     static let shared = APIClient()
     
+    private let pinningDelegate = CertificatePinningDelegate()
     private let session: URLSession
     
     /// Encoder: camelCase → snake_case for API request bodies
@@ -31,9 +89,9 @@ class APIClient {
     /// Resource (total) timeout
     private static let resourceTimeout: TimeInterval = 90
 
-    /// Longer timeouts for streaming chat (research etc. can take minutes)
-    private static let streamRequestTimeout: TimeInterval = 60
-    private static let streamResourceTimeout: TimeInterval = 300
+    /// Longer timeouts for streaming chat (VPN/remote can be slow; context + LLM take time)
+    private static let streamRequestTimeout: TimeInterval = 300
+    private static let streamResourceTimeout: TimeInterval = 600
 
     private let streamSession: URLSession
 
@@ -41,18 +99,22 @@ class APIClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = Self.requestTimeout
         config.timeoutIntervalForResource = Self.resourceTimeout
-        self.session = URLSession(configuration: config)
+        self.session = URLSession(configuration: config, delegate: pinningDelegate, delegateQueue: nil)
 
         let streamConfig = URLSessionConfiguration.default
         streamConfig.timeoutIntervalForRequest = Self.streamRequestTimeout
         streamConfig.timeoutIntervalForResource = Self.streamResourceTimeout
-        self.streamSession = URLSession(configuration: streamConfig)
+        self.streamSession = URLSession(configuration: streamConfig, delegate: pinningDelegate, delegateQueue: nil)
     }
     
     private var baseURL: String {
         ConnectionManager.shared.effectiveBaseURL
     }
-    
+
+    private func logConnection(_ path: String) {
+        NSLog("[Neuroion] API %@ → %@", path, baseURL)
+    }
+
     func request<T: Decodable>(
         endpoint: String,
         method: String = "GET",
@@ -60,6 +122,7 @@ class APIClient {
         token: String? = nil
     ) async throws -> T {
         let path = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        logConnection(path)
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw APIError.invalidURL
         }
@@ -97,6 +160,7 @@ class APIClient {
         token: String? = nil
     ) async throws {
         let path = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        logConnection(path)
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw APIError.invalidURL
         }
@@ -126,6 +190,7 @@ class APIClient {
         token: String? = nil
     ) async throws -> AsyncThrowingStream<[String: Any], Error> {
         let path = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        logConnection(path)
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw APIError.invalidURL
         }

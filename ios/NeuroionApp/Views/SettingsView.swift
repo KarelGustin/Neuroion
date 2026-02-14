@@ -51,15 +51,19 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
-                    TextField("Remote Homebase URL", text: $connectionManager.remoteBaseURL)
+                    TextField("Remote / VPN URL", text: $connectionManager.remoteBaseURL)
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
                     Toggle("Use remote connection", isOn: $connectionManager.useRemoteURL)
+                    Toggle("Use VPN tunnel", isOn: $connectionManager.useVPNBaseURL)
+                    Text("In use: \(ConnectionManager.shared.effectiveBaseURL)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 } header: {
                     Text("Connection")
                 } footer: {
-                    Text("Homebase URL: your Pi on local Wi‑Fi (e.g. http://192.168.1.1:8000). Remote URL: use when away (e.g. Tailscale: http://neuroion-pi:8000). Turn on \"Use remote connection\" when not at home.")
+                    Text("Homebase URL: local network (e.g. http://neuroion.local:8000). Remote/VPN URL: tunnel or Tailscale. \"Use VPN tunnel\" uses 10.66.66.1 when the tunnel is connected.")
                 }
                 
                 Section("Location") {
@@ -100,13 +104,29 @@ struct SettingsView: View {
         showPairingScanner = false
         pairingError = nil
         connectionManager.baseURL = payload.baseURL
+        if payload.useVPN {
+            connectionManager.remoteBaseURL = payload.vpnBaseURL ?? neuroionVPNBaseURL
+            connectionManager.useVPNBaseURL = true
+        }
         isPairing = true
 
         Task {
             do {
                 let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-                try await authManager.pair(deviceId: deviceId, pairingCode: payload.pairingCode)
-                await MainActor.run { isPairing = false }
+                let response = try await authManager.pair(
+                    deviceId: deviceId,
+                    pairingCode: payload.pairingCode,
+                    includeVpn: payload.useVPN
+                )
+                await MainActor.run {
+                    if payload.useVPN, let config = response.wireguardConfig, !config.isEmpty {
+                        #if NEUROION_VPN_ENABLED
+                        VPNTunnelManager.shared.setConfiguration(wireguardConfig: config)
+                        VPNTunnelManager.shared.startTunnel()
+                        #endif
+                    }
+                    isPairing = false
+                }
             } catch {
                 await MainActor.run {
                     pairingError = error.localizedDescription

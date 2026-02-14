@@ -8,7 +8,25 @@ Chat-frontend voor Neuroion (zoals ChatGPT/Ollama): praat met je Homebase-agent,
 - iOS 16+ (voor deployment op je iPhone)
 - Neuroion Homebase draait ergens bereikbaar (lokaal netwerk of server)
 
-## Project in Xcode opzetten en op je iPhone deployen
+## Quick start: project genereren en bouwen (aanbevolen)
+
+Vanuit de **repo-root** (waar `package.json` staat):
+
+1. **Eenmalig:** installeer XcodeGen of Mint (voor projectgeneratie):
+   ```bash
+   brew install xcodegen
+   ```
+   Of: `brew install mint` — dan haalt het script XcodeGen automatisch op bij de eerste run.
+
+2. **Genereren en bouwen:**
+   ```bash
+   npm run ios
+   ```
+   Dit genereert `ios/Neuroion.xcodeproj` uit `ios/project.yml` en bouwt de app. Daarna kun je in Xcode `ios/Neuroion.xcodeproj` openen, je Team kiezen bij Signing, en op je iPhone runnen.
+
+   Alleen het project opnieuw genereren (zonder build): `npm run generate:ios`.
+
+## Project handmatig in Xcode opzetten
 
 1. **Nieuw iOS-appproject maken**
    - Open Xcode → **File → New → Project**
@@ -83,6 +101,8 @@ Chat-frontend voor Neuroion (zoals ChatGPT/Ollama): praat met je Homebase-agent,
   4. **Schoon opnieuw bouwen**  
      **Product → Clean Build Folder**, daarna **Product → Run** op je iPhone.
 - **"Multiple commands produce ... Info.plist"**: Twee buildstappen schrijven naar dezelfde Info.plist. Oplossing: in Xcode → project (blauw icoon) → target (bijv. "Neuroion One") → tab **Build Phases** → **Copy Bundle Resources**. Verwijder **Info.plist** uit deze lijst (selecteer en klik op −). De Info.plist wordt al via Build Settings → Info.plist File verwerkt; die mag niet ook gekopieerd worden.
+- **"Cannot find VPNTunnelManager in scope"**: De app-target moet alle Swift-bestanden uit `NeuroionApp` bevatten. **Oplossing:** Genereer het project opnieuw met `npm run generate:ios` (vanuit de repo-root), of voeg in Xcode handmatig toe: target NeuroionOne → **Build Phases** → **Compile Sources** → + → kies `VPNTunnelManager.swift`.
 - **"Invalid URL" / geen verbinding**: Controleer of de Homebase URL klopt (inclusief `http://` en poort `:8000`) en of je telefoon op hetzelfde netwerk zit als de server (of dat de server van buiten bereikbaar is).
+- **Geen logs in de terminal bij `npm run dev`**: De app praat met de URL die in **Instellingen → Connection** staat. Als **Use VPN tunnel** of **Use remote connection** aan staat, gaan verzoeken naar die URL (bijv. 10.66.66.1 of een Tailscale-URL), niet naar je MacBook. Om tegen je lokale server te testen: zet **Homebase URL** op het IP van je Mac (bijv. `http://192.168.178.201:8000`, zie de "Network"-regel in de `npm run dev`-output), en zet **Use VPN tunnel** en **Use remote connection** uit. Dan zie je `POST /chat/stream` in de terminal wanneer je een bericht stuurt.
 - **"Invalid or expired pairing code"**: Haal een nieuwe code uit de Setup UI; codes verlopen na enkele minuten.
 - **HTTP wordt geblokkeerd**: De meegeleverde Info.plist staat lokaal netwerk en arbitrary loads toe. Als je die hebt vervangen, voeg dan ten minste **App Transport Security → NSAllowsLocalNetworking = YES** toe voor een HTTP-Homebase op je netwerk.

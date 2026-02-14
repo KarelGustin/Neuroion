@@ -29,6 +29,10 @@ from neuroion.core.agent.prompts import (
     build_structured_tool_messages,
     build_tool_result_messages,
 )
+from neuroion.core.agent.tool_formatters import (
+    result_summary_for_trace,
+    tools_list_text_for_agent,
+)
 from neuroion.core.agent.tool_protocol import parse_llm_output, format_tool_result_for_llm
 from neuroion.core.agent.tool_router import get_tool_router
 from neuroion.core.agent.tool_registry import get_tool_registry
@@ -37,150 +41,6 @@ from neuroion.core.llm.base import LLMClient
 from neuroion.core.observability.metrics import record_tool_call
 
 logger = logging.getLogger(__name__)
-
-
-def _tool_category(name: str) -> str:
-    """Return category label for grouping tools in the plan prompt."""
-    if not name:
-        return "Other"
-    if name.startswith("codebase."):
-        return "Codebase"
-    if name.startswith("cron."):
-        return "Reminders/Scheduling"
-    if name.startswith("web."):
-        return "Web/Research"
-    if name in ("get_dashboard_link",):
-        return "Dashboard"
-    if name in ("generate_week_menu", "create_grocery_list", "summarize_family_preferences"):
-        return "Meals/Preferences"
-    return "Other"
-
-
-def _format_tool_params(parameters: Any) -> str:
-    """Format JSON schema parameters as compact 'name, req, opt?' for agent context."""
-    if not parameters or not isinstance(parameters, dict):
-        return ""
-    props = parameters.get("properties") or {}
-    required = set(parameters.get("required") or [])
-    if not props:
-        return ""
-    parts = []
-    for key in props:
-        parts.append(f"{key}?" if key not in required else key)
-    return ", ".join(parts)
-
-
-def _tools_list_text_for_agent(tool_router, allowed_tools: Optional[set] = None) -> str:
-    """Build 'name(params): description' lines for agent loop prompt, grouped by category.
-    Includes exact parameter names so the model uses correct keys in arguments.
-    If allowed_tools is set, only include those tools (e.g. exclude codebase for web research)."""
-    tools = tool_router.get_all_tools_for_llm()
-    by_category: Dict[str, List[str]] = {}
-    for t in tools:
-        fn = t.get("function") or t
-        name = fn.get("name") or t.get("name") or ""
-        if not name:
-            continue
-        if allowed_tools is not None and name not in allowed_tools:
-            continue
-        desc = (fn.get("description") or t.get("description") or "")[:120]
-        params_str = _format_tool_params(fn.get("parameters"))
-        if params_str:
-            line = f"- {name}({params_str}): {desc}"
-        else:
-            line = f"- {name}: {desc}"
-        cat = _tool_category(name)
-        by_category.setdefault(cat, []).append(line)
-    order = ("Codebase", "Web/Research", "Reminders/Scheduling", "Dashboard", "Meals/Preferences", "Other")
-    sections = []
-    for cat in order:
-        if cat in by_category and by_category[cat]:
-            sections.append(f"{cat}:\n" + "\n".join(by_category[cat]))
-    for cat, lines in by_category.items():
-        if cat not in order:
-            sections.append(f"{cat}:\n" + "\n".join(lines))
-    return "\n\n".join(sections) if sections else "No tools."
-
-
-# Max chars for web search result summary in trace (so final LLM can answer with actual findings)
-_WEB_SEARCH_SUMMARY_MAX = 2800
-
-
-def _result_summary_for_trace(tool_name: str, result: Any) -> str:
-    """Summary of tool result for turn trace. For web.search, include titles and URLs so final reply can use them."""
-    if not isinstance(result, dict):
-        return str(result)[:200] if result else "ok"
-    if result.get("success") is False:
-        return f"error: {result.get('error', 'unknown')}"[:150]
-    # Web search: pass through enough for final LLM to formulate a real answer (titles + URLs)
-    if tool_name == "web.search" and "results" in result and isinstance(result["results"], list):
-        query = result.get("query") or ""
-        lines = [f"Query: {query}"] if query else []
-        for i, r in enumerate(result["results"][:10]):
-            if not isinstance(r, dict):
-                continue
-            title = (r.get("title") or r.get("name") or "").strip()[:120]
-            url = (r.get("url") or r.get("href") or r.get("link") or "").strip()
-            snippet = (r.get("snippet") or r.get("body") or "").strip()[:150]
-            if title or url:
-                lines.append(f"{i + 1}) {title} | {url}" if url else f"{i + 1}) {title}")
-            if snippet and len("\n".join(lines)) < _WEB_SEARCH_SUMMARY_MAX - 180:
-                lines.append(f"   {snippet}")
-            if len("\n".join(lines)) >= _WEB_SEARCH_SUMMARY_MAX:
-                break
-        if lines:
-            return "\n".join(lines)[:_WEB_SEARCH_SUMMARY_MAX]
-        return f"{len(result['results'])} results"
-    # web.shopping_search: same shape as web.search (titles + URLs for product options)
-    if tool_name == "web.shopping_search" and "results" in result and isinstance(result["results"], list):
-        query = result.get("query") or ""
-        lines = [f"Query: {query}"] if query else []
-        for i, r in enumerate(result["results"][:5]):
-            if not isinstance(r, dict):
-                continue
-            title = (r.get("title") or r.get("name") or "").strip()[:120]
-            url = (r.get("url") or r.get("href") or r.get("link") or "").strip()
-            snippet = (r.get("snippet") or r.get("body") or "").strip()[:100]
-            if title or url:
-                lines.append(f"{i + 1}) {title} | {url}" if url else f"{i + 1}) {title}")
-            if snippet:
-                lines.append(f"   {snippet}")
-        if lines:
-            return "\n".join(lines)[:_WEB_SEARCH_SUMMARY_MAX]
-        return f"{len(result['results'])} results"
-    # github.search: name, url, description
-    if tool_name == "github.search" and "results" in result and isinstance(result["results"], list):
-        lines = []
-        for i, r in enumerate(result["results"][:5]):
-            if not isinstance(r, dict):
-                continue
-            name = (r.get("name") or "").strip()
-            url = (r.get("url") or "").strip()
-            desc = (r.get("description") or "").strip()[:120]
-            if name or url:
-                lines.append(f"{i + 1}) {name} | {url}" if url else f"{i + 1}) {name}")
-            if desc:
-                lines.append(f"   {desc}")
-        if lines:
-            return "\n".join(lines)[:_WEB_SEARCH_SUMMARY_MAX]
-        return f"{len(result['results'])} repos"
-    # Common shapes
-    if "content" in result and isinstance(result.get("content"), str):
-        preview = result["content"][:100].replace("\n", " ")
-        return f"{len(result['content'])} chars" if len(result["content"]) > 100 else preview
-    if "path" in result and "entries" in result:
-        return f"{len(result['entries'])} entries"
-    if "matches" in result:
-        return f"{len(result['matches'])} matches"
-    if "results" in result and isinstance(result["results"], list):
-        return f"{len(result['results'])} results"
-    if "menu" in result:
-        return "menu generated"
-    if "list" in result:
-        return "list created"
-    if "message" in result:
-        return str(result["message"])[:80]
-    return "ok"
 
 
 def _is_web_research_intent(message: str) -> bool:
@@ -290,7 +150,7 @@ def run_agent_turn(
     name = (agent_input.agent_name or "ion").strip() or "ion"
     user_message = agent_input.user_message or ""
 
-    tools_list_text = _tools_list_text_for_agent(tool_router, allowed_tools=set(allowed_tools))
+    tools_list_text = tools_list_text_for_agent(tool_router, allowed_tools=set(allowed_tools))
     system_short = get_agent_loop_system_prompt(name, tools_list_text)
     plan_instruction = get_agent_plan_action_instruction()
 
@@ -346,7 +206,7 @@ def run_agent_turn(
             record_tool_call(tname, result.success)
             _emit(progress_callback, {"type": "tool_done", "tool": tname})
             out = result.output if result.success and result.output else {"success": False, "error": result.error}
-            summary = _result_summary_for_trace(tname, out)
+            summary = result_summary_for_trace(tname, out)
             trace.append_tool_call(
                 tool=tname,
                 arguments=targs,
@@ -421,7 +281,7 @@ def run_agent_turn(
             record_tool_call(tname, result.success)
             _emit(progress_callback, {"type": "tool_done", "tool": tname})
             out = result.output if result.success and result.output else {"success": False, "error": result.error}
-            summary = _result_summary_for_trace(tname, out)
+            summary = result_summary_for_trace(tname, out)
             trace.append_tool_call(
                 tool=tname,
                 arguments=targs,

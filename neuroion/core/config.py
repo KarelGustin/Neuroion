@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # Agent task mode: use structured JSON protocol when client sends X-Agent-Task-Mode: 1 (default off; header controls task path)
     agent_task_mode: bool = os.getenv("AGENT_TASK_MODE", "0").strip().lower() in ("1", "true", "yes")
 
+    # WireGuard VPN (unit as 10.66.66.1; iOS app uses this as fixed base URL)
+    wireguard_vpn_cidr: str = os.getenv("WIREGUARD_VPN_CIDR", "10.66.66.0/24")
+    vpn_server_ip: str = os.getenv("VPN_SERVER_IP", "10.66.66.1")
+    wireguard_config_path: str = os.getenv("WIREGUARD_CONFIG", "/etc/wireguard/wg0.conf")
+    wireguard_endpoint: str = os.getenv("WIREGUARD_ENDPOINT", "")  # host:port e.g. neuroion.local:51820
+    wireguard_add_peer_script: str = os.getenv(
+        "WIREGUARD_ADD_PEER_SCRIPT",
+        str(Path(__file__).resolve().parent.parent.parent / "scripts" / "wireguard-add-peer.sh"),
+    )
+
     class Config:
         # Load .env from project root (neuroion/core/config.py -> parent.parent.parent)
         env_file = str(Path(__file__).resolve().parent.parent.parent / ".env")

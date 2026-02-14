@@ -6,10 +6,13 @@ Supports streaming via Server-Sent Events (SSE) for real-time progress.
 """
 import asyncio
 import json
+import logging
 import queue
 import threading
 from datetime import timedelta
 from typing import Optional, List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -88,6 +91,7 @@ async def chat_stream(
     Keeps the connection alive so long requests (e.g. market research) complete.
     Uses db_session() per thread so the request session is never used from another thread.
     """
+    logger.info("Chat stream request received: message=%s (user_id=%s)", request.message[:80] if request.message else "", user.get("user_id"))
     agent = get_agent()
     household_id = user["household_id"]
     user_id = user["user_id"]
@@ -164,6 +168,8 @@ async def chat_stream(
     thread.start()
 
     async def event_stream():
+        # Send immediate status so the client gets data within ~1s and doesn't hit "no data" timeout
+        yield f"data: {json.dumps({'type': 'status', 'text': 'Neuroion denkt na…'})}\n\n"
         loop = asyncio.get_event_loop()
         while True:
             ev = await loop.run_in_executor(None, sync_queue.get)
@@ -212,24 +218,7 @@ def chat(
     agent = get_agent()
     household_id = user["household_id"]
     user_id = user["user_id"]
-    
-    # #region agent log
-    try:
-        import json as _json, time as _time
-        with open('/Users/karelgustin/Neuroion/Neuroion/.cursor/debug.log', 'a') as _f:
-            _f.write(_json.dumps({
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "H1",
-                "location": "chat.py:84",
-                "message": "chat entry",
-                "data": {"household_id": household_id, "user_id": user_id},
-                "timestamp": int(_time.time() * 1000),
-            }) + "\n")
-    except Exception:
-        pass
-    # #endregion
-    
+
     # Increment daily request counter
     RequestCounter.increment(db, household_id)
 
