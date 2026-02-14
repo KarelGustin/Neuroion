@@ -33,6 +33,18 @@ struct ChatMessage: Codable {
     let content: String
 }
 
+/// Message from GET /chat/history (includes id and created_at for display).
+struct ChatHistoryMessage: Codable {
+    let id: Int
+    let role: String
+    let content: String
+    let created_at: String?
+}
+
+struct ChatHistoryResponse: Codable {
+    let messages: [ChatHistoryMessage]
+}
+
 struct ChatResponse: Codable {
     let message: String
     let reasoning: String

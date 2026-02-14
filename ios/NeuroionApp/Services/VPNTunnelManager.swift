@@ -128,3 +128,11 @@ class VPNTunnelManager: ObservableObject, TunnelStatusProviding {
         }
     }
 }
+
+extension VPNTunnelManager: TunnelStartRequesting {
+    /// Called by ConnectionManager when auto-connection finds local unreachable and VPN is preferred.
+    func startTunnelIfConfigured() {
+        guard manager != nil else { return }
+        startTunnel()
+    }
+}

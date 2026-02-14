@@ -47,6 +47,7 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Automatic connection", isOn: $connectionManager.useAutoConnection)
                     TextField("Homebase URL", text: $connectionManager.baseURL)
                         .keyboardType(.URL)
                         .autocapitalization(.none)
@@ -55,15 +56,19 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                         .autocorrectionDisabled()
-                    Toggle("Use remote connection", isOn: $connectionManager.useRemoteURL)
-                    Toggle("Use VPN tunnel", isOn: $connectionManager.useVPNBaseURL)
-                    Text("In use: \(ConnectionManager.shared.effectiveBaseURL)")
+                    if !connectionManager.useAutoConnection {
+                        Toggle("Use remote connection", isOn: $connectionManager.useRemoteURL)
+                        Toggle("Use VPN tunnel", isOn: $connectionManager.useVPNBaseURL)
+                    }
+                    Text("In use: \(connectionManager.effectiveBaseURL) (\(connectionManager.effectiveConnectionLabel))")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } header: {
                     Text("Connection")
                 } footer: {
-                    Text("Homebase URL: local network (e.g. http://neuroion.local:8000). Remote/VPN URL: tunnel or Tailscale. \"Use VPN tunnel\" uses 10.66.66.1 when the tunnel is connected.")
+                    Text(connectionManager.useAutoConnection
+                         ? "Automatic: same WiFi → local URL; 4G/other network → tunnel or remote. Set Homebase URL (local) and Remote/VPN URL (e.g. https://10.66.66.1); enable \"Use VPN tunnel\" so the app can use the tunnel when away."
+                         : "Homebase URL: local network (e.g. http://neuroion.local:8000). Remote/VPN URL: tunnel or Tailscale. Toggles choose connection manually.")
                 }
                 
                 Section("Location") {

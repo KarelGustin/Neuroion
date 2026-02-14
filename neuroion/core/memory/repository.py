@@ -866,7 +866,39 @@ class ChatMessageRepository:
             query = query.filter(ChatMessage.user_id == user_id)
         
         return query.order_by(ChatMessage.created_at.desc()).limit(limit).all()
-    
+
+    @staticmethod
+    def get_history_for_display(
+        db: Session,
+        household_id: int,
+        user_id: Optional[int],
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get the most recent messages in chronological order (oldest first) for displaying chat history.
+        Returns list of { id, role, content, created_at } with created_at as ISO string.
+        """
+        require_active_session(db)
+        query = db.query(ChatMessage).filter(ChatMessage.household_id == household_id)
+        if user_id is not None:
+            query = query.filter(ChatMessage.user_id == user_id)
+        messages = (
+            query.order_by(ChatMessage.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        # Chronological order (oldest first)
+        messages = list(reversed(messages))
+        return [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in messages
+        ]
+
     @staticmethod
     def get_conversation_history(
         db: Session,

@@ -42,6 +42,32 @@ from neuroion.core.observability.metrics import record_tool_call
 
 logger = logging.getLogger(__name__)
 
+# Max length for step_output content in stream (keeps SSE payloads bounded)
+STEP_OUTPUT_PLAN_MAX = 4000
+STEP_OUTPUT_TOOL_MAX = 3500
+STEP_OUTPUT_REFLECT_MAX = 2000
+
+
+def _truncate(s: str, max_len: int, suffix: str = "…") -> str:
+    if not s or len(s) <= max_len:
+        return s or ""
+    return s[: max_len - len(suffix)] + suffix
+
+
+def _emit_step_output(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    phase: str,
+    content: str,
+    tool: Optional[str] = None,
+) -> None:
+    """Emit actual AI output for this step so the client can show a dynamic pipeline log."""
+    if not progress_callback or not content:
+        return
+    ev: Dict[str, Any] = {"type": "step_output", "phase": phase, "content": content.strip()}
+    if tool:
+        ev["tool"] = tool
+    progress_callback(ev)
+
 
 def _is_web_research_intent(message: str) -> bool:
     """True if the user message clearly asks for web search / product lookup (no codebase)."""
@@ -143,6 +169,30 @@ def _emit(progress_callback: Optional[Callable[[Dict[str, Any]], None]], event: 
             pass
 
 
+def _writer_llm_call(
+    llm: LLMClient,
+    messages: List[Dict[str, str]],
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> str:
+    """Run writer LLM call; stream tokens to callback when possible."""
+    use_stream = progress_callback is not None and hasattr(llm, "stream") and callable(getattr(llm, "stream"))
+    if use_stream:
+        try:
+            chunks: List[str] = []
+            for chunk in llm.stream(messages, temperature=0.45):
+                if chunk:
+                    chunks.append(chunk)
+                    progress_callback({"type": "token", "text": chunk})
+            return "".join(chunks)
+        except Exception as e:
+            logger.warning("Writer stream failed, falling back to sync: %s", e)
+    try:
+        return llm.chat(messages, temperature=0.45, max_tokens=1024) or ""
+    except Exception as e:
+        logger.warning("Writer chat failed: %s", e)
+        raise
+
+
 def run_agent_turn(
     *,
     agent_input: AgentInput,
@@ -206,6 +256,24 @@ def run_agent_turn(
     if next_action == NEXT_ACTION_ASK_USER and question_to_user:
         return question_to_user.strip()
 
+    # Emit actual plan output so client can show what the AI decided
+    plan_lines = []
+    if goal:
+        plan_lines.append(f"Doel: {goal}")
+    if plan_steps:
+        plan_lines.append("Plan: " + " → ".join(plan_steps[:10]))
+    if tool_calls:
+        parts = [f"{tc.get('name', '')}({json.dumps(tc.get('arguments') or {}, ensure_ascii=False)[:80]})" for tc in tool_calls[:8]]
+        plan_lines.append("Tools: " + ", ".join(parts))
+    plan_lines.append(f"Volgende actie: {next_action}")
+    if response_outline:
+        plan_lines.append("Outline: " + " | ".join(response_outline[:5]))
+    _emit_step_output(
+        progress_callback,
+        "plan",
+        _truncate("\n".join(plan_lines), STEP_OUTPUT_PLAN_MAX),
+    )
+
     _emit(progress_callback, {"type": "status", "text": "Plan klaar. Tools uitvoeren…"})
     trace = TurnTrace()
     context = RunContext(
@@ -226,9 +294,15 @@ def run_agent_turn(
             _emit(progress_callback, {"type": "tool_start", "tool": tname})
             result = tool_router.call(tname, targs, context)
             record_tool_call(tname, result.success)
-            _emit(progress_callback, {"type": "tool_done", "tool": tname})
             out = result.output if result.success and result.output else {"success": False, "error": result.error}
             summary = result_summary_for_trace(tname, out)
+            _emit_step_output(
+                progress_callback,
+                "tool_result",
+                _truncate(summary, STEP_OUTPUT_TOOL_MAX),
+                tool=tname,
+            )
+            _emit(progress_callback, {"type": "tool_done", "tool": tname})
             trace.append_tool_call(
                 tool=tname,
                 arguments=targs,
@@ -252,7 +326,7 @@ def run_agent_turn(
             no_tools_used=True,
         )
         try:
-            direct_raw = llm.chat(writer_messages, temperature=0.45)
+            direct_raw = _writer_llm_call(llm, writer_messages, progress_callback)
         except Exception as e:
             logger.warning("Writer (no tools) failed: %s", e)
             return "I had trouble answering. Please try again."
@@ -282,8 +356,22 @@ def run_agent_turn(
         except Exception as e:
             logger.warning("Agent reflect call failed: %s", e)
             break
-        _, next_calls, refl_next_action, refl_outline, refl_question = parse_reflect_response(
+        refl_text, next_calls, refl_next_action, refl_outline, refl_question = parse_reflect_response(
             reflect_raw, allowed_tools=allowed_tools
+        )
+        # Emit actual reflect output so client can follow the AI's decision
+        refl_lines = []
+        if refl_text:
+            refl_lines.append(refl_text)
+        refl_lines.append(f"Volgende actie: {refl_next_action}")
+        if next_calls:
+            refl_lines.append("Nog tools: " + ", ".join(tc.get("name", "") for tc in next_calls))
+        if refl_outline:
+            refl_lines.append("Outline: " + " | ".join(refl_outline[:5]))
+        _emit_step_output(
+            progress_callback,
+            "reflect",
+            _truncate("\n".join(refl_lines), STEP_OUTPUT_REFLECT_MAX),
         )
         if refl_outline:
             last_response_outline = refl_outline
@@ -301,9 +389,15 @@ def run_agent_turn(
             _emit(progress_callback, {"type": "tool_start", "tool": tname})
             result = tool_router.call(tname, targs, context)
             record_tool_call(tname, result.success)
-            _emit(progress_callback, {"type": "tool_done", "tool": tname})
             out = result.output if result.success and result.output else {"success": False, "error": result.error}
             summary = result_summary_for_trace(tname, out)
+            _emit_step_output(
+                progress_callback,
+                "tool_result",
+                _truncate(summary, STEP_OUTPUT_TOOL_MAX),
+                tool=tname,
+            )
+            _emit(progress_callback, {"type": "tool_done", "tool": tname})
             trace.append_tool_call(
                 tool=tname,
                 arguments=targs,
@@ -327,7 +421,7 @@ def run_agent_turn(
         no_tools_used=False,
     )
     try:
-        final_raw = llm.chat(writer_messages, temperature=0.45)
+        final_raw = _writer_llm_call(llm, writer_messages, progress_callback)
     except Exception as e:
         logger.warning("Writer (final) call failed: %s", e)
         return "I had trouble finishing that. Please try again."

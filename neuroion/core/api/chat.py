@@ -67,6 +67,19 @@ class ActionExecuteResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ChatHistoryMessage(BaseModel):
+    """Single message in chat history."""
+    id: int
+    role: str
+    content: str
+    created_at: Optional[str] = None
+
+
+class ChatHistoryResponse(BaseModel):
+    """Chat history for display (e.g. on app start)."""
+    messages: List[ChatHistoryMessage]
+
+
 # Global agent instance
 _agent: Optional[Agent] = None
 
@@ -94,6 +107,7 @@ async def chat_stream(
 
     Events:
       - status: { type, text, ts, step }; current status line.
+      - step_output: { type, phase, content, tool?, ts, step }; actual AI output for that step (plan, tool_result, reflect). step.content has the text to show.
       - token: { type, text, ts }; streamed reply text (append to message).
       - tool_start / tool_done: { type, tool, ts, step }; tool step running/done.
       - done: { type, message, actions?, error?, ts, step }; final message and step "Klaar".
@@ -359,3 +373,33 @@ def execute_action(
         result=result.get("result"),
         error=result.get("error"),
     )
+
+
+@router.get("/history", response_model=ChatHistoryResponse)
+def get_chat_history(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+    limit: int = 100,
+) -> ChatHistoryResponse:
+    """
+    Get chat history for the current user (most recent messages, chronological order).
+    Call this on app start so the chat view shows previous messages.
+    """
+    if limit < 1 or limit > 200:
+        limit = 100
+    rows = ChatMessageRepository.get_history_for_display(
+        db=db,
+        household_id=user["household_id"],
+        user_id=user["user_id"],
+        limit=limit,
+    )
+    messages = [
+        ChatHistoryMessage(
+            id=m["id"],
+            role=m["role"],
+            content=m["content"],
+            created_at=m.get("created_at"),
+        )
+        for m in rows
+    ]
+    return ChatHistoryResponse(messages=messages)

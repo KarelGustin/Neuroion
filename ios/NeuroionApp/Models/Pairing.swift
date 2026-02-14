@@ -224,6 +224,16 @@ class ChatService {
             token: token
         )
     }
+
+    /// Load chat history (e.g. on app start) so the conversation is restored.
+    func fetchHistory(token: String, limit: Int = 100) async throws -> ChatHistoryResponse {
+        let endpoint = limit != 100 ? "/chat/history?limit=\(limit)" : "/chat/history"
+        return try await apiClient.request(
+            endpoint: endpoint,
+            method: "GET",
+            token: token
+        )
+    }
 }
 
 extension ActionResponse {

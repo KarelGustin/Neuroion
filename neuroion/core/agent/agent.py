@@ -102,6 +102,12 @@ def _enrich_progress_event(event: Dict[str, Any]) -> Dict[str, Any]:
     elif kind == "token":
         # No step per token to avoid spam; "Antwoord formuleren…" already set the writing step
         pass
+    elif kind == "step_output":
+        phase = ev.get("phase") or "output"
+        label = {"plan": "Plan", "tool_result": "Toolresultaat", "reflect": "Reflectie", "writer": "Antwoord"}.get(phase, phase)
+        if ev.get("tool"):
+            label = f"{label}: {ev['tool']}"
+        ev["step"] = {"phase": phase, "label": label, "status": "done", "content": ev.get("content", "")}
     elif kind == "done":
         ev["step"] = {"phase": "done", "label": "Klaar", "status": "done"}
     return ev

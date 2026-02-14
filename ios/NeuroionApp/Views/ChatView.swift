@@ -30,6 +30,16 @@ struct ChatView: View {
                                 TypingIndicatorView(statusText: store.statusText)
                                     .id(typingIndicatorId)
                             }
+                            if store.isLoadingHistory {
+                                HStack {
+                                    ProgressView()
+                                    Text("Chat laden…")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                            }
                         }
                         .padding()
                         .contentShape(Rectangle())
@@ -76,6 +86,9 @@ struct ChatView: View {
             }
             .navigationTitle("Chat")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                store.loadHistoryIfNeeded(token: authManager.token ?? "")
+            }
         }
     }
 
@@ -254,11 +267,52 @@ final class ChatSessionStore: ObservableObject {
 
     @Published var messages: [Message] = []
     @Published var isSending = false
+    @Published var isLoadingHistory = false
     @Published var statusText = "Neuroion denkt na…"
 
     private var currentTask: Task<Void, Never>?
+    private var hasLoadedHistory = false
 
     private init() {}
+
+    /// Load chat history from server (e.g. on app start). Only loads when messages are empty so we don't overwrite current session.
+    func loadHistoryIfNeeded(token: String) {
+        guard !token.isEmpty, messages.isEmpty, !hasLoadedHistory else { return }
+        hasLoadedHistory = true
+        Task { @MainActor in
+            isLoadingHistory = true
+            defer { isLoadingHistory = false }
+            do {
+                let response = try await ChatService.shared.fetchHistory(token: token)
+                messages = response.messages.map { msg in
+                    let date: Date = {
+                        guard let created = msg.created_at else { return Date() }
+                        let formatter = ISO8601DateFormatter()
+                        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                        return formatter.date(from: created)
+                            ?? ISO8601DateFormatter().date(from: created)
+                            ?? Date()
+                    }()
+                    return Message(
+                        id: Self.stableUUID(for: msg.id),
+                        text: msg.content,
+                        isUser: msg.role == "user",
+                        timestamp: date
+                    )
+                }
+                neuroionLog("loaded \(messages.count) messages from history")
+            } catch {
+                neuroionLog("load history failed: \(error.localizedDescription)")
+                hasLoadedHistory = false
+            }
+        }
+    }
+
+    private static func stableUUID(for serverId: Int) -> UUID {
+        let hex = String(format: "%012llx", UInt64(bitPattern: Int64(serverId)))
+        let uuidString = "00000000-0000-0000-0000-\(hex)"
+        return UUID(uuidString: uuidString) ?? UUID()
+    }
 
     func sendMessage(_ text: String, token: String) {
         guard !text.isEmpty else { return }

@@ -9,18 +9,28 @@ import SwiftUI
 
 @main
 struct NeuroionApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthManager()
-    
+
     var body: some Scene {
         WindowGroup {
             RootContent(authManager: authManager)
-                .onAppear { setTunnelProviderIfNeeded() }
+                .onAppear {
+                    setTunnelProviderIfNeeded()
+                    ConnectionManager.shared.refreshEffectiveConnection()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        ConnectionManager.shared.refreshEffectiveConnection()
+                    }
+                }
         }
     }
 
     private func setTunnelProviderIfNeeded() {
         #if NEUROION_VPN_ENABLED
         ConnectionManager.shared.tunnelStatusProvider = VPNTunnelManager.shared
+        ConnectionManager.shared.tunnelStartRequester = VPNTunnelManager.shared
         #endif
     }
 }
