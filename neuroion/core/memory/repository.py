@@ -663,6 +663,34 @@ class AgendaEventRepository:
         db.commit()
         return True
 
+    @staticmethod
+    def delete_all_for_user(db: Session, household_id: int, user_id: int) -> int:
+        """Delete all agenda events for the user. Returns count deleted."""
+        require_active_session(db)
+        deleted = db.query(AgendaEvent).filter(
+            AgendaEvent.household_id == household_id,
+            AgendaEvent.user_id == user_id,
+        ).delete()
+        db.commit()
+        return deleted
+
+    @staticmethod
+    def list_all_for_user(
+        db: Session,
+        household_id: int,
+        user_id: int,
+    ) -> List[AgendaEvent]:
+        """List all agenda events for the user, ordered by start_at."""
+        return (
+            db.query(AgendaEvent)
+            .filter(
+                AgendaEvent.household_id == household_id,
+                AgendaEvent.user_id == user_id,
+            )
+            .order_by(AgendaEvent.start_at.asc())
+            .all()
+        )
+
 
 class CronJobRepository:
     """Repository for cron job records."""

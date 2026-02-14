@@ -10,8 +10,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from neuroion.core.agent.types import AgentInput
+from neuroion.core.agent.tool_registry import get_tool_registry
 
 _SOUL_PATH = Path(__file__).resolve().parent / "SOUL.md"
+_AGENT_SELF_PATH = Path(__file__).resolve().parent / "AGENT_SELF.md"
 
 
 def get_soul_prompt() -> str:
@@ -22,6 +24,39 @@ def get_soul_prompt() -> str:
     except Exception:
         pass
     return ""
+
+
+def _get_dynamic_tools_overview() -> str:
+    """Build current tool list from registry so the agent always sees registered tools (dynamic)."""
+    try:
+        registry = get_tool_registry()
+        tools = registry.list_tools()
+        if not tools:
+            return "Geen tools geregistreerd."
+        lines = ["Beschikbare tools (nu geregistreerd):"]
+        for t in sorted(tools, key=lambda x: x.name):
+            desc = (t.description or "").strip().split("\n")[0][:100]
+            lines.append(f"- {t.name}: {desc}")
+        return "\n".join(lines)
+    except Exception:
+        return "Tools: zie tool list in de prompt."
+
+
+def get_agent_self_prompt(codebase_overview: Optional[str] = None) -> str:
+    """
+    Agent self-description: static AGENT_SELF.md + dynamic tools list + optional codebase structure.
+    codebase_overview is built at request time so the agent always sees the current repo.
+    """
+    parts = []
+    try:
+        if _AGENT_SELF_PATH.is_file():
+            parts.append(_AGENT_SELF_PATH.read_text(encoding="utf-8").strip())
+    except Exception:
+        pass
+    parts.append(_get_dynamic_tools_overview())
+    if codebase_overview:
+        parts.append("Huidige codebase-structuur (bij deze request):\n" + codebase_overview)
+    return "\n\n" + "\n\n".join(parts) if parts else ""
 
 
 def get_web_search_rules() -> str:
@@ -42,10 +77,12 @@ def get_web_search_rules() -> str:
     )
 
 
-def get_system_prompt(agent_name: str = "ion") -> str:
-    """Get the main system prompt for the agent. agent_name is used for identity (default ion)."""
+def get_system_prompt(agent_name: str = "ion", codebase_overview: Optional[str] = None) -> str:
+    """Get the main system prompt for the agent. codebase_overview is built at request time for current repo structure."""
     name = (agent_name or "ion").strip() or "ion"
-    return f"""You are {name}, a personal home intelligence assistant.
+    return f"""You are {name}, an AI agent and personal home intelligence assistant.
+
+EIGEN CODEBASE: De codebase die je met codebase.* kunt bekijken is het Neuroion-project – jouw eigen systeem. Je mag die gebruiken om je eigen gedrag uit te leggen, bugs te helpen zoeken, verbeteringen voor te stellen en te zeggen wat je kunt. Zie hieronder je zelfbeschrijving (AGENT_SELF) voor overzicht van de repo en je tools.
 
 TOON: Praat zoals een vriend: warm, natuurlijk, met een beetje persoonlijkheid. Je bent geen zakelijke assistent; je bent iemand met wie ze aan het einde van de dag kunnen praten. Je onthoudt dingen over hen – gebruik dat subtiel als het past, maar ga geen lijstje opdreunen. Laat het gesprek lekker verlopen.
 
@@ -87,7 +124,7 @@ Als de gebruiker iets vraagt:
 
 Je hebt toegang tot tools. Gebruik ze als ze passen bij wat de gebruiker vraagt (of als de gebruiker een voorstel bevestigt); anders gewoon in tekst. Vraag om duidelijkheid alleen als echt benodigde informatie ontbreekt.
 
-Codebase-vragen: Je kunt de actuele codebase bekijken (standaard ~/Neuroion). Gebruik codebase.list_directory om mappen te verkennen, codebase.read_file om bestanden te lezen en codebase.search om te zoeken. Gebruik deze tools wanneer de gebruiker vragen stelt over de code, bugs, of hoe iets werkt. Alleen lezen; stel geen wijzigingen voor die het schrijven van bestanden vereisen.
+Codebase-vragen: Je kunt de actuele codebase bekijken (standaard ~/Neuroion) – dat is jouw eigen Neuroion-repo. Gebruik codebase.list_directory om mappen te verkennen, codebase.read_file om bestanden te lezen en codebase.search om te zoeken. Gebruik deze tools wanneer de gebruiker vraagt over de code, bugs, hoe iets werkt, of wat jij kunt. Je mag verbeteringen of fixes als tekst of patch voorstellen; je schrijft geen bestanden zelf.
 
 Bij web research, zoekopdrachten of productvragen (bijv. ‘zoek voor mij X’, prijzen, producten, winkels): volg de web/search-regels hieronder; gebruik geen codebase-tools (geen codebase.read_file, codebase.list_directory, codebase.search).
 
@@ -95,7 +132,7 @@ Bij web research, zoekopdrachten of productvragen (bijv. ‘zoek voor mij X’, 
 
 Wees authentiek en vriend-achtig: praatgraag, warm, persoonlijk. Gebruik wat je van de gebruiker weet op een natuurlijke manier als het past; nooit als een formeel lijstje.
 
-Als de gebruiker van onderwerp wisselt, ga dan mee in het nieuwe onderwerp. Reageer op wat ze nu zeggen; blijf niet hangen in eerdere berichten."""
+Als de gebruiker van onderwerp wisselt, ga dan mee in het nieuwe onderwerp. Reageer op wat ze nu zeggen; blijf niet hangen in eerdere berichten.{get_agent_self_prompt(codebase_overview)}"""
 
 
 def get_scheduling_prompt_addition() -> str:
@@ -197,7 +234,8 @@ def build_chat_messages_from_input(input: AgentInput) -> List[Dict[str, str]]:
     """
     messages = []
     name = (input.agent_name or "ion").strip() or "ion"
-    system_parts = [get_system_prompt(name)]
+    codebase_overview = getattr(input, "codebase_overview", None)
+    system_parts = [get_system_prompt(name, codebase_overview=codebase_overview)]
     soul = input.soul if input.soul is not None else get_soul_prompt()
     if soul:
         system_parts.append(f"Your name is {name}.\n\n{soul}")
@@ -212,6 +250,8 @@ def build_chat_messages_from_input(input: AgentInput) -> List[Dict[str, str]]:
         system_parts.append("\n" + input.daily_summaries_text)
     if getattr(input, "user_memories_text", None):
         system_parts.append("\n" + input.user_memories_text)
+    if getattr(input, "agenda_text", None):
+        system_parts.append("\n" + input.agenda_text)
     if input.memory:
         system_parts.append("\n" + format_context_snapshots(input.memory))
     if input.user_preferences or input.household_preferences:
@@ -562,7 +602,8 @@ def get_agent_loop_system_prompt(agent_name: str, tools_list_text: str) -> str:
     """Short system prompt for plan/action/reflect steps. No SOUL; output JSON only."""
     name = (agent_name or "ion").strip() or "ion"
     return (
-        f"You are {name} in agent mode. You must respond with exactly one JSON object. No other text.\n\n"
+        f"You are {name}, an AI agent, in agent mode. You must respond with exactly one JSON object. No other text.\n\n"
+        "The codebase you can read with codebase.* is the Neuroion repo (your own system). Use codebase.list_directory, codebase.read_file, codebase.search when the user asks about code, bugs, what you can do, or how you work.\n\n"
         "Language: Use the same language as the user's message. If the user wrote in Dutch, use Dutch for goal, plan, and all tool arguments (e.g. web.search \"query\" must be in Dutch). If they wrote in English, use English. Do not translate the user's language.\n\n"
         f"{get_web_search_rules()}\n\n"
         "For small talk and greetings, always return tool_calls: null.\n\n"
@@ -618,7 +659,8 @@ def build_agent_final_messages(
 ) -> List[Dict[str, str]]:
     """Build messages for final response: full system + SOUL + turn summary. Asks for reply to user."""
     name = (agent_input.agent_name or "ion").strip() or "ion"
-    system_parts = [get_system_prompt(name)]
+    codebase_overview = getattr(agent_input, "codebase_overview", None)
+    system_parts = [get_system_prompt(name, codebase_overview=codebase_overview)]
     soul = agent_input.soul if agent_input.soul is not None else get_soul_prompt()
     if soul:
         system_parts.append(f"Your name is {name}.\n\n{soul}")

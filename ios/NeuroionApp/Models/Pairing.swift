@@ -118,6 +118,7 @@ class AuthManager: ObservableObject {
             VPNTunnelManager.shared.stopTunnel()
             VPNTunnelManager.shared.removeConfiguration()
             #endif
+            WebSocketService.shared.disconnect()
             ConnectionManager.shared.useVPNBaseURL = false
             self.token = nil
             self.isAuthenticated = false

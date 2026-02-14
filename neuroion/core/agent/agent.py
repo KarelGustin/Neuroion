@@ -298,6 +298,8 @@ class Agent:
             session_summaries_text,
             daily_summaries_text,
             user_memories_text,
+            agenda_text,
+            codebase_overview_text,
         ) = future_context.result()
         self.llm = future_llm.result()
 
@@ -315,6 +317,8 @@ class Agent:
             session_summaries_text=session_summaries_text,
             daily_summaries_text=daily_summaries_text,
             user_memories_text=user_memories_text,
+            agenda_text=agenda_text,
+            codebase_overview=codebase_overview_text,
         )
 
         # Enrich all progress events with ts + step so the client can show a Cursor-like pipeline log

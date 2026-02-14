@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from neuroion.core.memory.db import db_session
 from neuroion.core.memory.repository import (
+    AgendaEventRepository,
     ContextSnapshotRepository,
     DailySummaryRepository,
     PreferenceRepository,
@@ -17,6 +18,7 @@ from neuroion.core.memory.repository import (
     UserMemoryRepository,
     UserRepository,
 )
+from neuroion.core.skills.codebase import get_codebase_overview, get_codebase_root
 
 
 def load_context_task(
@@ -31,13 +33,15 @@ def load_context_task(
     Optional[str],
     Optional[str],
     Optional[str],
+    Optional[str],
+    Optional[str],
 ]:
     """
     Load context for agent input (run in thread).
 
     Returns:
         (context_dicts, user_preferences, household_preferences, agent_name,
-         user_location, session_summaries_text, daily_summaries_text, user_memories_text)
+         user_location, session_summaries_text, daily_summaries_text, user_memories_text, agenda_text, codebase_overview_text)
     """
     with db_session() as db:
         context_snapshots = ContextSnapshotRepository.get_recent(
@@ -56,6 +60,13 @@ def load_context_task(
             daily_summaries_text,
             user_memories_text,
         ) = _get_user_context(db, household_id, user_id)
+        agenda_text = _get_agenda_text(db, household_id, user_id)
+        # Dynamic codebase overview at request time so the agent always sees current structure
+        try:
+            root = get_codebase_root(db)
+            codebase_overview_text = get_codebase_overview(root, max_depth=2, max_items=250)
+        except Exception:
+            codebase_overview_text = None
 
         return (
             context_dicts,
@@ -66,6 +77,8 @@ def load_context_task(
             session_summaries_text,
             daily_summaries_text,
             user_memories_text,
+            agenda_text,
+            codebase_overview_text,
         )
 
 
@@ -131,3 +144,21 @@ def _get_user_context(
         user_memories_text = "What you know about this user (long-term):\n" + "\n".join(lines)
 
     return user_location, session_summaries_text, daily_summaries_text, user_memories_text
+
+
+def _get_agenda_text(db: Any, household_id: int, user_id: Optional[int]) -> Optional[str]:
+    """Load upcoming agenda events (next 14 days) for the user as formatted text."""
+    if user_id is None:
+        return None
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=14)
+    events = AgendaEventRepository.list_for_user(db, household_id, user_id, now, end)
+    if not events:
+        return None
+    lines = []
+    for e in events:
+        start = e.start_at.strftime("%Y-%m-%d %H:%M") if hasattr(e.start_at, "strftime") else str(e.start_at)[:16]
+        end_str = e.end_at.strftime("%H:%M") if hasattr(e.end_at, "strftime") else str(e.end_at)[11:16]
+        lines.append(f"- {start}–{end_str}: {e.title}")
+    return "Upcoming agenda (next 14 days):\n" + "\n".join(lines)

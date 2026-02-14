@@ -25,6 +25,8 @@ class AgentInput:
     session_summaries_text: Optional[str] = None  # Recent session summaries
     daily_summaries_text: Optional[str] = None  # Last 3 days compacted
     user_memories_text: Optional[str] = None  # Long-term facts about the user
+    agenda_text: Optional[str] = None  # Upcoming agenda (next 14 days)
+    codebase_overview: Optional[str] = None  # Dynamic dir overview at request time (current repo structure)
 
 # Pending decision from LLM: (kind, payload) where kind in ("tool_call", "need_info", "final")
 PendingDecision = Tuple[str, Any]

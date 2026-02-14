@@ -89,6 +89,47 @@ class UpdateAgendaEventRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class AgendaSyncEventItem(BaseModel):
+    """Single event for bulk sync (id optional, client-side)."""
+    id: Optional[int] = None
+    title: str
+    start_at: str
+    end_at: str
+    all_day: bool = False
+    notes: Optional[str] = None
+
+
+class AgendaSyncRequest(BaseModel):
+    """Request body for full agenda sync from app."""
+    events: List[AgendaSyncEventItem]
+
+
+class AgendaSyncResponse(BaseModel):
+    """Response after agenda sync."""
+    success: bool
+    created: int
+
+
+@router.post("/sync", response_model=AgendaSyncResponse)
+def agenda_sync(
+    request: AgendaSyncRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+) -> AgendaSyncResponse:
+    """
+    Full replace: replace current user's agenda with the given events.
+    Used by the app when syncing local agenda to the backend (e.g. when WebSocket is not connected).
+    """
+    from neuroion.core.websocket.agenda_sync import sync_agenda_for_user
+    events_dict = [e.model_dump() for e in request.events]
+    created = sync_agenda_for_user(
+        user_id=user["user_id"],
+        household_id=user["household_id"],
+        events=events_dict,
+    )
+    return AgendaSyncResponse(success=True, created=created)
+
+
 @router.get("", response_model=AgendaListResponse)
 def list_agenda_events(
     start: str,

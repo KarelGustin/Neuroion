@@ -97,9 +97,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Could not start cron scheduler: %s", e)
 
+    # Start proactive service (agenda reminders to connected WebSocket clients)
+    try:
+        from neuroion.core.services.proactive_service import start_proactive_service
+        await start_proactive_service()
+    except Exception as e:
+        logger.warning("Could not start proactive service: %s", e)
+
     yield
 
     # Shutdown
+    try:
+        from neuroion.core.services.proactive_service import stop_proactive_service
+        await stop_proactive_service()
+    except Exception as e:
+        logger.warning("Proactive service stop: %s", e)
     try:
         from neuroion.core.cron.scheduler import stop_scheduler
         await stop_scheduler()
@@ -212,6 +224,10 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Explicitly register POST /chat/stream so it is always available (avoids 404 if router load order differs)
 app.add_api_route("/chat/stream", chat.chat_stream, methods=["POST"])
+
+# WebSocket for chat, heartbeat, proactive messages, agenda sync
+from neuroion.core.websocket.routes import websocket_endpoint
+app.add_websocket_route("/ws", websocket_endpoint)
 
 # Include routers
 app.include_router(health.router)

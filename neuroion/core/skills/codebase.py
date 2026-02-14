@@ -42,6 +42,53 @@ def get_codebase_root(db: Optional[Session]) -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
+# Skip these dirs when building overview (keeps output small and relevant)
+_OVERVIEW_SKIP_DIRS = frozenset({".git", "__pycache__", "node_modules", ".venv", "venv", ".cursor"})
+
+
+def get_codebase_overview(
+    root: Path,
+    max_depth: int = 2,
+    max_items: int = 250,
+) -> str:
+    """
+    Build a compact directory overview of the codebase at request time.
+    Used to inject current repo structure into the agent prompt so it sees changes directly.
+    """
+    if not root.is_dir():
+        return f"(root not a directory: {root})"
+    lines: List[str] = []
+    count = 0
+
+    def walk(current: Path, depth: int, prefix: str) -> None:
+        nonlocal count
+        if count >= max_items or depth > max_depth:
+            return
+        try:
+            entries = sorted(current.iterdir())
+        except OSError:
+            return
+        for p in entries:
+            if count >= max_items:
+                return
+            name = p.name
+            if name.startswith(".") and name not in (".cursor",):
+                continue
+            if p.is_dir() and name in _OVERVIEW_SKIP_DIRS:
+                continue
+            try:
+                rel = p.relative_to(root)
+            except ValueError:
+                continue
+            lines.append(f"{prefix}{name}/" if p.is_dir() else f"{prefix}{name}")
+            count += 1
+            if p.is_dir() and depth < max_depth:
+                walk(p, depth + 1, prefix + "  ")
+
+    walk(root, 0, "")
+    return "\n".join(lines) if lines else "(empty)"
+
+
 def _resolve_path(relative_path: str, root: Path) -> Optional[Path]:
     """Resolve path under root; return None if it escapes root."""
     if not root.is_dir():

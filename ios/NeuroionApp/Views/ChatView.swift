@@ -272,8 +272,13 @@ final class ChatSessionStore: ObservableObject {
 
     private var currentTask: Task<Void, Never>?
     private var hasLoadedHistory = false
+    /// When sending via WebSocket, the assistant message we're streaming into (index in messages).
+    private var streamingMessageIndex: Int?
+    private var streamingAccumulatedText = ""
 
-    private init() {}
+    private init() {
+        WebSocketService.shared.delegate = self
+    }
 
     /// Load chat history from server (e.g. on app start). Only loads when messages are empty so we don't overwrite current session.
     func loadHistoryIfNeeded(token: String) {
@@ -328,6 +333,15 @@ final class ChatSessionStore: ObservableObject {
         isSending = true
         statusText = "Neuroion denkt na…"
 
+        if WebSocketService.shared.isConnected {
+            streamingAccumulatedText = ""
+            let placeholder = Message(id: UUID(), text: "", isUser: false, timestamp: Date())
+            messages.append(placeholder)
+            streamingMessageIndex = messages.count - 1
+            WebSocketService.shared.sendChatMessage(text)
+            return
+        }
+
         currentTask = Task { @MainActor in
             await runStream(message: text, token: token)
             currentTask = nil
@@ -336,6 +350,15 @@ final class ChatSessionStore: ObservableObject {
 
     func cancelSend() {
         neuroionLog("cancelSend")
+        if WebSocketService.shared.isConnected {
+            WebSocketService.shared.sendCancelGeneration()
+            if let idx = streamingMessageIndex, idx < messages.count {
+                messages[idx].text = NSLocalizedString("Gestopt. Je kunt een nieuw bericht sturen.", comment: "Chat stopped")
+            }
+            streamingMessageIndex = nil
+            isSending = false
+            return
+        }
         currentTask?.cancel()
         currentTask = nil
         isSending = false
@@ -448,6 +471,64 @@ final class ChatSessionStore: ObservableObject {
         }
         return error.localizedDescription
     }
+}
+
+// MARK: - WebSocketServiceDelegate
+
+extension ChatSessionStore: WebSocketServiceDelegate {
+    func webSocket(_ service: WebSocketService, didReceiveChatToken text: String) {
+        streamingAccumulatedText += text
+        if let idx = streamingMessageIndex, idx < messages.count {
+            let m = messages[idx]
+            messages[idx] = Message(id: m.id, text: streamingAccumulatedText, isUser: m.isUser, timestamp: m.timestamp, actions: m.actions)
+        }
+    }
+
+    func webSocket(_ service: WebSocketService, didReceiveChatDone message: String, actions: [[String: Any]], error: String?) {
+        if let idx = streamingMessageIndex, idx < messages.count {
+            let actionList: [Action] = actions.compactMap { ar in
+                guard let name = ar["name"] as? String else { return nil }
+                let params = (ar["parameters"] as? [String: Any]) ?? [:]
+                return Action(
+                    id: ar["id"] as? Int ?? 0,
+                    name: name,
+                    description: ar["description"] as? String ?? "",
+                    parameters: params,
+                    reasoning: ar["reasoning"] as? String ?? ""
+                )
+            }
+            let m = messages[idx]
+            let finalText = error != nil ? (error ?? message) : (message.isEmpty ? NSLocalizedString("Geen antwoord ontvangen.", comment: "Chat") : message)
+            messages[idx] = Message(id: m.id, text: finalText, isUser: m.isUser, timestamp: m.timestamp, actions: actionList.isEmpty ? nil : actionList)
+        }
+        streamingMessageIndex = nil
+        streamingAccumulatedText = ""
+        isSending = false
+    }
+
+    func webSocket(_ service: WebSocketService, didReceiveChatError error: String) {
+        if let idx = streamingMessageIndex, idx < messages.count {
+            let m = messages[idx]
+            messages[idx] = Message(id: m.id, text: error, isUser: m.isUser, timestamp: m.timestamp, actions: m.actions)
+        }
+        streamingMessageIndex = nil
+        streamingAccumulatedText = ""
+        isSending = false
+    }
+
+    func webSocket(_ service: WebSocketService, didReceiveProactiveMessage message: String) {
+        let proactive = Message(id: UUID(), text: message, isUser: false, timestamp: Date())
+        messages.append(proactive)
+    }
+
+    func webSocket(_ service: WebSocketService, didReceiveAgendaUpdate events: [[String: Any]]) {
+        // Handled in step 6 by AgendaStore / local agenda
+        NotificationCenter.default.post(name: .neuroionAgendaUpdate, object: nil, userInfo: ["events": events])
+    }
+}
+
+extension Notification.Name {
+    static let neuroionAgendaUpdate = Notification.Name("neuroionAgendaUpdate")
 }
 
 private func neuroionLog(_ message: String) {

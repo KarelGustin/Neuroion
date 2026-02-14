@@ -185,18 +185,58 @@ enum AgendaService {
             token: token
         )
     }
+
+    struct AgendaSyncResponse: Codable {
+        let success: Bool
+        let created: Int
+    }
+
+    struct AgendaSyncRequestBody: Encodable {
+        let events: [AgendaSyncEventItem]
+        struct AgendaSyncEventItem: Encodable {
+            let title: String
+            let start_at: String
+            let end_at: String
+            let all_day: Bool
+            let notes: String?
+        }
+    }
+
+    static func sync(events: [(title: String, startAt: Date, endAt: Date, allDay: Bool, notes: String?)], token: String) async throws -> AgendaSyncResponse {
+        let body = AgendaSyncRequestBody(events: events.map { e in
+            AgendaSyncRequestBody.AgendaSyncEventItem(
+                title: e.title,
+                start_at: agendaISO8601String(from: e.startAt),
+                end_at: agendaISO8601String(from: e.endAt),
+                all_day: e.allDay,
+                notes: e.notes
+            )
+        })
+        return try await APIClient.shared.request(
+            endpoint: "/agenda/sync",
+            method: "POST",
+            body: body,
+            token: token
+        )
+    }
 }
 
 // MARK: - Main agenda container
 
 struct AgendaView: View {
     @EnvironmentObject var authManager: AuthManager
+    @ObservedObject private var agendaStore = AgendaStore.shared
     @State private var selectedDate = Calendar.current.startOfDay(for: Date())
-    @State private var events: [AgendaEvent] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingAddEvent = false
     @State private var eventToEdit: AgendaEvent?
+
+    private var displayedEvents: [AgendaEvent] {
+        agendaStore.events(from: monthStart, to: monthEnd).map { e in
+            AgendaEvent(id: e.id, title: e.title, startAt: e.startAt, endAt: e.endAt, allDay: e.allDay, notes: e.notes, createdAt: e.createdAt, updatedAt: e.updatedAt)
+        }
+    }
 
     private var monthStart: Date {
         let cal = Calendar.current
@@ -214,7 +254,7 @@ struct AgendaView: View {
             VStack(spacing: 0) {
                 MonthGridView(
                     selectedDate: $selectedDate,
-                    events: events,
+                    events: displayedEvents,
                     monthStart: monthStart
                 )
                 Divider()
@@ -226,7 +266,7 @@ struct AgendaView: View {
                 }
                 AgendaDayListView(
                     date: selectedDate,
-                    events: events.filter { eventOnDay($0, selectedDate) },
+                    events: displayedEvents.filter { eventOnDay($0, selectedDate) },
                     onSelectEvent: { eventToEdit = $0 },
                     onRefresh: { Task { await loadEvents() } }
                 )
@@ -278,10 +318,15 @@ struct AgendaView: View {
             let start = Calendar.current.startOfDay(for: monthStart)
             var end = Calendar.current.date(byAdding: .day, value: 1, to: monthEnd) ?? monthEnd
             end = Calendar.current.date(byAdding: .month, value: 1, to: monthStart) ?? end
-            events = try await AgendaService.listEvents(from: start, to: end, token: token)
+            let loaded = try await AgendaService.listEvents(from: start, to: end, token: token)
+            await MainActor.run {
+                AgendaStore.shared.replace(with: loaded.map { e in
+                    LocalAgendaEvent(id: e.id, title: e.title, startAt: e.startAt, endAt: e.endAt, allDay: e.allDay, notes: e.notes, createdAt: e.createdAt, updatedAt: e.updatedAt)
+                })
+            }
         } catch {
             errorMessage = error.localizedDescription
-            events = []
+            await MainActor.run { AgendaStore.shared.replace(with: []) }
         }
     }
 
